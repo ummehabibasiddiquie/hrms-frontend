@@ -24,6 +24,7 @@ import { fileToBase64 } from "../../utils/fileToBase64";
 import { useAuth } from "../../context/AuthContext";
 import { log, logError } from "../../config/environment";
 import SearchableSelect from "../common/SearchableSelect";
+import { DateRangePicker } from "../common/CustomCalendar";
 import { Briefcase, ListChecks } from "lucide-react";
 
 // Helper to get today's date in YYYY-MM-DD format
@@ -118,12 +119,14 @@ const Tracker = ({ embedded = false }) => {
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getTodayDate());
 
+  // Tooltip states for dropdown buttons
+  const [projectTooltip, setProjectTooltip] = useState(false);
+  const [taskTooltip, setTaskTooltip] = useState(false);
+
   // Modal state
   const [showModal, setShowModal] = useState(false);
 
-  // Custom calendar/dropdown states
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
+  // Custom dropdown states
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [showTaskDropdown, setShowTaskDropdown] = useState(false);
 
@@ -918,105 +921,13 @@ const Tracker = ({ embedded = false }) => {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
-  const generateCalendar = (currentDate) => {
-    const date = currentDate ? new Date(currentDate) : new Date();
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-    
-    return { year, month, daysInMonth, startingDayOfWeek };
-  };
-
-  const handleDateSelect = (name, dateValue) => {
-    if (name === 'start') {
-      setStartDate(dateValue);
-      setShowStartPicker(false);
-    } else if (name === 'end') {
-      setEndDate(dateValue);
-      setShowEndPicker(false);
-    }
-  };
-
-  const CustomDatePicker = ({ name, value, onSelect, show, onClose }) => {
-    const [viewDate, setViewDate] = useState(value || new Date().toISOString().split('T')[0]);
-    const { year, month, daysInMonth, startingDayOfWeek } = generateCalendar(viewDate);
-    
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-
-    const handlePrevMonth = () => {
-      const newDate = new Date(year, month - 1, 1);
-      setViewDate(newDate.toISOString().split('T')[0]);
-    };
-
-    const handleNextMonth = () => {
-      const newDate = new Date(year, month + 1, 1);
-      setViewDate(newDate.toISOString().split('T')[0]);
-    };
-
-    if (!show) return null;
-
-    return (
-      <div className="absolute z-50 mt-1 bg-white rounded-lg shadow-xl border-2 border-blue-200 p-3 w-64">
-        <div className="flex items-center justify-between mb-3">
-          <button type="button" onClick={handlePrevMonth} className="p-1 hover:bg-slate-100 rounded">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <span className="font-bold text-sm text-slate-800">{monthNames[month]} {year}</span>
-          <button type="button" onClick={handleNextMonth} className="p-1 hover:bg-slate-100 rounded">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-7 gap-1 mb-1">
-          {dayNames.map(day => (
-            <div key={day} className="text-center text-xs font-bold text-slate-600">{day}</div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: startingDayOfWeek }).map((_, i) => (
-            <div key={`empty-${i}`} />
-          ))}
-          {Array.from({ length: daysInMonth }).map((_, i) => {
-            const day = i + 1;
-            const dateStr = formatToStorage(day, month + 1, year);
-            const isSelected = dateStr === value;
-            return (
-              <button
-                type="button"
-                key={day}
-                onClick={() => onSelect(name, dateStr)}
-                className={`text-xs p-1.5 rounded hover:bg-blue-100 transition-colors ${
-                  isSelected ? 'bg-blue-600 text-white font-bold' : 'text-slate-700'
-                }`}
-              >
-                {day}
-              </button>
-            );
-          })}
-        </div>
-
-        <button 
-          type="button"
-          onClick={onClose}
-          className="w-full mt-3 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs"
-        >
-          Close
-        </button>
-      </div>
-    );
-  };
-
+  
+  
   const CustomDropdown = ({ options, value, onChange, placeholder, show, onClose, disabled }) => {
     if (!show || disabled) return null;
 
     return (
-      <div className="absolute z-50 mt-1 w-full bg-white rounded-lg shadow-xl border-2 border-blue-200 max-h-60 overflow-y-auto">
+      <div className="absolute z-[60] mt-1 bg-white rounded-lg shadow-xl border-2 border-blue-200 overflow-y-auto" style={{ width: '250px', height: '240px' }}>
         <div
           onClick={() => {
             onChange('');
@@ -1051,7 +962,7 @@ const Tracker = ({ embedded = false }) => {
           >
             <div className="flex items-center gap-2">
               {String(value) === String(option.value) && (
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600 flex-shrink-0">
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               )}
@@ -1111,84 +1022,28 @@ const Tracker = ({ embedded = false }) => {
             </div>
 
             {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Date From */}
-              <div className="relative space-y-2">
-                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
-                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
-                    <line x1="16" x2="16" y1="2" y2="6"></line>
-                    <line x1="8" x2="8" y1="2" y2="6"></line>
-                    <line x1="3" x2="21" y1="10" y2="10"></line>
-                  </svg>
-                  Date From
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowStartPicker(!showStartPicker);
-                    setShowEndPicker(false);
-                  }}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between"
-                >
-                  <span>{startDate ? new Date(startDate).toLocaleDateString('en-GB') : 'Select date'}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
-                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
-                    <line x1="16" x2="16" y1="2" y2="6"></line>
-                    <line x1="8" x2="8" y1="2" y2="6"></line>
-                    <line x1="3" x2="21" y1="10" y2="10"></line>
-                  </svg>
-                </button>
-                <CustomDatePicker 
-                  name="start" 
-                  value={startDate} 
-                  onSelect={handleDateSelect} 
-                  show={showStartPicker} 
-                  onClose={() => setShowStartPicker(false)} 
-                />
-              </div>
-
-              {/* Date To */}
-              <div className="relative space-y-2">
-                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
-                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
-                    <line x1="16" x2="16" y1="2" y2="6"></line>
-                    <line x1="8" x2="8" y1="2" y2="6"></line>
-                    <line x1="3" x2="21" y1="10" y2="10"></line>
-                  </svg>
-                  Date To
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEndPicker(!showEndPicker);
-                    setShowStartPicker(false);
-                  }}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between"
-                >
-                  <span>{endDate ? new Date(endDate).toLocaleDateString('en-GB') : 'Select date'}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
-                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
-                    <line x1="16" x2="16" y1="2" y2="6"></line>
-                    <line x1="8" x2="8" y1="2" y2="6"></line>
-                    <line x1="3" x2="21" y1="10" y2="10"></line>
-                  </svg>
-                </button>
-                <CustomDatePicker 
-                  name="end" 
-                  value={endDate} 
-                  onSelect={handleDateSelect} 
-                  show={showEndPicker} 
-                  onClose={() => setShowEndPicker(false)} 
+            <div className="flex flex-wrap items-end gap-3 mb-4">
+              {/* Date Range Picker - Adjusted for 2-dropdown layout */}
+              <div className="relative">
+                <DateRangePicker
+                  startDate={startDate}
+                  endDate={endDate}
+                  onStartDateChange={setStartDate}
+                  onEndDateChange={setEndDate}
+                  label=""
+                  description={null}
+                  showClearButton={false}
+                  compact={true}
+                  fieldWidth="320px"
+                  noWrapper={true}
                 />
               </div>
 
               {/* Project Filter */}
-              <div className="relative space-y-2">
-                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+              <div style={{ width: '250px' }}>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
                   <Briefcase className="w-3.5 h-3.5 text-blue-600" />
-                  Project
+                  PROJECT
                 </label>
                 <button
                   type="button"
@@ -1196,11 +1051,13 @@ const Tracker = ({ embedded = false }) => {
                     setShowProjectDropdown(!showProjectDropdown);
                     setShowTaskDropdown(false);
                   }}
-                  className={`w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between ${
+                  onMouseEnter={() => setProjectTooltip(true)}
+                  onMouseLeave={() => setProjectTooltip(false)}
+                  className={`w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between relative ${
                     filterProject ? 'text-slate-700' : 'text-slate-500'
                   }`}
                 >
-                  <span className={filterProject ? 'text-slate-700' : 'text-slate-500'}>
+                  <span className={`${filterProject ? 'text-slate-700' : 'text-slate-500'} truncate`}>
                     {filterProject 
                       ? projects.find(p => String(p.project_id) === String(filterProject))?.project_name || 'All Projects'
                       : 'All Projects'
@@ -1209,6 +1066,17 @@ const Tracker = ({ embedded = false }) => {
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-blue-600 transition-transform ${showProjectDropdown ? 'rotate-180' : ''}`}>
                     <polyline points="6 9 12 15 18 9"></polyline>
                   </svg>
+                  {projectTooltip && filterProject && (
+                    <div 
+                      className="absolute z-[9999] left-0 top-full mt-0.5 bg-white rounded-lg shadow-xl border-2 border-blue-200 p-3 min-w-full max-w-md"
+                      onMouseEnter={() => setProjectTooltip(true)}
+                      onMouseLeave={() => setProjectTooltip(false)}
+                    >
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium border border-blue-200">
+                        {projects.find(p => String(p.project_id) === String(filterProject))?.project_name || 'All Projects'}
+                      </span>
+                    </div>
+                  )}
                 </button>
                 <CustomDropdown
                   options={projects.map(p => ({ value: p.project_id, label: p.project_name }))}
@@ -1224,10 +1092,10 @@ const Tracker = ({ embedded = false }) => {
               </div>
 
               {/* Task Filter */}
-              <div className="relative space-y-2">
-                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+              <div style={{ width: '250px' }}>
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
                   <ListChecks className="w-3.5 h-3.5 text-blue-600" />
-                  Task
+                  TASK
                 </label>
                 <button
                   type="button"
@@ -1235,12 +1103,14 @@ const Tracker = ({ embedded = false }) => {
                     setShowTaskDropdown(!showTaskDropdown);
                     setShowProjectDropdown(false);
                   }}
+                  onMouseEnter={() => setTaskTooltip(true)}
+                  onMouseLeave={() => setTaskTooltip(false)}
                   disabled={!filterProject}
-                  className={`w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed ${
+                  className={`w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed relative ${
                     filterTask ? 'text-slate-700' : 'text-slate-500'
                   }`}
                 >
-                  <span className={filterTask ? 'text-slate-700' : 'text-slate-500'}>
+                  <span className={`${filterTask ? 'text-slate-700' : 'text-slate-500'} truncate`}>
                     {filterTask 
                       ? availableFilterTasks.find(t => String(t.task_id) === String(filterTask))?.label || 'All Tasks'
                       : 'All Tasks'
@@ -1249,6 +1119,17 @@ const Tracker = ({ embedded = false }) => {
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-blue-600 transition-transform ${showTaskDropdown ? 'rotate-180' : ''}`}>
                     <polyline points="6 9 12 15 18 9"></polyline>
                   </svg>
+                  {taskTooltip && filterTask && (
+                    <div 
+                      className="absolute z-[9999] left-0 top-full mt-0.5 bg-white rounded-lg shadow-xl border-2 border-blue-200 p-3 min-w-full max-w-md"
+                      onMouseEnter={() => setTaskTooltip(true)}
+                      onMouseLeave={() => setTaskTooltip(false)}
+                    >
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium border border-blue-200">
+                        {availableFilterTasks.find(t => String(t.task_id) === String(filterTask))?.label || 'All Tasks'}
+                      </span>
+                    </div>
+                  )}
                 </button>
                 <CustomDropdown
                   options={availableFilterTasks.map(t => ({ value: t.task_id, label: t.label }))}
