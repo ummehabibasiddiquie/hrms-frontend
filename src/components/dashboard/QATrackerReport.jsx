@@ -619,7 +619,7 @@ const QATrackerReport = () => {
         break;
       case 'production':
         if (!value) newErrors.production = 'Production is required';
-        else if (isNaN(value) || Number(value) <= 0) newErrors.production = 'Enter valid production';
+        // else if (isNaN(value) || Number(value) <= 0) newErrors.production = 'Enter valid production';
         else if (addFormData.base_target && Number(value) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42') {
           newErrors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
         }
@@ -679,9 +679,10 @@ const QATrackerReport = () => {
     if (!addFormData.task_id) errors.task_id = 'Task is required';
     if (!addFormData.shift_type) errors.shift_type = 'Shift is required';
     if (!addFormData.production) errors.production = 'Production is required';
-    else if (isNaN(addFormData.production) || Number(addFormData.production) <= 0) {
-      errors.production = 'Enter valid production';
-    } else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42') {
+    // else if (isNaN(addFormData.production) || Number(addFormData.production) <= 0) {
+    //   errors.production = 'Enter valid production';
+    // } 
+    else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42') {
       errors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
     }
     
