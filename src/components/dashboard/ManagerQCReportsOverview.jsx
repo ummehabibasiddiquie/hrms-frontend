@@ -109,7 +109,7 @@ const ManagerQCReportsOverview = () => {
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(record => {
-        const { types: errorTypes } = getErrorTypes(record.error_list);
+        const { types: errorTypes } = getErrorTypes(record.merged_error_list);
         const errorTypesString = errorTypes.join(' ').toLowerCase();
         return (
           record.agent_name?.toLowerCase().includes(searchLower) ||
@@ -118,10 +118,10 @@ const ManagerQCReportsOverview = () => {
           record.project_name?.toLowerCase().includes(searchLower) ||
           record.task_name?.toLowerCase().includes(searchLower) ||
           record.qa_agent_name?.toLowerCase().includes(searchLower) ||
-          record.file_record_count?.toString().includes(searchLower) ||
-          record.qc_generated_count?.toString().includes(searchLower) ||
-          getErrorCount(record.error_list).toString().includes(searchLower) ||
-          record.qc_score?.toString().includes(searchLower) ||
+          record.total_file_record_count?.toString().includes(searchLower) ||
+          record.total_qc_generated_count?.toString().includes(searchLower) ||
+          (record.total_error_count || 0).toString().includes(searchLower) ||
+          (record.final_qc_score || 0).toString().includes(searchLower) ||
           errorTypesString.includes(searchLower)
         );
       });
@@ -296,7 +296,7 @@ const ManagerQCReportsOverview = () => {
       }
 
       const exportData = filteredRecords.map(record => {
-        const { types, count } = getErrorTypes(record.error_list);
+        const { types, count } = getErrorTypes(record.merged_error_list);
         const evalDate = formatDate(record.created_at);
         const workDate = formatDate(record.date_of_file_submission);
         
@@ -309,10 +309,10 @@ const ManagerQCReportsOverview = () => {
           'Agent Name': record.agent_name || 'N/A',
           'Project Name': record.project_name || 'N/A',
           'Task Name': record.task_name || 'N/A',
-          'Records': record.file_record_count || 0,
-          'QC Records': record.qc_generated_count || 0,
-          'No. of Errors': count,
-          'Final QC Score': `${record.qc_score || 0}%`,
+          'Records': record.total_file_record_count || 0,
+          'QC Records': record.total_qc_generated_count || 0,
+          'No. of Errors': record.total_error_count || 0,
+          'Final QC Score': `${record.final_qc_score || 0}%`,
           'Error Types': types.length > 0 ? types.join(', ') : '-',
           'QA Name': record.qa_agent_name || 'N/A'
         };
@@ -320,11 +320,11 @@ const ManagerQCReportsOverview = () => {
 
       // Add summary row
       const totalProjects = new Set(filteredRecords.map(r => r.project_name)).size;
-      const totalRecords = filteredRecords.reduce((sum, r) => sum + (parseInt(r.file_record_count || 0)), 0);
-      const totalQCRecords = filteredRecords.reduce((sum, r) => sum + (parseInt(r.qc_generated_count || 0)), 0);
-      const totalErrors = filteredRecords.reduce((sum, r) => sum + getErrorCount(r.error_list), 0);
+      const totalRecords = filteredRecords.reduce((sum, r) => sum + (parseInt(r.total_file_record_count || 0)), 0);
+      const totalQCRecords = filteredRecords.reduce((sum, r) => sum + (parseInt(r.total_qc_generated_count || 0)), 0);
+      const totalErrors = filteredRecords.reduce((sum, r) => sum + (r.total_error_count || 0), 0);
       const avgScore = filteredRecords.length > 0 
-        ? (filteredRecords.reduce((sum, r) => sum + (parseFloat(r.qc_score || 0)), 0) / filteredRecords.length).toFixed(2)
+        ? (filteredRecords.reduce((sum, r) => sum + (parseFloat(r.final_qc_score || 0)), 0) / filteredRecords.length).toFixed(2)
         : '0.00';
 
       exportData.push({
@@ -665,48 +665,48 @@ const ManagerQCReportsOverview = () => {
                         {record.task_name || 'N/A'}
                       </td>
                       
-                      {/* Records - file_record_count */}
+                      {/* Records - total_file_record_count */}
                       <td className="px-3 py-3 text-center">
                         <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs font-bold min-w-[40px]">
-                          {record.file_record_count || '0'}
+                          {record.total_file_record_count || '0'}
                         </span>
                       </td>
                       
-                      {/* QC Records - qc_generated_count */}
+                      {/* QC Records - total_qc_generated_count */}
                       <td className="px-3 py-3 text-center">
                         <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-blue-100 text-blue-700 text-xs font-bold min-w-[40px]">
-                          {record.qc_generated_count || '0'}
+                          {record.total_qc_generated_count || '0'}
                         </span>
                       </td>
                       
-                      {/* No. of Errors - from error_list */}
+                      {/* No. of Errors - total_error_count */}
                       <td className="px-3 py-3 text-center">
                         <span className={`inline-flex items-center justify-center px-2 py-1 rounded text-xs font-bold min-w-[40px] ${
-                          getErrorCount(record.error_list) > 0 
+                          (record.total_error_count || 0) > 0 
                             ? 'bg-red-100 text-red-700' 
                             : 'bg-green-100 text-green-700'
                         }`}>
-                          {getErrorCount(record.error_list)}
+                          {record.total_error_count || 0}
                         </span>
                       </td>
                       
-                      {/* Final QC Score - qc_score */}
+                      {/* Final QC Score - final_qc_score */}
                       <td className="px-3 py-3 text-center">
                         <span className={`inline-flex items-center justify-center px-2 py-1 rounded text-xs font-bold ${
-                          (record.qc_score || 0) >= 98
+                          (record.final_qc_score || 0) >= 98
                             ? 'bg-green-100 text-green-700'
-                            : (record.qc_score || 0) >= 90
+                            : (record.final_qc_score || 0) >= 90
                             ? 'bg-yellow-100 text-yellow-700'
                             : 'bg-red-100 text-red-700'
                         }`}>
-                          {record.qc_score || '0'}%
+                          {record.final_qc_score || '0'}%
                         </span>
                       </td>
                       
-                      {/* Error Type - from error_list */}
+                      {/* Error Type - from merged_error_list */}
                       <td className="px-3 py-3">
                         {(() => {
-                          const { types, count } = getErrorTypes(record.error_list);
+                          const { types, count } = getErrorTypes(record.merged_error_list);
                           if (count === 0) {
                             return <span className="text-xs text-slate-400">-</span>;
                           }
@@ -726,7 +726,7 @@ const ManagerQCReportsOverview = () => {
                               {/* Show summary if more errors exist */}
                               {types.length > 2 && (
                                 <button
-                                  onClick={() => openErrorModal(record.error_list, `All Errors (${count})`)}
+                                  onClick={() => openErrorModal(record.merged_error_list, `All Errors (${count})`)}
                                   className="text-xs text-blue-600 hover:text-blue-800 font-medium text-left hover:underline"
                                 >
                                   +{types.length - 2} more error types • View all {count} errors
@@ -734,7 +734,7 @@ const ManagerQCReportsOverview = () => {
                               )}
                               {types.length <= 2 && count > types.length && (
                                 <button
-                                  onClick={() => openErrorModal(record.error_list, `All Errors (${count})`)}
+                                  onClick={() => openErrorModal(record.merged_error_list, `All Errors (${count})`)}
                                   className="text-xs text-blue-600 hover:text-blue-800 font-medium text-left hover:underline"
                                 >
                                   View all {count} errors
