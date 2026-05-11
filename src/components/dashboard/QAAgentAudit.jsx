@@ -218,7 +218,20 @@ const QAAgentAudit = () => {
       }
     });
     
-    const result = Object.values(grouped);
+    // Sort records within each QA agent by worked_date descending (newest first)
+    Object.keys(grouped).forEach(qaName => {
+      grouped[qaName].records.sort((a, b) => {
+        const dateA = new Date(a.worked_date);
+        const dateB = new Date(b.worked_date);
+        return dateB - dateA; // newest first
+      });
+    });
+
+    // Sort QA agent names alphabetically
+    const result = Object.values(grouped).sort((a, b) => {
+      return a.qaAgentName.localeCompare(b.qaAgentName);
+    });
+    
     console.log('[QAAgentAudit] Grouped by QA Agent:', result.length, 'QA agents');
     console.log('[QAAgentAudit] Grouped data:', result);
     return result;
@@ -280,7 +293,20 @@ const QAAgentAudit = () => {
       }
     });
     
-    const result = Object.values(grouped);
+    // Sort records within each QA agent by worked_date descending (newest first)
+    Object.keys(grouped).forEach(qaAgentKey => {
+      grouped[qaAgentKey].records.sort((a, b) => {
+        const dateA = new Date(a.worked_date);
+        const dateB = new Date(b.worked_date);
+        return dateB - dateA; // newest first
+      });
+    });
+
+    // Sort QA agent names alphabetically
+    const result = Object.values(grouped).sort((a, b) => {
+      return a.qaAgentName.localeCompare(b.qaAgentName);
+    });
+    
     console.log('[QAAgentAudit] Grouped report data:', result.length, 'QA agents');
     return result;
   }, [reportData]);
@@ -553,7 +579,7 @@ const QAAgentAudit = () => {
         project_id: record.project_id,
         task_id: record.task_id,
         // Add worked_date for consistent filtering across both tabs
-        worked_date: record.timestamp || record.date_of_file_submission || record.audit_datetime,
+        worked_date: record.date_of_file_submission || record.timestamp || record.audit_datetime,
         // Audit-related fields (from QC audit submissions)
         qc_checked_file: record.qc_checked_file || null,
         error_notes: record.error_notes || null,
@@ -561,9 +587,16 @@ const QAAgentAudit = () => {
         audit_performed: !!(record.qc_checked_file || record.error_notes) // Boolean flag to check if audit was done
       }));
 
-      setAuditData(mappedData);
-      console.log('[QAAgentAudit] Mapped data:', mappedData);
-      console.log('[QAAgentAudit] Total records fetched:', mappedData.length);
+      // Sort audit data by worked_date in descending order (newest first)
+      const sortedData = mappedData.sort((a, b) => {
+        const dateA = new Date(a.worked_date);
+        const dateB = new Date(b.worked_date);
+        return dateB - dateA;
+      });
+
+      setAuditData(sortedData);
+      console.log('[QAAgentAudit] Mapped data:', sortedData);
+      console.log('[QAAgentAudit] Total records fetched:', sortedData.length);
 
     } catch (err) {
       console.error('[QAAgentAudit] Error fetching audit data:', err);
@@ -979,8 +1012,8 @@ const QAAgentAudit = () => {
                           <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
                             <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
                               <div className="flex flex-col">
-                                <span className="text-sm font-semibold">{formatDateTime(row.updated_at).date}</span>
-                                <span className="text-xs text-gray-600">{formatDateTime(row.updated_at).time}</span>
+                                <span className="text-sm font-semibold">{formatDateTime(row.worked_date).date}</span>
+                                <span className="text-xs text-gray-600">{formatDateTime(row.worked_date).time}</span>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-gray-900 font-medium">{row.agent_name || '-'}</td>
