@@ -132,13 +132,20 @@ const QAAgentAudit = () => {
 
   // State management
   const [activeTab, setActiveTab] = useState('audit_form'); // 'audit_form' or 'audit_report'
-  const [dateRange, setDateRange] = useState({ start: '', end: '' }); // No default date since filter UI is removed
+  
+  // Separate state for form filters
+  const [formDateRange, setFormDateRange] = useState({ start: '', end: '' });
+  const [formSearchQuery, setFormSearchQuery] = useState('');
+  
+  // Separate state for report filters
+  const [reportDateRange, setReportDateRange] = useState({ start: '', end: '' });
+  const [reportSearchQuery, setReportSearchQuery] = useState('');
+  
   const [auditData, setAuditData] = useState([]);
   const [reportData, setReportData] = useState([]); // Separate state for audit report
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [expandedAgents, setExpandedAgents] = useState({}); // Track which QA agents are expanded
-  const [searchQuery, setSearchQuery] = useState(''); // Search within QA agents
   
     
   // Modal state for QC Score input
@@ -159,32 +166,11 @@ const QAAgentAudit = () => {
     const grouped = {};
     
     console.log('[QAAgentAudit] Grouping audit data. Total records:', auditData.length);
-    console.log('[QAAgentAudit] Date range filter:', dateRange);
     console.log('[QAAgentAudit] Sample record:', auditData[0]);
     
-    // Filter by date range if set
+    // Backend handles date filtering, so use data as-is
     let filteredData = auditData;
-    if (dateRange.start && dateRange.end) {
-      const startDate = new Date(dateRange.start);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(dateRange.end);
-      endDate.setHours(23, 59, 59, 999);
-      
-      console.log('[QAAgentAudit] Filtering by date range:', startDate, 'to', endDate);
-      filteredData = auditData.filter(record => {
-        if (!record.audit_datetime && !record.timestamp) {
-          console.log('[QAAgentAudit] Record missing datetime:', record);
-          return false;
-        }
-        const recordDate = new Date(record.audit_datetime || record.timestamp);
-        const matches = recordDate >= startDate && recordDate <= endDate;
-        console.log(`[QAAgentAudit] Record date: ${recordDate.toISOString()}, Matches: ${matches}`);
-        return matches;
-      });
-      console.log('[QAAgentAudit] After date filter:', filteredData.length, 'records');
-    } else {
-      console.log('[QAAgentAudit] No date filter applied, showing all records');
-    }
+    console.log('[QAAgentAudit] Using backend-filtered data:', filteredData.length, 'records');
     
     filteredData.forEach(record => {
       const qaName = record.qc_agent_name || 
@@ -236,7 +222,7 @@ const QAAgentAudit = () => {
     console.log('[QAAgentAudit] Grouped by QA Agent:', result.length, 'QA agents');
     console.log('[QAAgentAudit] Grouped data:', result);
     return result;
-  }, [auditData, dateRange]);
+  }, [auditData]);
 
   // Group report data by Agent
   const groupedReportData = React.useMemo(() => {
@@ -244,20 +230,9 @@ const QAAgentAudit = () => {
     
     console.log('[QAAgentAudit] Grouping report data. Total records:', reportData.length);
     
-    // Filter by date range if set
+    // Backend handles date filtering, so use data as-is
     let filteredData = reportData;
-    if (dateRange.start && dateRange.end) {
-      const startDate = new Date(dateRange.start);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(dateRange.end);
-      endDate.setHours(23, 59, 59, 999);
-      
-      filteredData = reportData.filter(record => {
-        if (!record.worked_date) return false;
-        const recordDate = new Date(record.worked_date);
-        return recordDate >= startDate && recordDate <= endDate;
-      });
-    }
+    console.log('[QAAgentAudit] Using backend-filtered report data:', filteredData.length, 'records');
     
     filteredData.forEach(record => {
       const qaAgentKey = record.qc_agent_name || 
@@ -308,20 +283,20 @@ const QAAgentAudit = () => {
     const result = Object.values(grouped);
     console.log('[QAAgentAudit] Grouped report data:', result.length, 'QA agents');
     return result;
-  }, [reportData, dateRange]);
+  }, [reportData]);
 
   // Filter grouped data by search query
   const filteredQAAgents = React.useMemo(() => {
     console.log('[QAAgentAudit] Filtering QA Agents...');
-    console.log('[QAAgentAudit] Search query:', searchQuery);
+    console.log('[QAAgentAudit] Search query:', formSearchQuery);
     console.log('[QAAgentAudit] Grouped QA Agents before filter:', groupedByQAAgent.length);
     
-    if (!searchQuery.trim()) {
+    if (!formSearchQuery.trim()) {
       console.log('[QAAgentAudit] No search query, returning all grouped agents');
       return groupedByQAAgent;
     }
     
-    const query = searchQuery.toLowerCase();
+    const query = formSearchQuery.toLowerCase();
     const filtered = groupedByQAAgent.filter(qa =>
       qa.qaAgentName.toLowerCase().includes(query) ||
       qa.records.some(r =>
@@ -332,17 +307,17 @@ const QAAgentAudit = () => {
     );
     console.log('[QAAgentAudit] Filtered QA Agents:', filtered.length);
     return filtered;
-  }, [groupedByQAAgent, searchQuery]);
+  }, [groupedByQAAgent, formSearchQuery]);
 
   // Filter report data by search query
   const filteredReportAgents = React.useMemo(() => {
     console.log('[QAAgentAudit] Filtering Report Agents...');
     
-    if (!searchQuery.trim()) {
+    if (!reportSearchQuery.trim()) {
       return groupedReportData;
     }
     
-    const query = searchQuery.toLowerCase();
+    const query = reportSearchQuery.toLowerCase();
     const filtered = groupedReportData.filter(agent =>
       agent.qaAgentName.toLowerCase().includes(query) ||
       agent.records.some(r =>
@@ -353,7 +328,7 @@ const QAAgentAudit = () => {
     );
     console.log('[QAAgentAudit] Filtered Report Agents:', filtered.length);
     return filtered;
-  }, [groupedReportData, searchQuery]);
+  }, [groupedReportData, reportSearchQuery]);
 
   
   // Toggle QA Agent section
@@ -577,6 +552,8 @@ const QAAgentAudit = () => {
         tracker_id: record.tracker_id,
         project_id: record.project_id,
         task_id: record.task_id,
+        // Add worked_date for consistent filtering across both tabs
+        worked_date: record.timestamp || record.date_of_file_submission || record.audit_datetime,
         // Audit-related fields (from QC audit submissions)
         qc_checked_file: record.qc_checked_file || null,
         error_notes: record.error_notes || null,
@@ -620,8 +597,8 @@ const QAAgentAudit = () => {
         // Call the Python API endpoint with user_id and date range
         const response = await api.post('/qc_audit/report', {
           logged_in_user_id: user?.user_id,
-          start_date: dateRange.start,
-          end_date: dateRange.end
+          start_date: reportDateRange.start,
+          end_date: reportDateRange.end
         });
 
         console.log('[QAAgentAudit] Report API Response:', response.data);
@@ -666,7 +643,7 @@ const QAAgentAudit = () => {
     if (user?.user_id) {
       fetchReportData();
     }
-  }, [user, activeTab, dateRange]);
+  }, [user, activeTab, reportDateRange]);
 
   // Export to Excel - exports ALL user data regardless of filters
   const handleExportExcel = () => {
@@ -822,8 +799,8 @@ const QAAgentAudit = () => {
             </label>
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={formSearchQuery}
+              onChange={(e) => setFormSearchQuery(e.target.value)}
               placeholder="Search by QA agent name..."
               className="w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
             />
@@ -832,11 +809,11 @@ const QAAgentAudit = () => {
           {/* Date Range Filter */}
           <div className="flex-1">
             <DateRangePicker
-              startDate={dateRange.start}
-              endDate={dateRange.end}
-              onStartDateChange={(date) => setDateRange(prev => ({ ...prev, start: date }))}
-              onEndDateChange={(date) => setDateRange(prev => ({ ...prev, end: date }))}
-              onClear={() => setDateRange({ start: '', end: '' })}
+              startDate={formDateRange.start}
+              endDate={formDateRange.end}
+              onStartDateChange={(date) => setFormDateRange(prev => ({ ...prev, start: date }))}
+              onEndDateChange={(date) => setFormDateRange(prev => ({ ...prev, end: date }))}
+              onClear={() => setFormDateRange({ start: '', end: '' })}
               label=""
               description=""
               showClearButton={true}
@@ -855,7 +832,7 @@ const QAAgentAudit = () => {
           console.log('[QAAgentAudit] Render - Error:', error);
           console.log('[QAAgentAudit] Render - Filtered QA Agents:', filteredQAAgents);
           console.log('[QAAgentAudit] Render - Filtered QA Agents Length:', filteredQAAgents.length);
-          console.log('[QAAgentAudit] Render - Search Query:', searchQuery);
+          console.log('[QAAgentAudit] Render - Search Query:', activeTab === 'audit_form' ? formSearchQuery : reportSearchQuery);
           return null;
         })()}
         {loading ? (
@@ -872,7 +849,7 @@ const QAAgentAudit = () => {
             <Users className="w-16 h-16 mx-auto mb-4 text-gray-300" />
             <p className="text-gray-400 font-medium text-lg">No QA agents found</p>
             <p className="text-gray-400 text-sm mt-2">
-              {searchQuery ? 'Try adjusting your search query' : 'No audit data available for this period'}
+              {formSearchQuery ? 'Try adjusting your search query' : 'No audit data available for this period'}
             </p>
           </div>
         ) : (
@@ -1099,8 +1076,8 @@ const QAAgentAudit = () => {
             </label>
             <input  
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={reportSearchQuery}
+              onChange={(e) => setReportSearchQuery(e.target.value)}
               placeholder="Search by QA agent name..."
               className="w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
             />
@@ -1109,11 +1086,11 @@ const QAAgentAudit = () => {
           {/* Date Range Filter */}
           <div className="flex-1 min-w-[200px] flex items-end">
             <DateRangePicker
-              startDate={dateRange.start}
-              endDate={dateRange.end}
-              onStartDateChange={(date) => setDateRange(prev => ({ ...prev, start: date }))}
-              onEndDateChange={(date) => setDateRange(prev => ({ ...prev, end: date }))}
-              onClear={() => setDateRange({ start: '', end: '' })}
+              startDate={reportDateRange.start}
+              endDate={reportDateRange.end}
+              onStartDateChange={(date) => setReportDateRange(prev => ({ ...prev, start: date }))}
+              onEndDateChange={(date) => setReportDateRange(prev => ({ ...prev, end: date }))}
+              onClear={() => setReportDateRange({ start: '', end: '' })}
               label=""
               description=""
               showClearButton={true}
@@ -1151,7 +1128,7 @@ const QAAgentAudit = () => {
             <Users className="w-16 h-16 mx-auto mb-4 text-gray-300" />
             <p className="text-gray-400 font-medium text-lg">No QA agents found</p>
             <p className="text-gray-400 text-sm mt-2">
-              {searchQuery ? 'Try adjusting your search query' : 'No audit data available for this period'}
+              {reportSearchQuery ? 'Try adjusting your search query' : 'No audit data available for this period'}
             </p>
           </div>
         ) : (
