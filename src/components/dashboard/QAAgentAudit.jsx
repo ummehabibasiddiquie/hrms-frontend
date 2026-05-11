@@ -30,7 +30,6 @@ import {
 import { getFriendlyErrorMessage } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
 import { DateRangePicker } from '../common/CustomCalendar';
-import MultiSelectWithCheckbox from '../common/MultiSelectWithCheckbox';
 
 const QAAgentAudit = () => {
   const { user } = useAuth();
@@ -141,9 +140,7 @@ const QAAgentAudit = () => {
   const [expandedAgents, setExpandedAgents] = useState({}); // Track which QA agents are expanded
   const [searchQuery, setSearchQuery] = useState(''); // Search within QA agents
   
-  // Individual agent filters - stores filters per agent
-  const [agentFilters, setAgentFilters] = useState({}); // { qaAgentName: { agents: [], startDate: '', endDate: '' } }
-  
+    
   // Modal state for QC Score input
   const [showQCScoreModal, setShowQCScoreModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -256,8 +253,8 @@ const QAAgentAudit = () => {
       endDate.setHours(23, 59, 59, 999);
       
       filteredData = reportData.filter(record => {
-        if (!record.audit_datetime) return false;
-        const recordDate = new Date(record.audit_datetime);
+        if (!record.worked_date) return false;
+        const recordDate = new Date(record.worked_date);
         return recordDate >= startDate && recordDate <= endDate;
       });
     }
@@ -358,18 +355,7 @@ const QAAgentAudit = () => {
     return filtered;
   }, [groupedReportData, searchQuery]);
 
-  // Auto-expand all QA agents when data is loaded
-  React.useEffect(() => {
-    if (filteredQAAgents.length > 0) {
-      const allExpanded = {};
-      filteredQAAgents.forEach(qa => {
-        allExpanded[qa.qaAgentName] = true;
-      });
-      setExpandedAgents(allExpanded);
-      console.log('[QAAgentAudit] Auto-expanded all QA agents:', Object.keys(allExpanded));
-    }
-  }, [filteredQAAgents]);
-
+  
   // Toggle QA Agent section
   const toggleAgent = (qaName) => {
     setExpandedAgents(prev => ({
@@ -391,77 +377,7 @@ const QAAgentAudit = () => {
     setExpandedAgents({});
   };
 
-  // Get filters for a specific agent
-  const getAgentFilter = (qaAgentName) => {
-    const todayDate = getTodayDate();
-    return agentFilters[qaAgentName] || { agents: [], startDate: todayDate, endDate: todayDate };
-  };
-
-  // Update filters for a specific agent
-  const updateAgentFilter = (qaAgentName, filterType, value) => {
-    setAgentFilters(prev => ({
-      ...prev,
-      [qaAgentName]: {
-        ...getAgentFilter(qaAgentName),
-        [filterType]: value
-      }
-    }));
-  };
-
-  // Clear filters for a specific agent
-  const clearAgentFilters = (qaAgentName) => {
-    setAgentFilters(prev => {
-      const newFilters = { ...prev };
-      delete newFilters[qaAgentName];
-      return newFilters;
-    });
-  };
-
-  // Filter records for a specific QA agent based on individual filters
-  const getFilteredRecords = (records, qaAgentName) => {
-    const filter = getAgentFilter(qaAgentName);
-    
-    let filtered = [...records];
-    
-    // Filter by agents (agent_name)
-    if (filter.agents && filter.agents.length > 0) {
-      filtered = filtered.filter(record => 
-        filter.agents.includes(record.agent_name)
-      );
-    }
-    
-    // Filter by date range
-    if (filter.startDate || filter.endDate) {
-      filtered = filtered.filter(record => {
-        const recordDate = new Date(record.timestamp || record.audit_datetime);
-        
-        // Set start date to beginning of day (00:00:00)
-        const start = filter.startDate ? new Date(filter.startDate) : null;
-        if (start) {
-          start.setHours(0, 0, 0, 0);
-        }
-        
-        // Set end date to end of day (23:59:59.999)
-        const end = filter.endDate ? new Date(filter.endDate) : null;
-        if (end) {
-          end.setHours(23, 59, 59, 999);
-        }
-        
-        if (start && recordDate < start) return false;
-        if (end && recordDate > end) return false;
-        return true;
-      });
-    }
-    
-    return filtered;
-  };
-
-  // Get unique agent names from records for a specific QA agent
-  const getUniqueAgents = (records) => {
-    const agents = [...new Set(records.map(r => r.agent_name).filter(Boolean))];
-    return agents.map(agent => ({ value: agent, label: agent }));
-  };
-
+  
   // Handle QC Score Modal
   const handleOpenQCScoreModal = (record) => {
     setSelectedRecord(record);
@@ -549,10 +465,8 @@ const QAAgentAudit = () => {
         // Close modal
         handleCloseQCScoreModal();
         
-        // Refresh the audit data after a short delay to show the toast
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        // Refresh the audit data without page reload
+        fetchAuditData();
       } else {
         toast.error(response.data.message || 'Failed to submit QC Score');
       }
@@ -608,85 +522,85 @@ const QAAgentAudit = () => {
     return { date: formattedDate, time: formattedTime };
   };
 
-  // Fetch audit form data
+  // Fetch audit form data - extracted as independent function
+  const fetchAuditData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('[QAAgentAudit] Fetching all QC audit data...');
+
+      // Call the API endpoint - fetch all QC records
+      const response = await nodeApi.get('/qc-records/list');
+
+      console.log('[QAAgentAudit] API Response:', response.data);
+
+      // Map API response to expected structure
+      const apiData = response.data?.data || [];
+      const mappedData = apiData.map(record => ({
+        audit_id: record.id,
+        audit_datetime: record.timestamp || record.date_of_file_submission,
+        timestamp: record.timestamp || record.date_of_file_submission, // Keep original field
+        qa_agent_name: record.qa_name,
+        qa_agent_id: record.qc_user_id,
+        agent_name: record.agent_name,
+        project_name: record.project_name,
+        task_name: record.task_name,
+        qc_file_path: record.qc_file_path || record['10%_file_path'] || record.file_path || 'N/A',
+        file_name: record.qc_file_path ? record.qc_file_path.split('/').pop() : (record['10%_file_path'] ? record['10%_file_path'].split('/').pop() : (record.file_path ? record.file_path.split('/').pop() : 'N/A')),
+        file_url: record.qc_file_path || record['10%_file_path'] || record.file_path || '', // URL for downloading
+        total_qc_performed: record['10%_data_generated_count'] || record.file_record_count || 0,
+        '10%_data_generated_count': record['10%_data_generated_count'] || 0, // Keep original field
+        '10%_qc_file_records': record['10%_data_generated_count'] || 0, // Alternative field name
+        qc_score: record.qc_score ?? null, // Keep original field - preserve null if no score added
+        average_qc_score: record.qc_score ?? null,
+        error_score: record.error_score ?? null, // Keep original field - preserve null if no errors
+        total_errors_found: record.error_score ?? null,
+        status: record.status || 'Pending', // Keep original field
+        audit_status: record.status || 'Pending',
+        comments: '', // Not in API response, can be added later
+        file_record_count: record.file_record_count || 0,
+        // Store original file paths for download functionality
+        file_path: record.file_path,
+        error_list: (() => {
+          // Parse error_list if it's a JSON string, otherwise use as-is
+          try {
+            if (typeof record.error_list === 'string') {
+              return JSON.parse(record.error_list);
+            }
+            return Array.isArray(record.error_list) ? record.error_list : [];
+          } catch (e) {
+            console.warn('[QAAgentAudit] Failed to parse error_list:', e);
+            return [];
+          }
+        })(),
+        tracker_id: record.tracker_id,
+        project_id: record.project_id,
+        task_id: record.task_id,
+        // Audit-related fields (from QC audit submissions)
+        qc_checked_file: record.qc_checked_file || null,
+        error_notes: record.error_notes || null,
+        updated_at: record.updated_at || record.timestamp || record.audit_datetime, // Add updated_at field
+        audit_performed: !!(record.qc_checked_file || record.error_notes) // Boolean flag to check if audit was done
+      }));
+
+      setAuditData(mappedData);
+      console.log('[QAAgentAudit] Mapped data:', mappedData);
+      console.log('[QAAgentAudit] Total records fetched:', mappedData.length);
+
+    } catch (err) {
+      console.error('[QAAgentAudit] Error fetching audit data:', err);
+      const msg = getFriendlyErrorMessage(err);
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch audit form data on component mount and tab change
   useEffect(() => {
     if (activeTab !== 'audit_form') return;
-
-    const fetchAuditData = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        console.log('[QAAgentAudit] Fetching all QC audit data...');
-
-        // Call the API endpoint - fetch all QC records
-        const response = await nodeApi.get('/qc-records/list');
-
-        console.log('[QAAgentAudit] API Response:', response.data);
-
-        // Map API response to expected structure
-        const apiData = response.data?.data || [];
-        const mappedData = apiData.map(record => ({
-          audit_id: record.id,
-          audit_datetime: record.timestamp || record.date_of_file_submission,
-          timestamp: record.timestamp || record.date_of_file_submission, // Keep original field
-          qa_agent_name: record.qa_name,
-          qa_agent_id: record.qc_user_id,
-          agent_name: record.agent_name,
-          project_name: record.project_name,
-          task_name: record.task_name,
-          qc_file_path: record.qc_file_path || record['10%_file_path'] || record.file_path || 'N/A',
-          file_name: record.qc_file_path ? record.qc_file_path.split('/').pop() : (record['10%_file_path'] ? record['10%_file_path'].split('/').pop() : (record.file_path ? record.file_path.split('/').pop() : 'N/A')),
-          file_url: record.qc_file_path || record['10%_file_path'] || record.file_path || '', // URL for downloading
-          total_qc_performed: record['10%_data_generated_count'] || record.file_record_count || 0,
-          '10%_data_generated_count': record['10%_data_generated_count'] || 0, // Keep original field
-          '10%_qc_file_records': record['10%_data_generated_count'] || 0, // Alternative field name
-          qc_score: record.qc_score ?? null, // Keep original field - preserve null if no score added
-          average_qc_score: record.qc_score ?? null,
-          error_score: record.error_score ?? null, // Keep original field - preserve null if no errors
-          total_errors_found: record.error_score ?? null,
-          status: record.status || 'Pending', // Keep original field
-          audit_status: record.status || 'Pending',
-          comments: '', // Not in API response, can be added later
-          file_record_count: record.file_record_count || 0,
-          // Store original file paths for download functionality
-          file_path: record.file_path,
-          error_list: (() => {
-            // Parse error_list if it's a JSON string, otherwise use as-is
-            try {
-              if (typeof record.error_list === 'string') {
-                return JSON.parse(record.error_list);
-              }
-              return Array.isArray(record.error_list) ? record.error_list : [];
-            } catch (e) {
-              console.warn('[QAAgentAudit] Failed to parse error_list:', e);
-              return [];
-            }
-          })(),
-          tracker_id: record.tracker_id,
-          project_id: record.project_id,
-          task_id: record.task_id,
-          // Audit-related fields (from QC audit submissions)
-          qc_checked_file: record.qc_checked_file || null,
-          error_notes: record.error_notes || null,
-          updated_at: record.updated_at || record.timestamp || record.audit_datetime, // Add updated_at field
-          audit_performed: !!(record.qc_checked_file || record.error_notes) // Boolean flag to check if audit was done
-        }));
-
-        setAuditData(mappedData);
-        console.log('[QAAgentAudit] Mapped data:', mappedData);
-        console.log('[QAAgentAudit] Total records fetched:', mappedData.length);
-
-      } catch (err) {
-        console.error('[QAAgentAudit] Error fetching audit data:', err);
-        const msg = getFriendlyErrorMessage(err);
-        setError(msg);
-        toast.error(msg);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (user?.user_id) {
       fetchAuditData();
     }
@@ -703,9 +617,11 @@ const QAAgentAudit = () => {
       try {
         console.log('[QAAgentAudit] Fetching QC audit report...');
 
-        // Call the Python API endpoint with user_id
+        // Call the Python API endpoint with user_id and date range
         const response = await api.post('/qc_audit/report', {
-          logged_in_user_id: user?.user_id
+          logged_in_user_id: user?.user_id,
+          start_date: dateRange.start,
+          end_date: dateRange.end
         });
 
         console.log('[QAAgentAudit] Report API Response:', response.data);
@@ -713,11 +629,13 @@ const QAAgentAudit = () => {
         // Extract records from response
         const records = response.data?.data?.records || [];
         
-        // Map API response to expected structure
+        // Map API response to expected structure and sort by worked_date descending
         const mappedData = records.map(record => ({
           agent_name: record.agent_name,
           qc_agent_name: record.qc_agent_name,
           audit_datetime: record.audit_datetime,
+          evaluation_date: record.evaluation_date,
+          worked_date: record.worked_date,
           project_name: record.project,
           task_name: record.task,
           total_qc_performed: record.total_qcs,
@@ -728,7 +646,12 @@ const QAAgentAudit = () => {
           audit_status: record.status,
           notes: record.error_notes,
           comments: record.error_notes
-        }));
+        })).sort((a, b) => {
+          // Sort by worked_date in descending order (newest first)
+          const dateA = new Date(a.worked_date);
+          const dateB = new Date(b.worked_date);
+          return dateB - dateA;
+        });
 
         console.log('[QAAgentAudit] Mapped report data:', mappedData);
         setReportData(mappedData);
@@ -743,7 +666,7 @@ const QAAgentAudit = () => {
     if (user?.user_id) {
       fetchReportData();
     }
-  }, [user, activeTab]);
+  }, [user, activeTab, dateRange]);
 
   // Export to Excel - exports ALL user data regardless of filters
   const handleExportExcel = () => {
@@ -761,12 +684,12 @@ const QAAgentAudit = () => {
       if (activeTab === 'audit_report') {
         // Export format for audit report - ALL users
         exportData = dataToExport.map(row => ({
-          'Audit Date & Time': row.audit_datetime || '-',
+          'Worked Date & Time': row.worked_date || '-',
           'Agent Name': row.agent_name || '-',
           'Project': row.project_name || '-',
           'Task': row.task_name || '-',
           'Total QCs': row.total_qc_performed || 0,
-          'QC Score': row.average_qc_score != null ? `${row.average_qc_score}%` : '-',
+          'QA Agent Score': row.average_qc_score != null ? `${row.average_qc_score}%` : '-',
           'QC Checked File': row.qc_checked_file || '-',
           'Status': row.audit_status || '-',
           'Error Notes': row.notes || '-'
@@ -782,7 +705,7 @@ const QAAgentAudit = () => {
           'Project': '',
           'Task': '',
           'Total QCs': totalQCs,
-          'QC Score': `${avgScore.toFixed(2)}%`,
+          'QA Agent Score': `${avgScore.toFixed(2)}%`,
           'QC Checked File': '',
           'Status': '',
           'Error Notes': ''
@@ -790,14 +713,14 @@ const QAAgentAudit = () => {
       } else {
         // Export format for audit form - ALL QA agents and users
         exportData = dataToExport.map(row => ({
-          'Audit Date & Time': row.audit_datetime || '-',
+          'Worked Date & Time': row.worked_date || '-',
           'QA Agent': row.qa_agent_name || '-',
           'Agent Name': row.agent_name || '-',
           'Project': row.project_name || '-',
           'Task': row.task_name || '-',
           'File': row.file_name || '-',
           'Total QCs': row.total_qc_performed || 0,
-          'QC Score': row.average_qc_score != null ? `${row.average_qc_score}%` : '-',
+          'QA Agent Score': row.average_qc_score != null ? `${row.average_qc_score}%` : '-',
           'Status': row.audit_status || '-'
         }));
 
@@ -813,7 +736,7 @@ const QAAgentAudit = () => {
           'Task': '',
           'File': '',
           'Total QCs': totalQCs,
-          'QC Score': `${avgScore.toFixed(2)}%`,
+          'QA Agent Score': `${avgScore.toFixed(2)}%`,
           'Status': ''
         });
       }
@@ -892,7 +815,7 @@ const QAAgentAudit = () => {
       <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
         <div className="flex flex-col lg:flex-row lg:items-end gap-4">
           {/* Search Input */}
-          <div className="flex-1 lg:flex-none lg:w-80">
+          <div className="flex-1 lg:flex-none lg:w-96">
             <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
               <Search className="w-3.5 h-3.5 text-blue-600" />
               Search QA Agents
@@ -903,6 +826,22 @@ const QAAgentAudit = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by QA agent name..."
               className="w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+            />
+          </div>
+
+          {/* Date Range Filter */}
+          <div className="flex-1">
+            <DateRangePicker
+              startDate={dateRange.start}
+              endDate={dateRange.end}
+              onStartDateChange={(date) => setDateRange(prev => ({ ...prev, start: date }))}
+              onEndDateChange={(date) => setDateRange(prev => ({ ...prev, end: date }))}
+              onClear={() => setDateRange({ start: '', end: '' })}
+              label=""
+              description=""
+              showClearButton={true}
+              noWrapper={true}
+              fieldWidth="250px"
             />
           </div>
         </div>
@@ -939,9 +878,7 @@ const QAAgentAudit = () => {
         ) : (
           filteredQAAgents.map(({ qaAgentName, records }) => {
             const isExpanded = expandedAgents[qaAgentName];
-            const filteredRecords = getFilteredRecords(records, qaAgentName);
-            const agentFilter = getAgentFilter(qaAgentName);
-            const uniqueAgents = getUniqueAgents(records);
+            const filteredRecords = records;
             
             // Calculate statistics for this QA agent
             const totalRecords = records.length;
@@ -1029,65 +966,7 @@ const QAAgentAudit = () => {
                     </div>
                   </div>
 
-                  {/* Individual Agent Filters */}
-                  {isExpanded && (
-                    <div className="mt-6 pt-5 border-t-2 border-blue-100">
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        {/* Agent Name Filter */}
-                        <div>
-                          <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
-                            <User className="w-3.5 h-3.5 text-blue-600" />
-                            Filter by Agent Name
-                          </label>
-                          <MultiSelectWithCheckbox
-                            value={agentFilter.agents}
-                            onChange={(value) => updateAgentFilter(qaAgentName, 'agents', value)}
-                            options={uniqueAgents}
-                            icon={User}
-                            placeholder="All Agents"
-                            showSelectAll={true}
-                          />
-                        </div>
-
-                        {/* Date Range Filter */}
-                        <div className="lg:col-span-2">
-                          <DateRangePicker
-                            startDate={agentFilter.startDate}
-                            endDate={agentFilter.endDate}
-                            onStartDateChange={(date) => updateAgentFilter(qaAgentName, 'startDate', date)}
-                            onEndDateChange={(date) => updateAgentFilter(qaAgentName, 'endDate', date)}
-                            onClear={() => clearAgentFilters(qaAgentName)}
-                            label=""
-                            description=""
-                            showClearButton={true}
-                            noWrapper={true}
-                            fieldWidth="200px"
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Filter Summary */}
-                      {(agentFilter.agents.length > 0 || agentFilter.startDate || agentFilter.endDate) && (
-                        <div className="mt-4 flex items-center gap-2 text-xs">
-                          <span className="font-bold text-slate-700">Active Filters:</span>
-                          {agentFilter.agents.length > 0 && (
-                            <span className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full font-bold shadow-sm">
-                              Agents: {agentFilter.agents.length}
-                            </span>
-                          )}
-                          {(agentFilter.startDate || agentFilter.endDate) && (
-                            <span className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full font-bold shadow-sm">
-                              Date Range Applied
-                            </span>
-                          )}
-                          <span className="font-bold text-slate-700 ml-2">
-                            Showing <span className="text-blue-700">{filteredRecords.length}</span> of <span className="text-slate-500">{records.length}</span> records
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                  </div>
 
                 {/* Collapsible Audit Records Table */}
                 {isExpanded && (
@@ -1095,6 +974,7 @@ const QAAgentAudit = () => {
                     <table className="min-w-full divide-y divide-blue-100">
                       <thead className="bg-blue-50">
                         <tr>
+                          <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Worked Date & Time</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Agent Name</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Project Name</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Task Name</th>
@@ -1102,7 +982,6 @@ const QAAgentAudit = () => {
                           <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">File Record Count</th>
                           <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Error List</th>
                           <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">QC Score</th>
-                          <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Date and Time</th>
                           <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
@@ -1121,6 +1000,12 @@ const QAAgentAudit = () => {
                         ) : (
                           filteredRecords.map((row, idx) => (
                           <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
+                            <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold">{formatDateTime(row.updated_at).date}</span>
+                                <span className="text-xs text-gray-600">{formatDateTime(row.updated_at).time}</span>
+                              </div>
+                            </td>
                             <td className="px-6 py-4 text-gray-900 font-medium">{row.agent_name || '-'}</td>
                             <td className="px-6 py-4 text-gray-900">{row.project_name || '-'}</td>
                             <td className="px-6 py-4 text-gray-900">{row.task_name || '-'}</td>
@@ -1174,12 +1059,6 @@ const QAAgentAudit = () => {
                                 {row.qc_score != null ? `${Number(row.qc_score).toFixed(2)}%` : (row.average_qc_score != null ? `${Number(row.average_qc_score).toFixed(2)}%` : '-')}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
-                              <div className="flex flex-col">
-                                <span className="text-sm font-semibold">{formatDateTime(row.updated_at).date}</span>
-                                <span className="text-xs text-gray-600">{formatDateTime(row.updated_at).time}</span>
-                              </div>
-                            </td>
                             <td className="px-6 py-4 text-center">
                               {!row.audit_performed ? (
                                 <button
@@ -1213,12 +1092,12 @@ const QAAgentAudit = () => {
       <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
         <div className="flex flex-col lg:flex-row lg:items-end gap-4">
           {/* Search Input */}
-          <div className="flex-1 lg:flex-none lg:w-80">
+          <div className="flex-1 lg:flex-none lg:w-96">
             <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
               <Search className="w-3.5 h-3.5 text-blue-600" />
               Search QA Agents
             </label>
-            <input
+            <input  
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -1226,9 +1105,25 @@ const QAAgentAudit = () => {
               className="w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
             />
           </div>
+
+          {/* Date Range Filter */}
+          <div className="flex-1 min-w-[200px] flex items-end">
+            <DateRangePicker
+              startDate={dateRange.start}
+              endDate={dateRange.end}
+              onStartDateChange={(date) => setDateRange(prev => ({ ...prev, start: date }))}
+              onEndDateChange={(date) => setDateRange(prev => ({ ...prev, end: date }))}
+              onClear={() => setDateRange({ start: '', end: '' })}
+              label=""
+              description=""
+              showClearButton={true}
+              noWrapper={true}
+              fieldWidth="250px"
+            />
+          </div>
           
           {/* Export Button */}
-          <div className="flex items-end ml-auto">
+          <div className="flex items-end flex-shrink-0 ml-4">
             <button
               onClick={handleExportExcel}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
@@ -1262,9 +1157,7 @@ const QAAgentAudit = () => {
         ) : (
           filteredReportAgents.map(({ qaAgentName, records }) => {
             const isExpanded = expandedAgents[qaAgentName];
-            const filteredRecords = getFilteredRecords(records, qaAgentName);
-            const agentFilter = getAgentFilter(qaAgentName);
-            const uniqueAgents = getUniqueAgents(records);
+            const filteredRecords = records;
             
             // Calculate statistics for this QA agent
             const totalRecords = records.length;
@@ -1353,65 +1246,7 @@ const QAAgentAudit = () => {
                     </div>
                   </div>
 
-                  {/* Individual Agent Filters */}
-                  {isExpanded && (
-                    <div className="mt-6 pt-5 border-t-2 border-blue-100">
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        {/* Agent Name Filter */}
-                        <div>
-                          <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
-                            <User className="w-3.5 h-3.5 text-blue-600" />
-                            Filter by Agent Name
-                          </label>
-                          <MultiSelectWithCheckbox
-                            value={agentFilter.agents}
-                            onChange={(value) => updateAgentFilter(qaAgentName, 'agents', value)}
-                            options={uniqueAgents}
-                            icon={User}
-                            placeholder="All Agents"
-                            showSelectAll={true}
-                          />
-                        </div>
-
-                        {/* Date Range Filter */}
-                        <div className="lg:col-span-2">
-                          <DateRangePicker
-                            startDate={agentFilter.startDate}
-                            endDate={agentFilter.endDate}
-                            onStartDateChange={(date) => updateAgentFilter(qaAgentName, 'startDate', date)}
-                            onEndDateChange={(date) => updateAgentFilter(qaAgentName, 'endDate', date)}
-                            onClear={() => clearAgentFilters(qaAgentName)}
-                            label=""
-                            description=""
-                            showClearButton={true}
-                            noWrapper={true}
-                            fieldWidth="200px"
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Filter Summary */}
-                      {(agentFilter.agents.length > 0 || agentFilter.startDate || agentFilter.endDate) && (
-                        <div className="mt-4 flex items-center gap-2 text-xs">
-                          <span className="font-bold text-slate-700">Active Filters:</span>
-                          {agentFilter.agents.length > 0 && (
-                            <span className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full font-bold shadow-sm">
-                              Agents: {agentFilter.agents.length}
-                            </span>
-                          )}
-                          {(agentFilter.startDate || agentFilter.endDate) && (
-                            <span className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full font-bold shadow-sm">
-                              Date Range Applied
-                            </span>
-                          )}
-                          <span className="font-bold text-slate-700 ml-2">
-                            Showing <span className="text-blue-700">{filteredRecords.length}</span> of <span className="text-slate-500">{records.length}</span> records
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                  </div>
 
                 {/* Collapsible Audit Records Table */}
                 {isExpanded && (
@@ -1419,11 +1254,12 @@ const QAAgentAudit = () => {
                     <table className="min-w-full divide-y divide-blue-100">
                       <thead className="bg-blue-50">
                         <tr>
-                          <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Audit Date & Time</th>
+                          <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Worked Date & Time</th>
+                          <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Evaluation Date & Time</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Agent Name</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Project</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Task</th>
-                          <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">QC Score</th>
+                          <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">QA Agent Score</th>
                           <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">QC Checked File</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Error Notes</th>
                         </tr>
@@ -1431,7 +1267,7 @@ const QAAgentAudit = () => {
                       <tbody className="bg-white divide-y divide-blue-50">
                         {filteredRecords.length === 0 ? (
                           <tr>
-                            <td colSpan="7" className="px-6 py-12 text-center">
+                            <td colSpan="8" className="px-6 py-12 text-center">
                               <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
                                 <Users className="w-10 h-10 text-slate-400" />
                               </div>
@@ -1445,8 +1281,14 @@ const QAAgentAudit = () => {
                           <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
                             <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
                               <div className="flex flex-col">
-                                <span className="text-sm font-semibold">{formatDateTime(row.audit_datetime).date}</span>
-                                <span className="text-xs text-gray-600">{formatDateTime(row.audit_datetime).time}</span>
+                                <span className="text-sm font-semibold">{formatDateTime(row.worked_date).date}</span>
+                                <span className="text-xs text-gray-600">{formatDateTime(row.worked_date).time}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold">{formatDateTime(row.evaluation_date).date}</span>
+                                <span className="text-xs text-gray-600">{formatDateTime(row.evaluation_date).time}</span>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-gray-900">{row.agent_name || '-'}</td>

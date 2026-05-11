@@ -22,16 +22,20 @@ import {
 } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import CustomSelect from '../common/CustomSelect';
+import { DateRangePicker } from '../common/CustomCalendar';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { exportToCSV } from '../../utils/csvExport';
 
 const QAAgentQCFormReport = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [qcRecords, setQcRecords] = useState([]);
   const [filteredRecords, setFilteredRecords] = useState([]);
   const [expandedRow, setExpandedRow] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
 
   // Fetch QC history from API
@@ -77,7 +81,7 @@ const QAAgentQCFormReport = () => {
     fetchQCHistory();
   }, []);
 
-  // Apply filters when search or status changes
+  // Apply filters when search, status, or date range changes
   useEffect(() => {
     let filtered = [...qcRecords];
 
@@ -95,8 +99,27 @@ const QAAgentQCFormReport = () => {
       filtered = filtered.filter(record => record.status === statusFilter);
     }
 
+    // Date range filter
+    if (dateRange.start || dateRange.end) {
+      filtered = filtered.filter(record => {
+        const submissionDate = record.date_of_file_submission ? new Date(record.date_of_file_submission) : null;
+        if (!submissionDate) return false;
+
+        const startDate = dateRange.start ? new Date(dateRange.start) : null;
+        const endDate = dateRange.end ? new Date(dateRange.end) : null;
+
+        if (startDate && submissionDate < startDate) return false;
+        if (endDate) {
+          const endDateTime = new Date(endDate);
+          endDateTime.setHours(23, 59, 59, 999);
+          if (submissionDate > endDateTime) return false;
+        }
+        return true;
+      });
+    }
+
     setFilteredRecords(filtered);
-  }, [searchTerm, statusFilter, qcRecords]);
+  }, [searchTerm, statusFilter, dateRange, qcRecords]);
 
   const getStatusBadge = (status) => {
     if (status === 'regular' || status === 'completed') {
@@ -308,6 +331,113 @@ const QAAgentQCFormReport = () => {
     }
   };
 
+  // Export Consolidated Report
+  const handleConsolidatedExport = async () => {
+    try {
+      if (!user?.user_id) {
+        toast.error('User not authenticated');
+        return;
+      }
+
+      // Show loading toast
+      const loadingToast = toast.loading('Generating consolidated report...');
+
+      // Prepare API payload
+      const payload = {
+        logged_in_user_id: user.user_id
+      };
+
+      // Add date range if filters are applied
+      if (dateRange.start && dateRange.end) {
+        payload.start_date = dateRange.start;
+        payload.end_date = dateRange.end;
+      }
+
+      // Call the consolidated API
+      const response = await api.post('qc_history_user/consolidated_qc_report', payload);
+
+      if (response.data?.status === 200 && response.data?.data?.records) {
+        const records = response.data.data.records;
+        
+        if (records.length === 0) {
+          toast.dismiss(loadingToast);
+          toast.error('No data found for the selected criteria');
+          return;
+        }
+
+        // Transform data for export
+        const exportData = records.map(record => {
+          // Format dates
+          const evalDate = record.evaluation_date ? 
+            new Date(record.evaluation_date).toLocaleDateString('en-GB') : 'N/A';
+          const workDate = record.work_date ? 
+            new Date(record.work_date).toLocaleDateString('en-GB') : 'N/A';
+          
+          // Format error types
+          const errorTypes = record.error_type && record.error_type.length > 0 
+            ? record.error_type.join(', ') 
+            : '-';
+
+          return {
+            'Evaluation Date': evalDate,
+            'Work Date': workDate,
+            'Team Lead': record.team_lead || 'N/A',
+            'Agent Name': record.agent_name || 'N/A',
+            'Project Name': record.project_name || 'N/A',
+            'Task Name': record.task_name || 'N/A',
+            'Records': record.records || 0,
+            'QC Records': record.qc_records || 0,
+            'No. of Errors': record.no_of_errors || 0,
+            'Avg QC Score': record.final_qc_score ? `${record.final_qc_score}%` : '0%',
+            'Error Types': errorTypes,
+            'QA Name': record.qa_name || 'N/A'
+          };
+        });
+
+        // Add summary row at the end
+        const totalRecords = records.reduce((sum, r) => sum + (r.records || 0), 0);
+        const totalQCRecords = records.reduce((sum, r) => sum + (r.qc_records || 0), 0);
+        const totalErrors = records.reduce((sum, r) => sum + (r.no_of_errors || 0), 0);
+        const avgScore = records.length > 0 
+          ? (records.reduce((sum, r) => sum + (r.final_qc_score || 0), 0) / records.length).toFixed(2)
+          : '0.00';
+
+        exportData.push({
+          'Evaluation Date': 'SUMMARY',
+          'Work Date': '',
+          'Team Lead': '',
+          'Agent Name': `Total Records: ${totalRecords}`,
+          'Project Name': `Total QC Records: ${totalQCRecords}`,
+          'Task Name': `Total Errors: ${totalErrors}`,
+          'Records': '',
+          'QC Records': '',
+          'No. of Errors': '',
+          'Avg QC Score': `${avgScore}%`,
+          'Error Types': '',
+          'QA Name': ''
+        });
+
+        // Generate filename with date range
+        const dateRangeStr = (dateRange.start && dateRange.end) 
+          ? `_${dateRange.start}_to_${dateRange.end}` 
+          : '';
+        const filename = `Consolidated_QC_Report${dateRangeStr}_${new Date().toISOString().split('T')[0]}.csv`;
+
+        // Export to CSV
+        exportToCSV(exportData, filename);
+        
+        toast.dismiss(loadingToast);
+        toast.success(`Exported ${records.length} consolidated records!`);
+      } else {
+        toast.dismiss(loadingToast);
+        toast.error('Failed to fetch consolidated data');
+      }
+    } catch (err) {
+      console.error('Consolidated export error:', err);
+      toast.error('Failed to generate consolidated report');
+    }
+  };
+
   // Build history items from rework and correction data
   const buildHistoryItems = (record) => {
     const items = [];
@@ -356,9 +486,10 @@ const QAAgentQCFormReport = () => {
     <div className="space-y-4">
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-md p-4 border-2 border-slate-200">
-        <div className="flex flex-col lg:flex-row gap-4">
+        {/* First Row: Search and Status */}
+        <div className="flex flex-col lg:flex-row items-center gap-4 lg:gap-0 mb-4">
           {/* Search */}
-          <div className="flex-1 min-w-0">
+          <div className="w-full lg:w-3/4 lg:pr-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
@@ -366,14 +497,13 @@ const QAAgentQCFormReport = () => {
                 placeholder="Search by agent, project, or task..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border-2 border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                className="w-full pl-10 pr-4 py-2.5 h-10 border-2 border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
               />
             </div>
           </div>
 
-          {/* Actions Row */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Status Filter */}
+          {/* Status Filter */}
+          <div className="w-full lg:w-1/4 lg:pl-2 flex-shrink-0">
             <CustomSelect
               value={statusFilter}
               onChange={(value) => setStatusFilter(value)}
@@ -385,37 +515,69 @@ const QAAgentQCFormReport = () => {
               ]}
               icon={Filter}
               placeholder="Filter by status"
-              className="w-40"
+              className="w-full h-10 lg:w-full"
             />
+          </div>
+        </div>
+
+        {/* Second Row: Date Filters and Buttons */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-0">
+          {/* Date Filters */}
+          <div className="w-full lg:w-auto">
+            <DateRangePicker
+              startDate={dateRange.start}
+              endDate={dateRange.end}
+              onStartDateChange={(date) => setDateRange(prev => ({ ...prev, start: date }))}
+              onEndDateChange={(date) => setDateRange(prev => ({ ...prev, end: date }))}
+              onClear={() => setDateRange({ start: '', end: '' })}
+              label=""
+              description=""
+              showClearButton={false}
+              noWrapper={true}
+              fieldWidth="300px"
+            />
+          </div>
+
+          {/* Buttons */}
+          <div className="flex flex-wrap items-center gap-2 lg:mt-6 w-full lg:w-auto lg:justify-end">
+            {/* Export Main Table */}
+            <button
+              onClick={handleExportExcel}
+              className="px-3 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+
+            {/* History Button */}
+            <button
+              onClick={handleExportHistory}
+              className="px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+            >
+              <Clock className="w-4 h-4" />
+              <span className="hidden sm:inline">History</span>
+            </button>
+
+            {/* Consolidated Export Button */}
+            <button
+              onClick={handleConsolidatedExport}
+              className="px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Consolidated Export</span>
+            </button>
 
             {/* Clear Filter Button */}
             <button
               onClick={() => {
                 setSearchTerm('');
                 setStatusFilter('all');
+                setDateRange({ start: '', end: '' });
               }}
               className="px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
             >
               <X className="w-4 h-4" />
               <span className="hidden sm:inline">Clear</span>
-            </button>
-
-            {/* Export Main Table */}
-            <button
-              onClick={handleExportExcel}
-              className="px-3 py-2.5 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export</span>
-            </button>
-
-            {/* Export History */}
-            <button
-              onClick={handleExportHistory}
-              className="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">History</span>
             </button>
           </div>
         </div>
