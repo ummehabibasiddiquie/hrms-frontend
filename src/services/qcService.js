@@ -156,7 +156,7 @@ export const saveQCRecord = async (payload) => {
       qc_score: payload.qc_score,
       status: payload.status,
       file_record_count: payload.file_record_count,
-      data_generated_count: payload.qc_generated_count,
+      data_generated_count: payload.data_generated_count,
       qc_file_records: payload.qc_file_records,
       error_score: payload.error_score,
       error_list_length: payload.error_list?.length || 0,

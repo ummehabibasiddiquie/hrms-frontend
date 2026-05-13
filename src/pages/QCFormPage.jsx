@@ -296,13 +296,7 @@ const QCFormPage = () => {
 
     } catch (err) {
       console.error('[QCFormPage] Error fetching form data:', err);
-      // Extract string message from various formats including {text, hyperlink} objects
-      const msg = typeof err.message === 'object' && err.message?.text 
-        ? err.message.text 
-        : typeof err.message === 'string' 
-          ? err.message 
-          : 'Failed to load QC form data';
-      setError(msg);
+      setError(err.message || 'Failed to load QC form data');
       toast.error('Failed to load form data');
     } finally {
       setLoading(false);
@@ -530,87 +524,80 @@ const QCFormPage = () => {
       // This allows QA to override the auto-calculated status if needed
       const status = submissionType || errorMetrics.status;
 
-      // Extract date and time from tracker data and format to YYYY-MM-DD HH:mm:ss
+      // Extract date from tracker data and format to YYYY-MM-DD
       let formattedDate = '';
-
+      
       // Try different date fields from tracker data
       const possibleDates = [
         trackerData.tracker_date,
         trackerData.date_time,
         trackerData.created_at,
         trackerData.submission_date,
-        trackerData.date,
-        trackerData.date_of_file_submission
+        trackerData.date
       ];
-
+      
       // Find first valid date
       const dateSource = possibleDates.find(date => date && date.trim() !== '');
-
+      
       if (dateSource) {
+        // Remove time and GMT parts if present
         let cleanDate = dateSource.trim();
-
+        
         // Handle formats like "Wed, 05 Mar 2026 14:30:23 GMT"
         if (cleanDate.includes(',')) {
           const parts = cleanDate.split(',')[1].trim(); // Get "05 Mar 2026 14:30:23 GMT"
-          const dateParts = parts.split(' '); // ["05", "Mar", "2026", "14:30:23", "GMT"]
-
+          const dateParts = parts.split(' '); // ["05", "Mar", "2026", ...]
+          
           if (dateParts.length >= 3) {
             const day = dateParts[0];
             const month = dateParts[1];
             const year = dateParts[2];
-            const time = dateParts[3] || '00:00:00';
-
+            
             // Convert month name to number
             const monthMap = {
               'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
               'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
               'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
             };
-
+            
             const monthNum = monthMap[month] || '01';
-            formattedDate = `${year}-${monthNum}-${day.padStart(2, '0')} ${time}`;
+            formattedDate = `${year}-${monthNum}-${day.padStart(2, '0')}`;
           }
         }
-        // Handle ISO format "2026-03-05T14:30:23Z" or "2026-03-05T14:30:23.000Z"
+        // Handle ISO format "2026-03-05T14:30:23Z"
         else if (cleanDate.includes('T')) {
-          const [datePart, timePart] = cleanDate.split('T');
-          const time = timePart ? timePart.replace('Z', '').split('.')[0] : '00:00:00';
-          formattedDate = `${datePart} ${time}`;
+          formattedDate = cleanDate.split('T')[0];
         }
         // Handle format "2026-03-05 14:30:23"
         else if (cleanDate.includes(' ')) {
+          formattedDate = cleanDate.split(' ')[0];
+        }
+        // Handle format "2026-03-05"
+        else if (cleanDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
           formattedDate = cleanDate;
         }
-        // Handle format "2026-03-05" (date only, append default time)
-        else if (cleanDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          formattedDate = `${cleanDate} 00:00:00`;
-        }
       }
-
-      // If still no valid date, use today's date and time
+      
+      // If still no valid date, use today's date
       if (!formattedDate || formattedDate === '') {
         const today = new Date();
         const year = today.getFullYear();
         const month = String(today.getMonth() + 1).padStart(2, '0');
         const day = String(today.getDate()).padStart(2, '0');
-        const hours = String(today.getHours()).padStart(2, '0');
-        const minutes = String(today.getMinutes()).padStart(2, '0');
-        const seconds = String(today.getSeconds()).padStart(2, '0');
-        formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        formattedDate = `${year}-${month}-${day}`;
       }
-
+      
       console.log('[QCFormPage] Date extraction:', {
         trackerDate: trackerData.tracker_date,
         dateTime: trackerData.date_time,
         createdAt: trackerData.created_at,
-        dateOfFileSubmission: trackerData.date_of_file_submission,
         formattedDate
       });
 
-      // Validate date format (now includes time)
-      if (!formattedDate.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)) {
+      // Validate date format
+      if (!formattedDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
         console.error('[QCFormPage] Invalid date format:', formattedDate);
-        throw new Error('Invalid date format. Expected YYYY-MM-DD HH:mm:ss');
+        throw new Error('Invalid date format. Expected YYYY-MM-DD');
       }
 
       // Extract assistant manager ID from tracker data with multiple fallbacks
@@ -715,11 +702,6 @@ const QCFormPage = () => {
 
       console.log('[QCFormPage] API Response:', response);
 
-      // Handle case where entire response is an object with {text, hyperlink} structure
-      if (response && typeof response === 'object' && response.text && !response.success && !response.status) {
-        throw new Error(response.text);
-      }
-
       if (response.success || response.status === 200) {
         const successMessage = submissionType === 'regular' 
           ? 'QC Form submitted & email notification sent!' 
@@ -735,11 +717,7 @@ const QCFormPage = () => {
           navigate('/dashboard?tab=agent_file_report&subtab=qc_report');
         }, 500);
       } else {
-        // Handle case where response.message is an object {text, hyperlink}
-        const msg = typeof response.message === 'object' && response.message?.text 
-          ? response.message.text 
-          : response.message || 'Failed to save QC record';
-        throw new Error(msg);
+        throw new Error(response.message || 'Failed to save QC record');
       }
 
     } catch (err) {
@@ -750,22 +728,8 @@ const QCFormPage = () => {
         status: err.response?.status
       });
       
-      // Helper to extract string message from various formats
-      const extractMessage = (data) => {
-        if (!data) return null;
-        if (typeof data === 'string') return data;
-        if (typeof data === 'object') {
-          // Handle {text, hyperlink} structure
-          if (data.text) return data.text;
-          if (data.message) return extractMessage(data.message);
-          if (data.error) return extractMessage(data.error);
-        }
-        return null;
-      };
-      
-      const errorMessage = extractMessage(err.response?.data?.message) 
-        || extractMessage(err.response?.data?.error)
-        || extractMessage(err.response?.data)
+      const errorMessage = err.response?.data?.message 
+        || err.response?.data?.error 
         || err.message 
         || 'Failed to submit QC form';
       

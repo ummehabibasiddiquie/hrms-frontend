@@ -1,9 +1,13 @@
 import OverviewTab from '../components/dashboard/overview/OverviewTab';
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import LoginPage from "../pages/LoginPage";
 import ResetPasswordPage from "../pages/ResetPasswordPage";
 import DashboardPage from "../pages/DashboardPage";
 import AdminPage from "../pages/AdminPage";
+import RosterPage from "../pages/AssistantManagerRoster";
+import AssistantManagerRoster from "../pages/AssistantManagerRoster";
+import SuperAdminApproval from "../pages/SuperAdminApproval";
+import UserRosterReport from "../pages/UserRosterReport";
 import Tracker from "../components/AgentDashboard/Tracker.jsx";
 import UserTrackingView from "../components/common/UserTrackingView";
 import AppLayout from "../layouts/AppLayout";
@@ -105,13 +109,61 @@ const AppRoutes = () => {
           }
         />
 
-        {/* Admin panel (for super admin and assistant managers) */}
+        {/* Admin panel (for admin, super admin and assistant managers) */}
         <Route
           path="/admin"
           element={
-            <ProtectedRoute allowedRoles={[1, 3, 4]}>
+            <ProtectedRoute allowedRoles={[1, 2, 3, 4]}>
               <AppLayout>
                 <AdminPage />
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Roster Management (for Assistant Managers) */}
+        <Route
+          path="/roster"
+          element={
+            <ProtectedRoute allowedRoles={[4]}>
+              <AppLayout>
+                <RosterPage />
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Assistant Manager Roster (Dedicated View) */}
+        <Route
+          path="/assistant-manager-roster"
+          element={
+            <ProtectedRoute allowedRoles={[4]}>
+              <AppLayout>
+                <AssistantManagerRoster />
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Super Admin Roster Approval */}
+        <Route
+          path="/super-admin-approval"
+          element={
+            <ProtectedRoute allowedRoles={[1]}>
+              <AppLayout>
+                <SuperAdminApproval />
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* User Roster Report (All users can view their own report) */}
+        <Route
+          path="/my-roster-report"
+          element={
+            <ProtectedRoute allowedRoles={[1,2,3,4,5,6]}>
+              <AppLayout>
+                <UserRosterReport />
               </AppLayout>
             </ProtectedRoute>
           }

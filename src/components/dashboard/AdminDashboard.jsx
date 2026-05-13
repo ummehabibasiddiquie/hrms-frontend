@@ -196,8 +196,11 @@ const AdminDashboard = () => {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-10">
+      {/* Debug: Log current state */}
+      {console.log('[AdminDashboard] Rendering with state:', { activeTab, loading, error, stats })}
+      
       {/* Navigation Tabs */}
-      <AssistantManagerTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+      <AssistantManagerTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} isSuperAdmin={true} />
       
       {/* Overview Tab Content */}
       {activeTab === 'overview' && (

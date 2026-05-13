@@ -24,7 +24,6 @@ import { fileToBase64 } from "../../utils/fileToBase64";
 import { useAuth } from "../../context/AuthContext";
 import { log, logError } from "../../config/environment";
 import SearchableSelect from "../common/SearchableSelect";
-import { DateRangePicker } from "../common/CustomCalendar";
 import { Briefcase, ListChecks } from "lucide-react";
 
 // Helper to get today's date in YYYY-MM-DD format
@@ -119,17 +118,68 @@ const Tracker = ({ embedded = false }) => {
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getTodayDate());
 
-  // Tooltip states for dropdown buttons
-  const [projectTooltip, setProjectTooltip] = useState(false);
-  const [taskTooltip, setTaskTooltip] = useState(false);
-
   // Modal state
   const [showModal, setShowModal] = useState(false);
 
-  // Custom dropdown states
+  // Custom calendar/dropdown states
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [showTaskDropdown, setShowTaskDropdown] = useState(false);
 
+  // Time window validation states (15-minute submission window)
+  const [isSubmissionWindowOpen, setIsSubmissionWindowOpen] = useState(false);
+  const [nextWindowTime, setNextWindowTime] = useState('');
+  const [timeRemaining, setTimeRemaining] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Helper function to check if current time is within 15-minute submission window
+  const checkSubmissionWindow = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    return minutes < 15;
+  };
+
+  // Helper function to calculate next window opening time
+  const getNextWindowTime = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    
+    if (minutes < 15) {
+      // Window is open, next window is next hour
+      const nextWindow = new Date(now);
+      nextWindow.setHours(now.getHours() + 1);
+      nextWindow.setMinutes(0);
+      nextWindow.setSeconds(0);
+      return nextWindow;
+    } else {
+      // Window is closed, show current hour's window
+      const nextWindow = new Date(now);
+      nextWindow.setHours(now.getHours() + 1);
+      nextWindow.setMinutes(0);
+      nextWindow.setSeconds(0);
+      return nextWindow;
+    }
+  };
+
+  // Helper function to format time remaining
+  const formatTimeRemaining = () => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const seconds = now.getSeconds();
+    
+    if (minutes < 15) {
+      // Window is open - show time until it closes
+      const remainingMinutes = 14 - minutes;
+      const remainingSeconds = 60 - seconds;
+      return `${remainingMinutes}m ${remainingSeconds}s`;
+    } else {
+      // Window is closed - show time until next window opens
+      const remainingMinutes = 59 - minutes;
+      const remainingSeconds = 60 - seconds;
+      return `${remainingMinutes}m ${remainingSeconds}s`;
+    }
+  };
 
   // Function to reset modal form and all file upload states
   const resetModalForm = () => {
@@ -176,6 +226,23 @@ const Tracker = ({ embedded = false }) => {
     setTouched({});
   };
 
+  // Time window validation - update every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+      setIsSubmissionWindowOpen(checkSubmissionWindow());
+      setNextWindowTime(getNextWindowTime().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
+      setTimeRemaining(formatTimeRemaining());
+    }, 1000);
+
+    // Initial check
+    setIsSubmissionWindowOpen(checkSubmissionWindow());
+    setNextWindowTime(getNextWindowTime().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
+    setTimeRemaining(formatTimeRemaining());
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line
+  }, []);
 
   // Fetch projects with tasks for form (fetch only once on mount or user change)
   useEffect(() => {
@@ -524,7 +591,10 @@ const Tracker = ({ embedded = false }) => {
     if (!baseTarget) newErrors.baseTarget = "Base Target is required.";
     if (!productionTarget) newErrors.productionTarget = "Production Target is required.";
     else if (isNaN(Number(productionTarget)) || Number(productionTarget) < 0) newErrors.productionTarget = "Enter a valid number.";
-        if (fileError) newErrors.file = fileError;
+    else if (baseTarget && Number(productionTarget) > (Number(baseTarget) * 2)) {
+      newErrors.productionTarget = `Production cannot exceed double the Base Target (Max: ${Number(baseTarget) * 2})`;
+    }
+    if (fileError) newErrors.file = fileError;
     return newErrors;
   };
 
@@ -537,7 +607,10 @@ const Tracker = ({ embedded = false }) => {
     if (!baseTarget) newErrors.baseTarget = "Base Target is required.";
     if (!productionTarget) newErrors.productionTarget = "Production Target is required.";
     else if (isNaN(Number(productionTarget)) || Number(productionTarget) < 0) newErrors.productionTarget = "Enter a valid number.";
-        if (fileError) newErrors.file = fileError;
+    else if (baseTarget && Number(productionTarget) > (Number(baseTarget) * 2)) {
+      newErrors.productionTarget = `Production cannot exceed double the Base Target (Max: ${Number(baseTarget) * 2})`;
+    }
+    if (fileError) newErrors.file = fileError;
     setErrors(newErrors);
   }, [selectedProject, selectedTask, shiftType, baseTarget, productionTarget, fileError]);
 
@@ -551,6 +624,14 @@ const Tracker = ({ embedded = false }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Check submission window first
+    // if (!isSubmissionWindowOpen) {
+    //   toast.error(`Tracker submissions are only allowed in the first 15 minutes of each hour. Next window opens at ${nextWindowTime}`, {
+    //     duration: 5000,
+    //     icon: '⏰'
+    //   });
+    //   return;
+    // }
     
     setTouched({ 
       selectedProject: true, 
@@ -720,15 +801,15 @@ const Tracker = ({ embedded = false }) => {
     return task?.task_name || task?.label || "-";
   };
 
-  // Check if tracker entry is from today (using UTC to match formatDateTime)
+  // Check if tracker entry is from today
   const isToday = (dateTime) => {
     if (!dateTime) return false;
     const trackerDate = new Date(dateTime);
     const today = new Date();
     return (
-      trackerDate.getUTCFullYear() === today.getUTCFullYear() &&
-      trackerDate.getUTCMonth() === today.getUTCMonth() &&
-      trackerDate.getUTCDate() === today.getUTCDate()
+      trackerDate.getFullYear() === today.getFullYear() &&
+      trackerDate.getMonth() === today.getMonth() &&
+      trackerDate.getDate() === today.getDate()
     );
   };
 
@@ -921,13 +1002,105 @@ const Tracker = ({ embedded = false }) => {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
-  
-  
+  const generateCalendar = (currentDate) => {
+    const date = currentDate ? new Date(currentDate) : new Date();
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    return { year, month, daysInMonth, startingDayOfWeek };
+  };
+
+  const handleDateSelect = (name, dateValue) => {
+    if (name === 'start') {
+      setStartDate(dateValue);
+      setShowStartPicker(false);
+    } else if (name === 'end') {
+      setEndDate(dateValue);
+      setShowEndPicker(false);
+    }
+  };
+
+  const CustomDatePicker = ({ name, value, onSelect, show, onClose }) => {
+    const [viewDate, setViewDate] = useState(value || new Date().toISOString().split('T')[0]);
+    const { year, month, daysInMonth, startingDayOfWeek } = generateCalendar(viewDate);
+    
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+    const handlePrevMonth = () => {
+      const newDate = new Date(year, month - 1, 1);
+      setViewDate(newDate.toISOString().split('T')[0]);
+    };
+
+    const handleNextMonth = () => {
+      const newDate = new Date(year, month + 1, 1);
+      setViewDate(newDate.toISOString().split('T')[0]);
+    };
+
+    if (!show) return null;
+
+    return (
+      <div className="absolute z-50 mt-1 bg-white rounded-lg shadow-xl border-2 border-blue-200 p-3 w-64">
+        <div className="flex items-center justify-between mb-3">
+          <button type="button" onClick={handlePrevMonth} className="p-1 hover:bg-slate-100 rounded">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <span className="font-bold text-sm text-slate-800">{monthNames[month]} {year}</span>
+          <button type="button" onClick={handleNextMonth} className="p-1 hover:bg-slate-100 rounded">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {dayNames.map(day => (
+            <div key={day} className="text-center text-xs font-bold text-slate-600">{day}</div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: startingDayOfWeek }).map((_, i) => (
+            <div key={`empty-${i}`} />
+          ))}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1;
+            const dateStr = formatToStorage(day, month + 1, year);
+            const isSelected = dateStr === value;
+            return (
+              <button
+                type="button"
+                key={day}
+                onClick={() => onSelect(name, dateStr)}
+                className={`text-xs p-1.5 rounded hover:bg-blue-100 transition-colors ${
+                  isSelected ? 'bg-blue-600 text-white font-bold' : 'text-slate-700'
+                }`}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+
+        <button 
+          type="button"
+          onClick={onClose}
+          className="w-full mt-3 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs"
+        >
+          Close
+        </button>
+      </div>
+    );
+  };
+
   const CustomDropdown = ({ options, value, onChange, placeholder, show, onClose, disabled }) => {
     if (!show || disabled) return null;
 
     return (
-      <div className="absolute z-[60] mt-1 bg-white rounded-lg shadow-xl border-2 border-blue-200 overflow-y-auto" style={{ width: '250px', height: '240px' }}>
+      <div className="absolute z-50 mt-1 w-full bg-white rounded-lg shadow-xl border-2 border-blue-200 max-h-60 overflow-y-auto">
         <div
           onClick={() => {
             onChange('');
@@ -962,7 +1135,7 @@ const Tracker = ({ embedded = false }) => {
           >
             <div className="flex items-center gap-2">
               {String(value) === String(option.value) && (
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600 flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               )}
@@ -995,11 +1168,44 @@ const Tracker = ({ embedded = false }) => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {/* Submission Window Status Indicator */}
+                <div className={`flex flex-col items-end gap-1 px-4 py-2 rounded-lg border-2 ${
+                  isSubmissionWindowOpen 
+                    ? 'bg-green-50 border-green-300' 
+                    : 'bg-red-50 border-red-300'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2.5 h-2.5 rounded-full ${
+                      isSubmissionWindowOpen ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+                    }`}></div>
+                    <span className={`text-xs font-bold uppercase tracking-wide ${
+                      isSubmissionWindowOpen ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                      {isSubmissionWindowOpen ? 'Window Open' : 'Window Closed'}
+                    </span>
+                  </div>
+                  <div className="text-xs font-semibold text-slate-600">
+                    {isSubmissionWindowOpen ? (
+                      <>Closes in: <span className="text-red-600">{timeRemaining}</span></>
+                    ) : (
+                      <>Opens at: <span className="text-green-600">{nextWindowTime}</span></>
+                    )}
+                  </div>
+                </div>
 
                 <button
                   onClick={() => {
-                    setShowModal(true);
+                    // Timer validation commented out - modal is now always accessible
+                    // if (isSubmissionWindowOpen) {
+                      setShowModal(true);
+                    // } else {
+                    //   toast.error(`Tracker submissions are only allowed in the first 15 minutes of each hour. Next window opens at ${nextWindowTime}`, {
+                    //     duration: 5000,
+                    //     icon: '⏰'
+                    //   });
+                    // }
                   }}
+                  // disabled={!isSubmissionWindowOpen}
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all duration-200 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white transform hover:scale-105 cursor-pointer"
                   title="Add new tracker"
                 >
@@ -1022,28 +1228,84 @@ const Tracker = ({ embedded = false }) => {
             </div>
 
             {/* Filters */}
-            <div className="flex flex-wrap items-end gap-3 mb-4">
-              {/* Date Range Picker - Adjusted for 2-dropdown layout */}
-              <div className="relative">
-                <DateRangePicker
-                  startDate={startDate}
-                  endDate={endDate}
-                  onStartDateChange={setStartDate}
-                  onEndDateChange={setEndDate}
-                  label=""
-                  description={null}
-                  showClearButton={false}
-                  compact={true}
-                  fieldWidth="320px"
-                  noWrapper={true}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Date From */}
+              <div className="relative space-y-2">
+                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
+                    <line x1="16" x2="16" y1="2" y2="6"></line>
+                    <line x1="8" x2="8" y1="2" y2="6"></line>
+                    <line x1="3" x2="21" y1="10" y2="10"></line>
+                  </svg>
+                  Date From
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStartPicker(!showStartPicker);
+                    setShowEndPicker(false);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between"
+                >
+                  <span>{startDate ? new Date(startDate).toLocaleDateString('en-GB') : 'Select date'}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
+                    <line x1="16" x2="16" y1="2" y2="6"></line>
+                    <line x1="8" x2="8" y1="2" y2="6"></line>
+                    <line x1="3" x2="21" y1="10" y2="10"></line>
+                  </svg>
+                </button>
+                <CustomDatePicker 
+                  name="start" 
+                  value={startDate} 
+                  onSelect={handleDateSelect} 
+                  show={showStartPicker} 
+                  onClose={() => setShowStartPicker(false)} 
+                />
+              </div>
+
+              {/* Date To */}
+              <div className="relative space-y-2">
+                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
+                    <line x1="16" x2="16" y1="2" y2="6"></line>
+                    <line x1="8" x2="8" y1="2" y2="6"></line>
+                    <line x1="3" x2="21" y1="10" y2="10"></line>
+                  </svg>
+                  Date To
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEndPicker(!showEndPicker);
+                    setShowStartPicker(false);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between"
+                >
+                  <span>{endDate ? new Date(endDate).toLocaleDateString('en-GB') : 'Select date'}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
+                    <line x1="16" x2="16" y1="2" y2="6"></line>
+                    <line x1="8" x2="8" y1="2" y2="6"></line>
+                    <line x1="3" x2="21" y1="10" y2="10"></line>
+                  </svg>
+                </button>
+                <CustomDatePicker 
+                  name="end" 
+                  value={endDate} 
+                  onSelect={handleDateSelect} 
+                  show={showEndPicker} 
+                  onClose={() => setShowEndPicker(false)} 
                 />
               </div>
 
               {/* Project Filter */}
-              <div style={{ width: '250px' }}>
-                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
+              <div className="relative space-y-2">
+                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
                   <Briefcase className="w-3.5 h-3.5 text-blue-600" />
-                  PROJECT
+                  Project
                 </label>
                 <button
                   type="button"
@@ -1051,13 +1313,11 @@ const Tracker = ({ embedded = false }) => {
                     setShowProjectDropdown(!showProjectDropdown);
                     setShowTaskDropdown(false);
                   }}
-                  onMouseEnter={() => setProjectTooltip(true)}
-                  onMouseLeave={() => setProjectTooltip(false)}
-                  className={`w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between relative ${
+                  className={`w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between ${
                     filterProject ? 'text-slate-700' : 'text-slate-500'
                   }`}
                 >
-                  <span className={`${filterProject ? 'text-slate-700' : 'text-slate-500'} truncate`}>
+                  <span className={filterProject ? 'text-slate-700' : 'text-slate-500'}>
                     {filterProject 
                       ? projects.find(p => String(p.project_id) === String(filterProject))?.project_name || 'All Projects'
                       : 'All Projects'
@@ -1066,17 +1326,6 @@ const Tracker = ({ embedded = false }) => {
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-blue-600 transition-transform ${showProjectDropdown ? 'rotate-180' : ''}`}>
                     <polyline points="6 9 12 15 18 9"></polyline>
                   </svg>
-                  {projectTooltip && filterProject && (
-                    <div 
-                      className="absolute z-[9999] left-0 top-full mt-0.5 bg-white rounded-lg shadow-xl border-2 border-blue-200 p-3 min-w-full max-w-md"
-                      onMouseEnter={() => setProjectTooltip(true)}
-                      onMouseLeave={() => setProjectTooltip(false)}
-                    >
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium border border-blue-200">
-                        {projects.find(p => String(p.project_id) === String(filterProject))?.project_name || 'All Projects'}
-                      </span>
-                    </div>
-                  )}
                 </button>
                 <CustomDropdown
                   options={projects.map(p => ({ value: p.project_id, label: p.project_name }))}
@@ -1092,10 +1341,10 @@ const Tracker = ({ embedded = false }) => {
               </div>
 
               {/* Task Filter */}
-              <div style={{ width: '250px' }}>
-                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
+              <div className="relative space-y-2">
+                <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
                   <ListChecks className="w-3.5 h-3.5 text-blue-600" />
-                  TASK
+                  Task
                 </label>
                 <button
                   type="button"
@@ -1103,14 +1352,12 @@ const Tracker = ({ embedded = false }) => {
                     setShowTaskDropdown(!showTaskDropdown);
                     setShowProjectDropdown(false);
                   }}
-                  onMouseEnter={() => setTaskTooltip(true)}
-                  onMouseLeave={() => setTaskTooltip(false)}
                   disabled={!filterProject}
-                  className={`w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed relative ${
+                  className={`w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed ${
                     filterTask ? 'text-slate-700' : 'text-slate-500'
                   }`}
                 >
-                  <span className={`${filterTask ? 'text-slate-700' : 'text-slate-500'} truncate`}>
+                  <span className={filterTask ? 'text-slate-700' : 'text-slate-500'}>
                     {filterTask 
                       ? availableFilterTasks.find(t => String(t.task_id) === String(filterTask))?.label || 'All Tasks'
                       : 'All Tasks'
@@ -1119,17 +1366,6 @@ const Tracker = ({ embedded = false }) => {
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-blue-600 transition-transform ${showTaskDropdown ? 'rotate-180' : ''}`}>
                     <polyline points="6 9 12 15 18 9"></polyline>
                   </svg>
-                  {taskTooltip && filterTask && (
-                    <div 
-                      className="absolute z-[9999] left-0 top-full mt-0.5 bg-white rounded-lg shadow-xl border-2 border-blue-200 p-3 min-w-full max-w-md"
-                      onMouseEnter={() => setTaskTooltip(true)}
-                      onMouseLeave={() => setTaskTooltip(false)}
-                    >
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-medium border border-blue-200">
-                        {availableFilterTasks.find(t => String(t.task_id) === String(filterTask))?.label || 'All Tasks'}
-                      </span>
-                    </div>
-                  )}
                 </button>
                 <CustomDropdown
                   options={availableFilterTasks.map(t => ({ value: t.task_id, label: t.label }))}
@@ -1997,8 +2233,15 @@ const Tracker = ({ embedded = false }) => {
                   )) && (
                     <button
                       type="submit"
+                      // disabled={submitting || isUploading || !isSubmissionWindowOpen}
                       disabled={submitting || isUploading}
+                      // className={`px-8 py-3 font-bold text-sm rounded-lg shadow-lg transition-all duration-200 flex items-center gap-2 ${
+                      //   !isSubmissionWindowOpen
+                      //     ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                      //     : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed'
+                      // }`}
                       className="px-8 py-3 font-bold text-sm rounded-lg shadow-lg transition-all duration-200 flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                      // title={!isSubmissionWindowOpen ? `Submissions only allowed in first 15 minutes of each hour. Next window: ${nextWindowTime}` : ''}
                       title="Submit tracker entry"
                     >
                       {submitting ? (

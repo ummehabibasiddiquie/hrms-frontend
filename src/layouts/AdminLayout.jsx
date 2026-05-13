@@ -1,19 +1,44 @@
-     import React from "react";
-     import { Settings, RefreshCw, Users, FolderKanban, File, FolderOpen, Shield } from "lucide-react";
-     import { useAuth } from "../context/AuthContext";
+import React from "react";
+import { Settings, RefreshCw, Users, FolderKanban, File, FolderOpen, Shield, Calendar } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
-     const AdminLayout = ({
-          children,
-          activeTab,
-          setActiveTab,
-          onFactoryReset,
-     }) => {
-          const { canManageUsers, canManageProjects, isSuperAdmin } = useAuth();
+const AdminLayout = ({
+     children,
+     activeTab,
+     setActiveTab,
+     onFactoryReset,
+}) => {
+     const { canManageUsers, canManageProjects, isSuperAdmin, user } = useAuth();
 
-          const showUsersTab = canManageUsers;
-          const showProjectsTab = canManageProjects;
+     const showUsersTab = canManageUsers;
+     const showProjectsTab = canManageProjects;
+     const showRosterTab = user && [2, 3, 4].includes(Number(user.role_id)); // Admin, Project Manager, Assistant Manager
+     
+     // Debug: Log role and tab visibility
+     console.log('🔍 AdminLayout - Role Detection:', { 
+       user, 
+       roleId: user?.role_id, 
+       showRosterTab,
+       'role_id type': typeof user?.role_id,
+       'Number(roleId)': Number(user?.role_id),
+       'includes check': [2, 3, 4].includes(Number(user?.role_id)),
+       'canManageUsers': canManageUsers,
+       'canManageProjects': canManageProjects,
+       'isSuperAdmin': isSuperAdmin
+     });
+     
+     // Also log to window for easier debugging
+     window.debugAdminLayout = {
+       user, 
+       roleId: user?.role_id, 
+       showRosterTab,
+       'role_id type': typeof user?.role_id,
+       'Number(roleId)': Number(user?.role_id),
+       'includes check': [2, 3, 4].includes(Number(user?.role_id))
+     };
+     console.log('🔍 Debug data available in window.debugAdminLayout');
 
-          return (
+     return (
                <div className="max-w-7xl mx-auto space-y-6">
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                          {/* Header */}
@@ -128,6 +153,46 @@
                                              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
                                         )}
                                    </button>
+
+                                   {/* Roster - Admin, Project Manager, Assistant Manager */}
+                                   {showRosterTab && (
+                                        <button
+                                             onClick={() => setActiveTab("roster")}
+                                             className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+                                                  activeTab === "roster"
+                                                       ? "text-blue-600 bg-blue-50"
+                                                       : "text-slate-600 hover:text-slate-800 hover:bg-slate-50"
+                                             }`}
+                                        >
+                                             <div className="flex items-center justify-center gap-2">
+                                                  <Calendar className="w-4 h-4" />
+                                                  <span>Roster</span>
+                                             </div>
+                                             {activeTab === "roster" && (
+                                                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+                                             )}
+                                        </button>
+                                   )}
+
+                                   {/* Roster Management - Super Admin Only */}
+                                   {isSuperAdmin && (
+                                        <button
+                                             onClick={() => setActiveTab("roster-management")}
+                                             className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+                                                  activeTab === "roster-management"
+                                                       ? "text-blue-600 bg-blue-50"
+                                                       : "text-slate-600 hover:text-slate-800 hover:bg-slate-50"
+                                             }`}
+                                        >
+                                             <div className="flex items-center justify-center gap-2">
+                                                  <Calendar className="w-4 h-4" />
+                                                  <span>Roster Management</span>
+                                             </div>
+                                             {activeTab === "roster-management" && (
+                                                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+                                             )}
+                                        </button>
+                                   )}
                               </div>
                          )}
 

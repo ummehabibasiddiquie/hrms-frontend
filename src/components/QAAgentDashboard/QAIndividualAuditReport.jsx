@@ -47,37 +47,18 @@ const QAIndividualAuditReport = () => {
     if (!dateTimeString || dateTimeString === '-') return { date: '-', time: '-' };
     
     try {
-      let date;
-      
-      // Check if it's MySQL datetime format (YYYY-MM-DD HH:MM:SS) or GMT format
-      if (dateTimeString.includes('T') || dateTimeString.includes('GMT')) {
-        // GMT format like "Tue, 07 Apr 2026 11:30:30 GMT"
-        date = new Date(dateTimeString);
-        // Use UTC methods for GMT format
-        var day = date.getUTCDate();
-        var month = date.getUTCMonth();
-        var year = date.getUTCFullYear();
-        var hours = date.getUTCHours();
-        var minutes = date.getUTCMinutes();
-      } else {
-        // MySQL datetime format like "2026-04-07 12:17:14"
-        date = new Date(dateTimeString);
-        // Use local methods for MySQL format (assuming it's already in correct timezone)
-        var day = date.getDate();
-        var month = date.getMonth();
-        var year = date.getFullYear();
-        var hours = date.getHours();
-        var minutes = date.getMinutes();
-      }
-      
-      // Format date as "7/Apr/2026"
+      const date = new Date(dateTimeString);
+      const day = date.getDate();
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const formattedDate = `${day}/${monthNames[month]}/${year}`;
+      const month = monthNames[date.getMonth()];
+      const year = date.getFullYear();
+      const formattedDate = `${day}/${month}/${year}`;
       
-      // Format time as "11:30 AM"
+      let hours = date.getHours();
+      const minutes = String(date.getMinutes()).padStart(2, '0');
       const ampm = hours >= 12 ? 'PM' : 'AM';
-      const displayHours = hours % 12 || 12;
-      const formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+      hours = hours % 12 || 12;
+      const formattedTime = `${hours}:${minutes} ${ampm}`;
       
       return { date: formattedDate, time: formattedTime };
     } catch (e) {
@@ -309,8 +290,10 @@ const QAIndividualAuditReport = () => {
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Agent Name</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Project</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Task</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Total QCs</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">QC Score</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">QC Checked File</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Error Notes</th>
                 </tr>
               </thead>
@@ -335,6 +318,9 @@ const QAIndividualAuditReport = () => {
                         <span className="text-sm font-medium text-slate-700">{record.task_name || '-'}</span>
                       </td>
                       <td className="px-4 py-3">
+                        <span className="text-sm font-bold text-slate-800">{record.total_qcs || '-'}</span>
+                      </td>
+                      <td className="px-4 py-3">
                         <span className={`inline-block px-3 py-1 rounded-lg text-sm font-bold ${getQCScoreColorClass(record.avg_qc_score)}`}>
                           {record.avg_qc_score !== null && record.avg_qc_score !== undefined ? `${record.avg_qc_score}%` : '-'}
                         </span>
@@ -355,6 +341,11 @@ const QAIndividualAuditReport = () => {
                         ) : (
                           <span className="text-slate-400 text-sm">-</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block px-3 py-1 rounded-lg text-xs font-semibold uppercase ${getAuditStatusBadgeClass(record.status)}`}>
+                          {record.status || '-'}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-slate-600">{record.error_notes || '-'}</span>

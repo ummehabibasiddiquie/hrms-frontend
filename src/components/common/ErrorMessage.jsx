@@ -2,20 +2,13 @@ import React from 'react';
 import { AlertCircle } from 'lucide-react';
 
 const ErrorMessage = ({ message, onRetry }) => {
-  // Ensure message is always a string
-  const safeMessage = typeof message === 'string' 
-    ? message 
-    : typeof message === 'object' && message?.text 
-      ? message.text 
-      : JSON.stringify(message || 'An error occurred');
-  
   return (
     <div className="flex flex-col items-center justify-center gap-4 p-8">
       <div className="flex items-center gap-3 text-red-600">
         <AlertCircle size={24} />
         <p className="text-lg font-semibold">Error</p>
       </div>
-      <p className="text-gray-600 text-center max-w-md">{safeMessage}</p>
+      <p className="text-gray-600 text-center max-w-md">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}

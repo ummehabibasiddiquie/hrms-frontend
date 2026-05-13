@@ -19,6 +19,7 @@ import ErrorMessage from '../common/ErrorMessage';
 import AppLayout from "../../layouts/AppLayout";
 import QATabsNavigation from "./QATabsNavigation";
 import BillableReport from "../common/BillableReport";
+import QABillableReport from "../dashboard/QABillableReport";
 import QAFilterBar from "./QAFilterBar";
 import QAIndividualAuditReport from "./QAIndividualAuditReport";
 import QAAgentQCFormReport from "../dashboard/QAAgentQCFormReport";
@@ -480,7 +481,9 @@ const QAAgentDashboard = ({ embedded = false }) => {
       )}
       
       {activeTab === 'billable_report' && <BillableReport />}
-      
+
+      {activeTab === 'qa_billable_report' && <QABillableReport />}
+
       {activeTab === 'audit_report' && <QAIndividualAuditReport />}
       
       {activeTab === 'qc_form_report' && <QAAgentQCFormReport />}

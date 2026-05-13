@@ -201,10 +201,12 @@ export const AuthProvider = ({ children }) => {
 
     // Calculate permissions
     const calculatedPermissions = {
-      // Can create/manage users - based on user_creation_permission flag
+      // Can create/manage users - based on user_creation_permission flag OR Admin role
       canManageUsers:
         user.user_creation_permission === 1 ||
-        user.user_creation_permission === "1",
+        user.user_creation_permission === "1" ||
+        roleId === 1 ||  // Super Admin
+        roleId === 2,    // Admin
 
       // Can create/manage projects - based on project_creation_permission flag OR role
       // Accessible to: Admin (1), Project Manager (3), Assistant Manager (4)
@@ -218,10 +220,8 @@ export const AuthProvider = ({ children }) => {
         isProjectManager ||
         isAssistantManager,
 
-      // Super Admin check - if user has both permissions, they're essentially a super admin
-      isSuperAdmin:
-        (user.user_creation_permission === 1 || user.user_creation_permission === "1") &&
-        (user.project_creation_permission === 1 || user.project_creation_permission === "1"),
+      // Super Admin check - strictly based on role_id === 1
+      isSuperAdmin: roleId === 1,
 
       // Can view salary details
       canViewSalary:

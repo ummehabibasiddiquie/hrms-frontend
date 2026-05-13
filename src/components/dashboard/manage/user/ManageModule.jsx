@@ -5,6 +5,8 @@ import ProjectsManagement from ".././project/ProjectsManagement";
 import AFDManagement from "../afd/AFDManagement";
 import ProjectCategory from "../category/ProjectCategory";
 import UserTrackingView from "../../../common/UserTrackingView";
+import SuperAdminApproval from "../../../../pages/SuperAdminApproval";
+import AssistantManagerRoster from "../../../../pages/AssistantManagerRoster";
 import { fetchUsersList } from "../../../../services/authService";
 import { fetchProjectsList } from "../../../../services/projectService";
 import { useAuth } from "../../../../context/AuthContext";
@@ -181,6 +183,18 @@ const ManageModule = ({ activeTab }) => {
 
                {activeTab === "permissions" && canManageUsers && (
                     <UserTrackingView />
+               )}
+
+               {activeTab === "roster" && user?.role_id === 1 && (
+                    <SuperAdminApproval />
+               )}
+
+               {activeTab === "roster-management" && user?.role_id === 1 && (
+                    <SuperAdminApproval />
+               )}
+
+               {activeTab === "roster" && [2, 3, 4].includes(Number(user?.role_id)) && (
+                    <AssistantManagerRoster />
                )}
           </>
      );

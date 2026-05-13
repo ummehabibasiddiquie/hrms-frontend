@@ -26,9 +26,8 @@ const getTodayDate = () => {
 };
 
 // Pending QC Files Table Component
-const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedAgentId, getTodayDate, fetchReworkTrackers }) => {
+const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedAgentId, agentDateFilters, getTodayDate, fetchReworkTrackers }) => {
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
-
 
   const formatDateTime = (dateString) => {
     if (!dateString) return '—';
@@ -307,11 +306,8 @@ const QAAgentList = () => {
   // Selected agent for split view
   const [selectedAgentId, setSelectedAgentId] = useState(null);
   
-  // Global date filter state
-  const [globalDateFilter, setGlobalDateFilter] = useState({ 
-    startDate: getTodayDate(), 
-    endDate: getTodayDate() 
-  });
+  // Per-agent date filter states
+  const [agentDateFilters, setAgentDateFilters] = useState({});
 
   // Project/task name mapping state
   const [projectNameMap, setProjectNameMap] = useState({});
@@ -429,8 +425,12 @@ const QAAgentList = () => {
         setAgents(allAgents);
         setAgentTrackers(initialTrackersByAgent);
         
-        // No need to initialize per-agent filters anymore
-
+        // Initialize date filters for all agents to today's date
+        const initialDateFilters = {};
+        allAgents.forEach(agent => {
+          initialDateFilters[agent.user_id] = { startDate: today, endDate: today };
+        });
+        setAgentDateFilters(initialDateFilters);
         
         // Auto-select first agent if available
         if (allAgents.length > 0) {
@@ -454,12 +454,15 @@ const QAAgentList = () => {
   useEffect(() => {
     if (selectedAgentId && (activeTab === 'agent_files' || activeTab === 'agent_rework_files' || activeTab === 'rework_review')) {
       if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-        fetchReworkTrackers(selectedAgentId, globalDateFilter.startDate, globalDateFilter.endDate);
+        // Fetch with date filter or default to today
+        const filters = agentDateFilters[selectedAgentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
+        fetchReworkTrackers(selectedAgentId, filters.startDate, filters.endDate);
       } else {
         fetchAgentTrackers(selectedAgentId);
       }
     }
-  }, [selectedAgentId, activeTab, globalDateFilter.startDate, globalDateFilter.endDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Initialize correction status when trackers change
   useEffect(() => {
@@ -480,17 +483,19 @@ const QAAgentList = () => {
   const fetchAgentTrackers = async (agentId, startDate = null, endDate = null) => {
     setAgentLoading(true);
     try {
-      // Use provided dates or fall back to global date filter
-      const dateFrom = startDate || globalDateFilter.startDate;
-      const dateTo = endDate || globalDateFilter.endDate;
-      log('[QAAgentList] Fetching trackers for agent:', agentId, 'with dates:', { startDate: dateFrom, endDate: dateTo });
-
+      // Use provided dates or fall back to state/today's date
+      const filters = startDate && endDate 
+        ? { startDate, endDate }
+        : (agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() });
+      
+      log('[QAAgentList] Fetching trackers for agent:', agentId, 'with dates:', filters);
+      
       const trackerRes = await api.post("/tracker/view", {
         logged_in_user_id: user?.user_id,
         device_id: device_id,
         device_type: device_type,
-        date_from: dateFrom,
-        date_to: dateTo,
+        date_from: filters.startDate,
+        date_to: filters.endDate,
         qc_pending: 0  // Fetch only QC pending trackers
       });
 
@@ -701,53 +706,59 @@ const QAAgentList = () => {
     setSearchQuery("");
   };
 
-  // Handle global date changes
-  const handleGlobalStartDateChange = (dateValue) => {
+  // Handle date changes for specific agent
+  const handleAgentStartDateChange = (agentId, dateValue) => {
+    const currentFilters = agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
     const newFilters = {
-      ...globalDateFilter,
+      ...currentFilters,
       startDate: dateValue
     };
-    setGlobalDateFilter(newFilters);
     
-    // Fetch updated data for current agent if selected
-    if (selectedAgentId) {
-      if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-        fetchReworkTrackers(selectedAgentId, newFilters.startDate, newFilters.endDate);
-      } else {
-        // fetchAgentTrackers already uses globalDateFilter internally, but we should trigger it manually if we don't rely on useEffect
-        fetchAgentTrackers(selectedAgentId, newFilters.startDate, newFilters.endDate);
-      }
+    setAgentDateFilters(prev => ({
+      ...prev,
+      [agentId]: newFilters
+    }));
+    
+    // Fetch updated data with new dates immediately
+    if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
+      fetchReworkTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    } else {
+      fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
     }
   };
 
-  const handleGlobalEndDateChange = (dateValue) => {
+  const handleAgentEndDateChange = (agentId, dateValue) => {
+    const currentFilters = agentDateFilters[agentId] || { startDate: getTodayDate(), endDate: getTodayDate() };
     const newFilters = {
-      ...globalDateFilter,
+      ...currentFilters,
       endDate: dateValue
     };
-    setGlobalDateFilter(newFilters);
     
-    // Fetch updated data for current agent if selected
-    if (selectedAgentId) {
-      if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-        fetchReworkTrackers(selectedAgentId, newFilters.startDate, newFilters.endDate);
-      } else {
-        fetchAgentTrackers(selectedAgentId, newFilters.startDate, newFilters.endDate);
-      }
+    setAgentDateFilters(prev => ({
+      ...prev,
+      [agentId]: newFilters
+    }));
+    
+    // Fetch updated data with new dates immediately
+    if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
+      fetchReworkTrackers(agentId, newFilters.startDate, newFilters.endDate);
+    } else {
+      fetchAgentTrackers(agentId, newFilters.startDate, newFilters.endDate);
     }
   };
 
-  const handleResetGlobalFilters = () => {
+  // Reset filters for specific agent
+  const handleResetAgentFilters = (agentId) => {
     const today = getTodayDate();
-    const newFilters = { startDate: today, endDate: today };
-    setGlobalDateFilter(newFilters);
-    
-    if (selectedAgentId) {
-      if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-        fetchReworkTrackers(selectedAgentId, today, today);
-      } else {
-        fetchAgentTrackers(selectedAgentId, today, today);
-      }
+    setAgentDateFilters(prev => ({
+      ...prev,
+      [agentId]: { startDate: today, endDate: today }
+    }));
+    // Fetch updated data with today's date immediately
+    if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
+      fetchReworkTrackers(agentId, today, today);
+    } else {
+      fetchAgentTrackers(agentId, today, today);
     }
   };
 
@@ -820,10 +831,11 @@ const QAAgentList = () => {
         
         // Refresh the data after successful save
         if (selectedAgentId) {
+          const filters = agentDateFilters[selectedAgentId];
           await fetchReworkTrackers(
             selectedAgentId,
-            globalDateFilter.startDate,
-            globalDateFilter.endDate
+            filters?.startDate || getTodayDate(),
+            filters?.endDate || getTodayDate()
           );
         }
       } else {
@@ -998,78 +1010,54 @@ const QAAgentList = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header Section with Tabs */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 border border-slate-200">
-          <div className="flex flex-col gap-5">
-            {/* Top Row - Title and Tabs */}
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              {/* Left - Title */}
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <UsersIcon className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-800 tracking-tight cursor-default">Agent Files & QC Report</h2>
-                  <p className="text-slate-600 text-sm font-medium mt-1 cursor-default">View and manage agent files with QC forms</p>
-                </div>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            {/* Left - Title */}
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <UsersIcon className="w-6 h-6 text-blue-600" />
               </div>
-
-              {/* Right - Tabs Navigation */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setActiveTab('agent_files')}
-                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
-                    activeTab === 'agent_files'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Agent's Tracker File</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('rework_review')}
-                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
-                    activeTab === 'rework_review'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Agent's Rework & Correction File</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('qc_report')}
-                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
-                    activeTab === 'qc_report'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <FileCheck className="w-4 h-4" />
-                  <span>QC Report</span>
-                </button>
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800 tracking-tight cursor-default">Agent Files & QC Report</h2>
+                <p className="text-slate-600 text-sm font-medium mt-1 cursor-default">View and manage agent files with QC forms</p>
               </div>
             </div>
-              {/* Bottom Row - Global Date Filter */}
-            {(activeTab === 'agent_files' || activeTab === 'rework_review') && (
-              <div className="flex items-center justify-end gap-4 pt-2 border-t border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center">
-                    <DateRangePicker
-                      startDate={globalDateFilter.startDate}
-                      endDate={globalDateFilter.endDate}
-                      onStartDateChange={handleGlobalStartDateChange}
-                      onEndDateChange={handleGlobalEndDateChange}
-                      onClear={handleResetGlobalFilters}
-                      label=""
-                      description=""
-                      showClearButton={true}
-                      noWrapper={true}
-                      fieldWidth="140px"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+
+            {/* Right - Tabs Navigation */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveTab('agent_files')}
+                className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
+                  activeTab === 'agent_files'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span>Agent's Tracker File</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('rework_review')}
+                className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
+                  activeTab === 'rework_review'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Agent's Rework & Correction File</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('qc_report')}
+                className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
+                  activeTab === 'qc_report'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <FileCheck className="w-4 h-4" />
+                <span>QC Report</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1170,11 +1158,20 @@ const QAAgentList = () => {
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          // Call appropriate API based on active tab with global date filter
-                          if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-                            fetchReworkTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
+                          // Initialize date filter to today if not set
+                          if (!agentDateFilters[agent.user_id]) {
+                            const today = getTodayDate();
+                            setAgentDateFilters(prev => ({
+                              ...prev,
+                              [agent.user_id]: { startDate: today, endDate: today }
+                            }));
+                          }
+                          // Call appropriate API based on active tab
+                          if (activeTab === 'agent_rework_files') {
+                            const filters = agentDateFilters[agent.user_id] || { startDate: getTodayDate(), endDate: getTodayDate() };
+                            fetchReworkTrackers(agent.user_id, filters.startDate, filters.endDate);
                           } else {
-                            fetchAgentTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
+                            fetchAgentTrackers(agent.user_id);
                           }
                         }}
                         disabled={agentLoading}
@@ -1248,9 +1245,9 @@ const QAAgentList = () => {
                                 </span>
                                 {trackers.length > 0 && (
                                   <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded">
-                                    {globalDateFilter.startDate === globalDateFilter.endDate
-                                      ? format(new Date(globalDateFilter.startDate), 'dd MMM yyyy')
-                                      : `${format(new Date(globalDateFilter.startDate), 'dd MMM')} - ${format(new Date(globalDateFilter.endDate), 'dd MMM yyyy')}`
+                                    {agentDateFilters[selectedAgentId]?.startDate === agentDateFilters[selectedAgentId]?.endDate
+                                      ? format(new Date(agentDateFilters[selectedAgentId]?.startDate), 'dd MMM yyyy')
+                                      : `${format(new Date(agentDateFilters[selectedAgentId]?.startDate), 'dd MMM')} - ${format(new Date(agentDateFilters[selectedAgentId]?.endDate), 'dd MMM yyyy')}`
                                     }
                                   </span>
                                 )}
@@ -1260,7 +1257,21 @@ const QAAgentList = () => {
                         </div>
                       </div>
 
-
+                      {/* Date Filter - Use DateRangePicker */}
+                      <div className="px-6 py-3 bg-white border-b border-slate-200">
+                        <DateRangePicker
+                          startDate={agentDateFilters[selectedAgentId]?.startDate || ''}
+                          endDate={agentDateFilters[selectedAgentId]?.endDate || ''}
+                          onStartDateChange={(date) => handleAgentStartDateChange(selectedAgentId, date)}
+                          onEndDateChange={(date) => handleAgentEndDateChange(selectedAgentId, date)}
+                          onClear={() => handleResetAgentFilters(selectedAgentId)}
+                          label=""
+                          description=""
+                          showClearButton={true}
+                          noWrapper={true}
+                          fieldWidth="200px"
+                        />
+                      </div>
 
                       {/* Files Table */}
                       <div className="flex-1 overflow-y-auto p-6">
@@ -1496,8 +1507,17 @@ const QAAgentList = () => {
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          // Fetch pending QC files for rework/correction using global date filter
-                          fetchReworkTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
+                          // Initialize date filter to today if not set
+                          if (!agentDateFilters[agent.user_id]) {
+                            const today = getTodayDate();
+                            setAgentDateFilters(prev => ({
+                              ...prev,
+                              [agent.user_id]: { startDate: today, endDate: today }
+                            }));
+                          }
+                          // Fetch pending QC files for rework/correction
+                          const filters = agentDateFilters[agent.user_id] || { startDate: getTodayDate(), endDate: getTodayDate() };
+                          fetchReworkTrackers(agent.user_id, filters.startDate, filters.endDate);
                         }}
                         disabled={agentLoading}
                         className={`w-full text-left p-4 rounded-xl transition-all duration-300 border-2 relative overflow-hidden ${
@@ -1574,7 +1594,21 @@ const QAAgentList = () => {
                         </div>
                       </div>
 
-
+                      {/* Date Filter - Use DateRangePicker */}
+                      <div className="px-6 py-3 bg-white border-b border-slate-200">
+                        <DateRangePicker
+                          startDate={agentDateFilters[selectedAgentId]?.startDate || ''}
+                          endDate={agentDateFilters[selectedAgentId]?.endDate || ''}
+                          onStartDateChange={(date) => handleAgentStartDateChange(selectedAgentId, date)}
+                          onEndDateChange={(date) => handleAgentEndDateChange(selectedAgentId, date)}
+                          onClear={() => handleResetAgentFilters(selectedAgentId)}
+                          label=""
+                          description=""
+                          showClearButton={true}
+                          noWrapper={true}
+                          fieldWidth="200px"
+                        />
+                      </div>
 
                       {/* Pending Files Table */}
                       <div className="flex-1 overflow-y-auto p-6">
@@ -1589,6 +1623,7 @@ const QAAgentList = () => {
                             setCorrectionStatus={setCorrectionStatus}
                             user={user}
                             selectedAgentId={selectedAgentId}
+                            agentDateFilters={agentDateFilters}
                             getTodayDate={getTodayDate}
                             fetchReworkTrackers={fetchReworkTrackers}
                           />

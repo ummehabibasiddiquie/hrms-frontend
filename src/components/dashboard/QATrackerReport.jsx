@@ -196,13 +196,11 @@ const QATrackerReport = () => {
       const res = await api.post("/dropdown/get", payload);
       const agents = res.data?.data || [];
       console.log('[QATrackerReport] Agents received from API:', agents.length);
-      console.log('[QATrackerReport] First agent sample:', agents[0]);
       const sortedAgents = agents
         .filter(a => a.label && a.user_id)
         .sort((a, b) => a.label.localeCompare(b.label));
       setUsersList(sortedAgents);
       console.log('[QATrackerReport] Agents list updated:', sortedAgents.length);
-      console.log('[QATrackerReport] Udit Kamani in list:', sortedAgents.find(a => a.user_id === 135));
       log('[QATrackerReport] Agents fetched successfully:', sortedAgents.length);
     } catch (error) {
       console.error('[QATrackerReport] Error fetching agents:', error);
@@ -519,18 +517,14 @@ const QATrackerReport = () => {
     }
     
     if (field === 'agent_id' && value) {
-      log('[QATrackerReport] Looking for agent_id:', value, 'in usersList of', usersList.length, 'agents');
-      log('[QATrackerReport] First agent in usersList:', usersList[0]);
       const selectedAgent = usersList.find(u => String(u.user_id) === String(value));
-      log('[QATrackerReport] Found agent:', selectedAgent);
-      log('[QATrackerReport] Agent has user_tenure:', selectedAgent?.user_tenure);
+      log('[QATrackerReport] Agent changed:', value, 'Selected agent:', selectedAgent);
       if (selectedAgent && addFormData.task_id) {
         const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
         const task = project?.tasks?.find(t => String(t.task_id) === String(addFormData.task_id));
         log('[QATrackerReport] Task for recalc:', task);
-        // user_tenure comes as string from API, convert to number
-        const userTenure = Number(selectedAgent.user_tenure) || Number(selectedAgent.tenure) || 1;
-        log('[QATrackerReport] User tenure:', userTenure, 'raw:', selectedAgent.user_tenure);
+        const userTenure = selectedAgent.user_tenure || selectedAgent.tenure || 1;
+        log('[QATrackerReport] User tenure:', userTenure);
         if (task && userTenure) {
           const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
           const calculated = Number(perHourTarget) * Number(userTenure);
@@ -549,35 +543,18 @@ const QATrackerReport = () => {
     if (field === 'task_id' && value) {
       const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
       const task = project?.tasks?.find(t => String(t.task_id) === String(value));
-      log('[QATrackerReport] Task changed in add modal:', value);
-      log('[QATrackerReport] Project:', addFormData.project_id, 'Found project:', project);
-      log('[QATrackerReport] Task details:', { 
-        task_id: task?.task_id, 
-        task_name: task?.task_name,
-        task_target: task?.task_target,
-        per_hour_target: task?.per_hour_target,
-        target: task?.target,
-        label_value: task?.label_value,
-        all_task_keys: task ? Object.keys(task) : null
-      });
+      log('[QATrackerReport] Task changed in add modal:', value, 'Task found:', task);
       const selectedAgent = usersList.find(u => String(u.user_id) === String(addFormData.agent_id));
       log('[QATrackerReport] Selected agent for calc:', selectedAgent);
-      log('[QATrackerReport] Agent ID being searched:', addFormData.agent_id, 'type:', typeof addFormData.agent_id);
-      log('[QATrackerReport] usersList count:', usersList.length);
-      // user_tenure comes as string from API, convert to number
-      const userTenure = Number(selectedAgent?.user_tenure) || Number(selectedAgent?.tenure) || 1;
-      log('[QATrackerReport] User tenure from agent:', userTenure, 'agent_tenure_sources:', {
-        user_tenure: selectedAgent?.user_tenure,
-        tenure: selectedAgent?.tenure,
-        raw_agent: selectedAgent
-      });
-      if (task) {
+      const userTenure = selectedAgent?.user_tenure || selectedAgent?.tenure || 1;
+      log('[QATrackerReport] User tenure from agent:', userTenure);
+      if (task && userTenure) {
         const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
         const calculated = Number(perHourTarget) * Number(userTenure);
         log('[QATrackerReport] Calculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
         setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
       } else {
-        log('[QATrackerReport] Could not calculate - task not found');
+        log('[QATrackerReport] Could not calculate - task:', !!task, 'user_tenure:', userTenure);
       }
     }
     
@@ -619,7 +596,7 @@ const QATrackerReport = () => {
         break;
       case 'production':
         if (!value) newErrors.production = 'Production is required';
-        // else if (isNaN(value) || Number(value) <= 0) newErrors.production = 'Enter valid production';
+        else if (isNaN(value) || Number(value) <= 0) newErrors.production = 'Enter valid production';
         else if (addFormData.base_target && Number(value) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42') {
           newErrors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
         }
@@ -679,10 +656,9 @@ const QATrackerReport = () => {
     if (!addFormData.task_id) errors.task_id = 'Task is required';
     if (!addFormData.shift_type) errors.shift_type = 'Shift is required';
     if (!addFormData.production) errors.production = 'Production is required';
-    // else if (isNaN(addFormData.production) || Number(addFormData.production) <= 0) {
-    //   errors.production = 'Enter valid production';
-    // } 
-    else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42') {
+    else if (isNaN(addFormData.production) || Number(addFormData.production) <= 0) {
+      errors.production = 'Enter valid production';
+    } else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42') {
       errors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
     }
     

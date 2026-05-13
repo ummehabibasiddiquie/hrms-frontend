@@ -3,7 +3,7 @@ import {
   LayoutGrid,
   Briefcase,
   FileCheck,
-  FileWarning,
+  FileText,
   DollarSign,
   RotateCcw
 } from 'lucide-react';
@@ -11,9 +11,9 @@ import {
 const QATabsNavigation = ({ activeTab, setActiveTab }) => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
-    { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
+    { id: 'billable_report', label: 'Agent Billable Report', icon: Briefcase },
     { id: 'audit_report', label: 'Audit Report', icon: FileCheck },
-    { id: 'adherence', label: 'Reporting Adherence', icon: FileWarning, disabled: true },
+    { id: 'qa_billable_report', label: 'QA Billable Report', icon: FileText },
     { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, disabled: true }
   ];
 

@@ -26,7 +26,7 @@ import {
   Brain,
   UserCheck,
   BarChart3,
-  CheckCircle2
+  Calendar
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import GeminiKeyModal from "../GeminiKeyModal";
@@ -104,13 +104,22 @@ const Header = ({
        ENTRY: "/entry",
        GUIDELINES: "/guidelines",
        SCHEDULER: "/scheduler",
-       QUALITY: "/quality"
+       QUALITY: "/quality",
+       ROSTER: "/roster"
      };
 
   // Helper for Navigation with role-based routing
   const goTo = (view) => {
+    console.log('Header - goTo called with view:', view);
     const roleId = Number(currentUser.role_id);
     const role = (currentUser?.role || currentUser?.role_name || currentUser?.user_role || '').toString().toUpperCase();
+    
+    // Handle Roster tab for Assistant Manager
+    if (view === 'ROSTER') {
+      navigate('/roster');
+      setIsMobileMenuOpen(false);
+      return;
+    }
     
     // Handle Analytics tab for all roles: always go to /dashboard?tab=overview
     if (view === ViewState.DASHBOARD || view === 'DASHBOARD' || view === 'Analytics') {
@@ -143,6 +152,13 @@ const Header = ({
       setIsMobileMenuOpen(false);
       return;
     }
+    if (view === 'ROSTER_REPORT') {
+      // For all roles - use dedicated route
+      console.log('Header - ROSTER_REPORT case hit, navigating to /my-roster-report');
+      navigate('/my-roster-report');
+      setIsMobileMenuOpen(false);
+      return;
+    }
     
     // Handle Manage tab for Assistant Managers - route to /dashboard with tab=manage
     if (view === ViewState.ADMIN_PANEL && roleId === 4) {
@@ -168,6 +184,11 @@ const Header = ({
         navigate("/agent-projects");
         setIsMobileMenuOpen(false);
         return;
+      } else if (view === 'ROSTER_REPORT') {
+        console.log('Header - Agent ROSTER_REPORT case hit, navigating to /my-roster-report');
+        navigate('/my-roster-report');
+        setIsMobileMenuOpen(false);
+        return;
       } else {
         const target = ROUTES[view] || "/agent";
         navigate(target);
@@ -190,6 +211,9 @@ const Header = ({
   const getNavItems = () => {
     const roleId = Number(currentUser?.role_id);
     const role = (currentUser?.role || currentUser?.role_name || currentUser?.user_role || '').toString().toUpperCase();
+    console.log('Header - getNavItems called for roleId:', roleId, 'role:', role);
+    
+    
     // Always show for admin and super admin (by role_id)
     if (roleId === 1 || roleId === 2) {
       return [
@@ -208,7 +232,7 @@ const Header = ({
         // Billable Report tab removed for agents in header
         { view: ViewState.ENTRY, label: "Tracker", icon: PenTool },
         { view: "AI_EVALUATION", label: "AI Evaluation", icon: Brain },
-        { view: "AGENT_PROJECTS", label: "Projects", icon: Database, disabled: true },
+        { view: "ROSTER_REPORT", label: "Roster Report", icon: FileText },
         // Roster tab temporarily removed for agents
       ];
     }
@@ -220,6 +244,7 @@ const Header = ({
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+            { view: "ROSTER_REPORT", label: "Roster Report", icon: FileText },
           ];
         }
         if (roleId === 3) {
@@ -253,6 +278,7 @@ const Header = ({
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+        { view: "ROSTER_REPORT", label: "Roster Report", icon: FileText },
       ];
     }
     if (role.includes('ASSISTANT') || role.includes('ASST')) {
@@ -279,6 +305,8 @@ const Header = ({
   };
 
   const navItems = getNavItems();
+  
+  
   // DEBUG: Log navItems and currentUser for troubleshooting tab visibility
 
   // Helper function to check if a tab is active
@@ -288,6 +316,11 @@ const Header = ({
     const currentTab = searchParams.get('tab');
     const roleId = Number(currentUser?.role_id);
     const role = (currentUser?.role || currentUser?.role_name || currentUser?.user_role || '').toString().toUpperCase();
+
+    // Check for Roster
+    if (view === 'ROSTER') {
+      return currentPath === '/roster';
+    }
 
     // Check for Analytics/Dashboard
     if (view === ViewState.DASHBOARD || view === 'Analytics') {
@@ -343,6 +376,11 @@ const Header = ({
       return currentPath === '/dashboard' && currentTab === 'billable_report';
     }
 
+    // Check for Roster Report
+    if (view === 'ROSTER_REPORT') {
+      return currentPath === '/my-roster-report';
+    }
+
     return false;
   };
 
@@ -351,6 +389,11 @@ const Header = ({
   // -----------------------------
   const renderNavButton = (item) => {
     const isActive = isTabActive(item.view);
+    const isManageTab = item.view === ViewState.ADMIN_PANEL || item.label === 'Manage';
+    const roleId = Number(currentUser?.role_id);
+    const isManagerOrAdmin = roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4;
+    
+    
     return (
       <button
         key={item.view}
@@ -374,6 +417,10 @@ const Header = ({
   // -----------------------------
   const renderMobileNavButton = (item) => {
     const isActive = isTabActive(item.view);
+    const isManageTab = item.view === ViewState.ADMIN_PANEL || item.label === 'Manage';
+    const roleId = Number(currentUser?.role_id);
+    const isManagerOrAdmin = roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4;
+    
     return (
       <button
         key={item.view}
@@ -418,26 +465,35 @@ const Header = ({
               <div className="flex items-center gap-2 border-l border-slate-200 pl-4 shrink-0">
 
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center text-lg font-bold text-white">
-                    {getInitials()}
+                  {/* User Initials with Role Badge */}
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center text-lg font-bold text-white">
+                      {getInitials()}
+                    </div>
+                    {/* Role indicator dot */}
+                    <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
+                      currentUser?.role_id === 1 ? 'bg-purple-500' :      // Super Admin
+                      currentUser?.role_id === 2 ? 'bg-indigo-500' :     // Admin
+                      currentUser?.role_id === 3 ? 'bg-emerald-500' :    // Project Manager
+                      currentUser?.role_id === 4 ? 'bg-cyan-500' :       // Assistant Manager
+                      currentUser?.role_id === 5 ? 'bg-orange-500' :       // QA Agent
+                      currentUser?.role_id === 6 ? 'bg-green-500' :        // Agent
+                      'bg-slate-400'
+                    }`} title={getRoleLabel()}></div>
                   </div>
-                  {/* Show Gemini Key button only for Agent role */}
-                  {(() => {
-                    const roleId = Number(currentUser?.role_id);
-                    const role = (currentUser?.role || currentUser?.role_name || currentUser?.user_role || '').toString().toUpperCase();
-                    if (roleId === 6 || role.includes('AGENT')) {
-                      return (
-                        <button
-                          onClick={() => setGeminiKeyOpen(true)}
-                          className="p-2 rounded-full hover:bg-purple-50 text-purple-600 transition-colors"
-                          title="Gemini AI Key"
-                        >
-                          <Brain className="w-5 h-5" />
-                        </button>
-                      );
-                    }
-                    return null;
-                  })()}
+                  {/* Role Label for QA and Agent */}
+                  {(currentUser?.role_id === 5 || currentUser?.role_id === 6) && (
+                    <span className="hidden md:block text-xs font-medium text-slate-500 uppercase tracking-wider">
+                      {currentUser?.role_id === 5 ? 'QA Agent' : 'Agent'}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setGeminiKeyOpen(true)}
+                    className="p-2 rounded-full hover:bg-purple-50 text-purple-600 transition-colors"
+                    title="Gemini AI Key"
+                  >
+                    <Brain className="w-5 h-5" />
+                  </button>
                   <button
                     onClick={() => {
 

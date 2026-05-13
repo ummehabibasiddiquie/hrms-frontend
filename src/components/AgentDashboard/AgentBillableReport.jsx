@@ -538,8 +538,6 @@ const BillableReport = () => {
                     onEndDateChange={setEndDate}
                     noWrapper={true}
                     showClearButton={false}
-                    disabledMonths={monthFilter ? [monthFilter] : null}
-                    showOnlySelectedMonth={true}
                   />
                 </div>
                 
@@ -578,32 +576,6 @@ const BillableReport = () => {
                 </div>
               </div>
             </div>
-            
-            {/* User Guidance Message */}
-            {monthFilter && (
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="text-sm">
-                    <p className="font-medium text-blue-800">
-                      📅 Date Range Filter Active
-                    </p>
-                    <p className="text-blue-700 mt-1">
-                      The calendar is now restricted to <span className="font-semibold">{(() => {
-                        const [year, month] = monthFilter.split('-');
-                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                        return `${monthNames[parseInt(month) - 1]} ${year}`;
-                      })()}</span> only. 
-                      Select a different month from the Month Filter to change the available dates.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
           {/* Daily Report Table - Enhanced Design */}
           <div className="bg-white rounded-xl shadow-md border border-blue-100 overflow-hidden">

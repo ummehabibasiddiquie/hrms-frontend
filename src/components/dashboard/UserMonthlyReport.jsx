@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Edit2, Trash2, Save, X, ChevronUp, ChevronDown, Search, Download, Users, FileX } from 'lucide-react';
+import { Edit2, Save, X, ChevronUp, ChevronDown, Search, Download, Users, FileX } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -8,7 +8,6 @@ import ErrorMessage from '../common/ErrorMessage';
 import { exportToCSV } from '../../utils/csvExport';
 import { MonthYearPicker } from '../common/CustomCalendar';
 import SearchableSelect from '../common/SearchableSelect';
-import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
 
 // Helper to get current month in format JAN2026
 const getCurrentMonthYear = () => {
@@ -39,13 +38,9 @@ const UserMonthlyReport = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Edit state
+  // Edit state - only for extra_assign_hours
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
-  
-  // Bulk input state - for adding multiple records at once
-  const [formData, setFormData] = useState({}); // { monthYear: { userId: { monthly_target, extra_assign_hours, working_days } } }
-  const [submitting, setSubmitting] = useState(false);
   
   // State for expanded/collapsed cards
   const [expandedMonths, setExpandedMonths] = useState({});
@@ -60,11 +55,6 @@ const UserMonthlyReport = () => {
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState('all');
   const [loadingTeams, setLoadingTeams] = useState(false);
-  
-  // State for delete confirmation modal
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [recordToDelete, setRecordToDelete] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch users on mount
   useEffect(() => {
@@ -235,21 +225,19 @@ const UserMonthlyReport = () => {
     });
   };
 
-  // Handle edit save
+  // Handle edit save - only update extra_assigned_hours
   const handleEditSave = async (id) => {
     try {
       const payload = {
-        user_monthly_tracker_id: id,
+        user_id: editData.user_id,
         month_year: editData.month_year,
-        monthly_target: parseFloat(editData.monthly_target),
-        extra_assigned_hours: parseFloat(editData.extra_assign_hours),
-        working_days: editData.working_days
+        extra_assigned_hours: parseFloat(editData.extra_assign_hours)
       };
 
       const response = await api.post('/user_monthly_tracker/update', payload);
       
       if (response.data?.status === 200) {
-        toast.success(response.data.message || 'Record updated successfully');
+        toast.success(response.data.message || 'Extra assign hours updated successfully');
         
         // Refresh data from server
         await fetchReportData();
@@ -259,7 +247,7 @@ const UserMonthlyReport = () => {
       }
     } catch (err) {
       console.error('Error updating record:', err);
-      toast.error(err.response?.data?.message || 'Failed to update record');
+      toast.error(err.response?.data?.message || 'Failed to update extra assign hours');
     }
   };
 
@@ -269,247 +257,19 @@ const UserMonthlyReport = () => {
     setEditData({});
   };
 
-  // Handle delete
-  const handleDeleteClick = (record) => {
-    setRecordToDelete(record);
-    setDeleteModalOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!recordToDelete) return;
-
-    setIsDeleting(true);
-    try {
-      const response = await api.post('/user_monthly_tracker/delete', {
-        user_monthly_tracker_id: recordToDelete.id
-      });
-      
-      if (response.data?.status === 200) {
-        toast.success(response.data.message || 'Record deleted successfully');
-        
-        // Refresh data from server
-        await fetchReportData();
-        
-        // Close modal and reset state
-        setDeleteModalOpen(false);
-        setRecordToDelete(null);
-      }
-    } catch (err) {
-      console.error('Error deleting record:', err);
-      toast.error(err.response?.data?.message || 'Failed to delete record');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const handleDeleteCancel = () => {
-    setDeleteModalOpen(false);
-    setRecordToDelete(null);
-  };
-
   // Handle edit data change
   const handleEditDataChange = (e) => {
     const { name, value } = e.target;
     setEditData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Handle form data change for bulk input
-  const handleFormDataChange = (monthYear, userId, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [monthYear]: {
-        ...prev[monthYear],
-        [userId]: {
-          ...prev[monthYear]?.[userId],
-          [field]: value
-        }
-      }
-    }));
-  };
-
-  // Handle Apply All - copy first user's data to all users in the same month
-  const handleApplyAll = (monthYear) => {
-    const monthData = groupedData[monthYear];
-    if (!monthData || monthData.length === 0) return;
-
-    // Find first user with form data or first placeholder
-    const firstUserData = formData[monthYear]?.[monthData[0].user_id];
-    
-    if (!firstUserData || (!firstUserData.monthly_target && !firstUserData.extra_assign_hours && !firstUserData.working_days)) {
-      toast.error('Please enter data for the first user first');
-      return;
-    }
-
-    // Apply first user's data to all users without submitted data
-    const newFormData = { ...formData };
-    if (!newFormData[monthYear]) {
-      newFormData[monthYear] = {};
-    }
-
-    monthData.forEach(record => {
-      // Only apply to records without submitted data
-      if (!record.id || !record.submitted) {
-        newFormData[monthYear][record.user_id] = {
-          monthly_target: firstUserData.monthly_target || '',
-          extra_assign_hours: firstUserData.extra_assign_hours || '',
-          working_days: firstUserData.working_days || ''
-        };
-      }
-    });
-
-    setFormData(newFormData);
-    toast.success('Data applied to all users!');
-  };
-
-  // Handle Submit All - submit all unsaved records with data
-  const handleSubmitAll = async (monthYear) => {
-    const monthFormData = formData[monthYear];
-    if (!monthFormData) {
-      toast.error('No data to submit');
-      return;
-    }
-
-    // Filter records that have at least one field filled
-    const recordsToSubmit = Object.entries(monthFormData).filter(([, data]) => {
-      return data.monthly_target || data.extra_assign_hours || data.working_days;
-    });
-
-    if (recordsToSubmit.length === 0) {
-      toast.error('No data to submit');
-      return;
-    }
-
-    setSubmitting(true);
-    let successCount = 0;
-    let errorCount = 0;
-    let skippedCount = 0;
-
-    try {
-      // Submit each record sequentially
-      for (const [userId, data] of recordsToSubmit) {
-        try {
-          // Check if user already has a record for this month
-          const existingRecord = reportData.find(
-            r => r.user_id === parseInt(userId) && r.month_year === monthYear && r.id && r.submitted
-          );
-          
-          if (existingRecord) {
-            console.log(`User ${userId} already has data for ${monthYear}, skipping`);
-            skippedCount++;
-            continue;
-          }
-
-          // Validate required fields
-          if (!data.monthly_target || !data.extra_assign_hours || !data.working_days) {
-            const user = users.find(u => u.user_id === parseInt(userId));
-            toast.error(`Please fill all fields for ${user?.user_name || 'user'}`);
-            errorCount++;
-            continue;
-          }
-
-          const payload = {
-            user_id: parseInt(userId),
-            month_year: monthYear,
-            monthly_target: parseFloat(data.monthly_target),
-            extra_assigned_hours: parseFloat(data.extra_assign_hours),
-            working_days: parseFloat(data.working_days)
-          };
-
-          const response = await api.post('/user_monthly_tracker/add', payload);
-          
-          if (response.data?.status === 201 || response.data?.status === 200) {
-            successCount++;
-          } else {
-            errorCount++;
-          }
-        } catch (err) {
-          console.error(`Error submitting for user ${userId}:`, err);
-          
-          // If it's a 409 CONFLICT, the record already exists - don't count as error
-          if (err.response?.status === 409) {
-            console.log(`User ${userId} record already exists (409), skipping`);
-            skippedCount++;
-          } else {
-            errorCount++;
-          }
-        }
-      }
-
-      // Show summary
-      if (successCount > 0) {
-        toast.success(`Successfully submitted ${successCount} record(s)`);
-      }
-      if (skippedCount > 0) {
-        toast.info(`${skippedCount} record(s) already exist, skipped`);
-      }
-      if (errorCount > 0) {
-        toast.error(`Failed to submit ${errorCount} record(s)`);
-      }
-
-      // Clear form data for this month and refresh
-      if (successCount > 0 || skippedCount > 0) {
-        setFormData(prev => {
-          const newData = { ...prev };
-          delete newData[monthYear];
-          return newData;
-        });
-        await fetchReportData();
-      }
-    } catch (err) {
-      console.error('Error in Submit All:', err);
-      toast.error('Failed to submit records');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   if (loadingUsers) {
     return <LoadingSpinner />;
   }
 
-  // Create merged data: ensure current month is always shown with all users
+  // Return report data from API
   const getTableData = () => {
-    const currentMonth = getCurrentMonthYear();
-    const allData = [...reportData];
-    
-    // Check if current month exists in reportData
-    const currentMonthData = reportData.filter(r => r.month_year === currentMonth);
-    const currentMonthUserIds = new Set(currentMonthData.map(r => r.user_id));
-    
-    // Add placeholder entries for users without data in current month
-    // Only add placeholders when no team filter is applied OR when we can match the team
-    users.forEach(user => {
-      if (!currentMonthUserIds.has(user.user_id)) {
-        // If a team filter is active, only add placeholder for users from that team
-        if (selectedTeam !== 'all') {
-          // Get the selected team's label from the teams array
-          const selectedTeamData = teams.find(t => t.team_id === selectedTeam);
-          const selectedTeamLabel = selectedTeamData?.label;
-          
-          // Only add placeholder if user's team matches the selected team
-          if (user.team_name === selectedTeamLabel) {
-            allData.push({
-              user_id: user.user_id,
-              user_name: user.user_name,
-              team_name: user.team_name,
-              month_year: currentMonth,
-              // No id or submitted flag means this is a placeholder
-            });
-          }
-        } else {
-          // No team filter, add placeholder for all users
-          allData.push({
-            user_id: user.user_id,
-            user_name: user.user_name,
-            team_name: user.team_name,
-            month_year: currentMonth,
-            // No id or submitted flag means this is a placeholder
-          });
-        }
-      }
-    });
-    
-    return allData;
+    return [...reportData];
   };
 
   // Group data by month_year
@@ -568,8 +328,8 @@ const UserMonthlyReport = () => {
         }
         data['Month/Year'] = record.month_year || '-';
         data['Monthly Target'] = record.monthly_target || 0;
-        data['Extra Assign Hours'] = record.extra_assign_hours || 0;
         data['Working Days'] = record.working_days || 0;
+        data['Extra Assign Hours'] = record.extra_assign_hours || 0;
         return data;
       });
 
@@ -582,8 +342,8 @@ const UserMonthlyReport = () => {
       }
       totals['Month/Year'] = '';
       totals['Monthly Target'] = submittedRecords.reduce((sum, r) => sum + (Number(r.monthly_target) || 0), 0);
-      totals['Extra Assign Hours'] = submittedRecords.reduce((sum, r) => sum + (Number(r.extra_assign_hours) || 0), 0);
       totals['Working Days'] = submittedRecords.reduce((sum, r) => sum + (Number(r.working_days) || 0), 0);
+      totals['Extra Assign Hours'] = submittedRecords.reduce((sum, r) => sum + (Number(r.extra_assign_hours) || 0), 0);
 
       // Add totals row to export data
       exportData.push(totals);
@@ -719,26 +479,6 @@ const UserMonthlyReport = () => {
                 {/* Expanded Card Content */}
                 {isExpanded && (
                   <div className="p-6">
-                    {/* Apply All and Submit All Buttons */}
-                    <div className="mb-4 flex gap-3">
-                      <button
-                        onClick={() => handleApplyAll(monthYear)}
-                        disabled={submitting}
-                        className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
-                        title="Apply first user's data to all users"
-                      >
-                        Apply First User to All
-                      </button>
-                      <button
-                        onClick={() => handleSubmitAll(monthYear)}
-                        disabled={submitting}
-                        className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
-                        title="Submit all unsaved records"
-                      >
-                        {submitting ? 'Submitting...' : 'Submit All'}
-                      </button>
-                    </div>
-
                     {/* Search Filter and Export Button */}
                     <div className="mb-4 flex gap-3">
                       <div className="relative flex-1">
@@ -801,8 +541,8 @@ const UserMonthlyReport = () => {
                               <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider border border-blue-500">Team</th>
                             )}
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Monthly Target</th>
-                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Extra Assign Hours</th>
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Working Days</th>
+                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Extra Assign Hours</th>
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Actions</th>
                           </tr>
                         </thead>
@@ -812,8 +552,6 @@ const UserMonthlyReport = () => {
                             {filteredMonthData.map((record) => {
                               // Check if this record is being edited
                               const isEditing = editingId === record.id;
-                              const hasData = record.id && record.submitted;
-                              const userFormData = formData[monthYear]?.[record.user_id] || {};
                               
                               if (isEditing) {
                                 // Edit Mode - Show inline edit fields
@@ -823,15 +561,11 @@ const UserMonthlyReport = () => {
                                     {canViewTeamColumn && (
                                       <td className="px-6 py-4 text-slate-600 border border-slate-300">{record.team_name || '-'}</td>
                                     )}
-                                    <td className="px-6 py-4 border border-slate-300">
-                                      <input
-                                        type="text"
-                                        name="monthly_target"
-                                        value={editData.monthly_target}
-                                        onChange={handleEditDataChange}
-                                        placeholder="Enter target"
-                                        className="w-full bg-white border-2 border-indigo-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                                      />
+                                    <td className="px-6 py-4 text-center text-slate-800 font-semibold border border-slate-300">
+                                      {editData.monthly_target}
+                                    </td>
+                                    <td className="px-6 py-4 text-center text-slate-800 font-semibold border border-slate-300">
+                                      {editData.working_days}
                                     </td>
                                     <td className="px-6 py-4 border border-slate-300">
                                       <input
@@ -840,16 +574,6 @@ const UserMonthlyReport = () => {
                                         value={editData.extra_assign_hours}
                                         onChange={handleEditDataChange}
                                         placeholder="Enter hours"
-                                        className="w-full bg-white border-2 border-indigo-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                                      />
-                                    </td>
-                                    <td className="px-6 py-4 border border-slate-300">
-                                      <input
-                                        type="text"
-                                        name="working_days"
-                                        value={editData.working_days}
-                                        onChange={handleEditDataChange}
-                                        placeholder="Enter days"
                                         className="w-full bg-white border-2 border-indigo-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
                                       />
                                     </td>
@@ -873,48 +597,6 @@ const UserMonthlyReport = () => {
                                     </td>
                                   </tr>
                                 );
-                              } else if (!hasData) {
-                                // Input Mode - Show input fields for records without data
-                                return (
-                                  <tr key={`input-${record.user_id}`} className="transition-all duration-200 border-b border-slate-300 bg-white">
-                                    <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300">{record.user_name}</td>
-                                    {canViewTeamColumn && (
-                                      <td className="px-6 py-4 text-slate-600 border border-slate-300">{record.team_name || '-'}</td>
-                                    )}
-                                    <td className="px-6 py-4 border border-slate-300">
-                                      <input
-                                        type="text"
-                                        value={userFormData.monthly_target || ''}
-                                        onChange={(e) => handleFormDataChange(monthYear, record.user_id, 'monthly_target', e.target.value)}
-                                        placeholder="Enter target"
-                                        className="w-full bg-white border-2 border-blue-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                                      />
-                                    </td>
-                                    <td className="px-6 py-4 border border-slate-300">
-                                      <input
-                                        type="text"
-                                        value={userFormData.extra_assign_hours || ''}
-                                        onChange={(e) => handleFormDataChange(monthYear, record.user_id, 'extra_assign_hours', e.target.value)}
-                                        placeholder="Enter hours"
-                                        className="w-full bg-white border-2 border-blue-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                                      />
-                                    </td>
-                                    <td className="px-6 py-4 border border-slate-300">
-                                      <input
-                                        type="text"
-                                        value={userFormData.working_days || ''}
-                                        onChange={(e) => handleFormDataChange(monthYear, record.user_id, 'working_days', e.target.value)}
-                                        placeholder="Enter days"
-                                        className="w-full bg-white border-2 border-blue-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                                      />
-                                    </td>
-                                    <td className="px-6 py-4 border border-slate-300">
-                                      <div className="flex items-center justify-center">
-                                        <span className="text-xs text-blue-600 italic font-semibold">Fill & Submit</span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
                               } else {
                                 // View Mode - Show data with Edit/Delete buttons
                                 return (
@@ -927,26 +609,19 @@ const UserMonthlyReport = () => {
                                       {record.monthly_target}
                                     </td>
                                     <td className="px-6 py-4 text-center text-slate-700 font-semibold border border-slate-300">
-                                      {record.extra_assign_hours}
-                                    </td>
-                                    <td className="px-6 py-4 text-center text-slate-700 font-semibold border border-slate-300">
                                       {record.working_days}
                                     </td>
+                                    <td className="px-6 py-4 text-center text-slate-700 font-semibold border border-slate-300">
+                                      {record.extra_assign_hours}
+                                    </td>
                                     <td className="px-6 py-4 border border-slate-300">
-                                      <div className="flex items-center justify-center gap-2">
+                                      <div className="flex items-center justify-center">
                                         <button
                                           onClick={() => handleEditClick(record)}
                                           className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all hover:shadow-md"
-                                          title="Edit"
+                                          title="Edit Extra Assign Hours"
                                         >
                                           <Edit2 className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteClick(record)}
-                                          className="p-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 transition-all hover:shadow-md"
-                                          title="Delete"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
                                         </button>
                                       </div>
                                     </td>
@@ -968,13 +643,13 @@ const UserMonthlyReport = () => {
                               <td className="px-6 py-4 text-center text-blue-700 font-bold border border-slate-300">
                                 {filteredMonthData
                                   .filter(r => r.id && r.submitted)
-                                  .reduce((sum, r) => sum + (Number(r.extra_assign_hours) || 0), 0)
+                                  .reduce((sum, r) => sum + (Number(r.working_days) || 0), 0)
                                   .toFixed(2)}
                               </td>
                               <td className="px-6 py-4 text-center text-blue-700 font-bold border border-slate-300">
                                 {filteredMonthData
                                   .filter(r => r.id && r.submitted)
-                                  .reduce((sum, r) => sum + (Number(r.working_days) || 0), 0)
+                                  .reduce((sum, r) => sum + (Number(r.extra_assign_hours) || 0), 0)
                                   .toFixed(2)}
                               </td>
                               <td className="px-6 py-4 border border-slate-300"></td>
@@ -1023,17 +698,7 @@ const UserMonthlyReport = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      <DeleteConfirmationModal
-        isOpen={deleteModalOpen}
-        onClose={handleDeleteCancel}
-        onConfirm={handleDeleteConfirm}
-        title="Delete User Monthly Record"
-        entityName={recordToDelete ? recordToDelete.user_name : ""}
-        entityType="user monthly record"
-        isDeleting={isDeleting}
-      />
-    </div>
+          </div>
   );
 };
 
