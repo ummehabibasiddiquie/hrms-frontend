@@ -16,7 +16,7 @@ import { DateRangePicker } from '../common/CustomCalendar';
 
 const AdminDashboard = () => {
   // StatCard component for dashboard stats
-  const StatCard = ({ title, value, subtext, icon: Icon, trend = 'neutral', alert, className = '' }) => (
+  const StatCard = ({ title, value, subtext, icon: Icon, trend = 'neutral', alert, className = '', valueClassName = '' }) => (
     <div
       className={`relative overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 min-w-0 group/card transform hover:-translate-y-1 ${className} 
         ${alert ? 'bg-white border-2 border-red-300' : 'bg-white border-2 border-slate-200 hover:border-blue-300'}`}
@@ -35,7 +35,7 @@ const AdminDashboard = () => {
           </div>
 
           {/* Value */}
-          <h3 className={`text-2xl sm:text-3xl font-extrabold truncate ${alert ? 'text-red-700' : 'text-slate-900'}`}>
+          <h3 className={`text-xl sm:text-2xl font-extrabold truncate ${alert ? 'text-red-700' : 'text-slate-900'} ${valueClassName}`}>
             {value}
           </h3>
 
@@ -108,6 +108,7 @@ const AdminDashboard = () => {
     totalProjects: 0,
     qcPending: 0,
     billableHours: 0,
+    assignedHours: 0,
     avgQcScore: 0,
     latestQc: [],
   });
@@ -164,6 +165,7 @@ const AdminDashboard = () => {
             totalProjects: uniqueProjects.size,
             qcPending: (data.tracker || []).filter(row => row.tracker_file && row.qc_status === 'pending').length,
             billableHours: (data.summary?.total_billable_hours || 0).toFixed(2),
+            assignedHours: (data.summary?.total_assigned_hours || 0).toFixed(2),
             avgQcScore: '-', // Not provided in response
             latestQc,
           });
@@ -239,8 +241,8 @@ const AdminDashboard = () => {
               <StatCard
                 icon={Clock}
                 title="Total Billable Hours"
-                value={loading ? "..." : Number(stats.billableHours).toFixed(2)}
-                subtext="Billable hours"
+                value={loading ? "..." : `${Number(stats.billableHours).toFixed(2)} / ${Number(stats.assignedHours).toFixed(2)}`}
+                subtext="Billable / Assigned hours"
                 trend="up"
                 className="h-32 flex flex-col justify-center"
               />
