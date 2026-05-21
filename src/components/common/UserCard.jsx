@@ -62,13 +62,12 @@ export default function UserCard({
 
   // Helper function to get day color class (Saturday/Sunday in red)
   const getDayColorClass = (dayName) => {
-    if (!dayName) return '';
-    const day = dayName.toLowerCase();
-    if (day === 'saturday' || day === 'sunday') {
-      return 'text-red-600 font-bold';
-    }
-    return '';
-  };
+  if (!dayName) return '';
+
+  const day = dayName.toLowerCase();
+
+  return day === 'saturday' || day === 'sunday';
+};
   
   // Helper function to get month's first and last day
   const getMonthDateRange = (monthStr) => {
@@ -216,8 +215,8 @@ export default function UserCard({
           </thead>
           <tbody className="bg-white">
             {filteredRows.map((row, idx) => (
-              <tr key={row.date_time || row.date || idx} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 border-b border-slate-100 last:border-0">
-                <td className={`px-6 py-4 font-medium whitespace-pre-line ${getDayColorClass(row.day)}`}>
+              <tr key={row.date_time || row.date || idx} className={`${getDayColorClass(row.day) ? 'bg-blue-50' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
+                <td className="px-6 py-4 font-medium whitespace-pre-line">
                   {row.date_time || row.date || row.work_date || '-'}
                 </td>
                 <td className="px-6 py-4 text-center text-slate-700 font-semibold">{row.assigned_hours !== null && row.assigned_hours !== undefined ? Number(row.assigned_hours).toFixed(2) : '-'}</td>
@@ -486,7 +485,7 @@ export default function UserCard({
                 {filteredRows.length > 0 ? (
                   <>
                     {filteredRows.map((row, idx) => (
-                      <tr key={row.date_time || row.date || idx} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200">
+                    <tr key={row.date_time || row.date || idx} className={` ${getDayColorClass(row.day) ? 'bg-orange-50 border-l-4 border-l-orange-800' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
                         <td className={`px-6 py-4 font-medium whitespace-pre-line ${getDayColorClass(row.day)}`}>{row.date_time || row.date || '-'}</td>
                         <td className="px-6 py-4 text-center text-slate-700">
                           {row.assign_hours === '-' || row.assignHours === '-' ? '-' : (row.assign_hours !== undefined && row.assign_hours !== null && !isNaN(Number(row.assign_hours)) ? Number(row.assign_hours).toFixed(2) : (row.assignHours ?? row.assigned_hour ?? "-"))}
