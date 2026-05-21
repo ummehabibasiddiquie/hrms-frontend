@@ -26,6 +26,16 @@ const BillableReport = ({ userId }) => {
     return dateInput;
   }
 
+  // Helper function to get day color class (Saturday/Sunday in red)
+  function getDayColorClass(dayName) {
+    if (!dayName) return '';
+    const day = dayName.toLowerCase();
+    if (day === 'saturday' || day === 'sunday') {
+      return 'text-red-600 font-bold';
+    }
+    return '';
+  }
+
   // Search filter state (client-side filtering by agent name)
   const [searchQuery, setSearchQuery] = useState('');
   const [showMonthPicker, setShowMonthPicker] = useState(false);
@@ -852,13 +862,16 @@ const BillableReport = ({ userId }) => {
                   showTeam={canViewTeamFilter}
                   dailyData={(() => {
                     const mappedData = rows.map(r => {
-                      // Format date as DD-MM-YYYY, never show time
+                      // Format date as DD-MM-YYYY with day name, never show time
                       let date = '-';
                       if (r.work_date) {
                         const d = new Date(r.work_date);
                         if (!isNaN(d.getTime())) {
                           const pad = n => String(n).padStart(2, '0');
-                          date = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+                          const dateStr = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+                          // Use day from API response if available, otherwise format from date
+                          const dayName = r.day || d.toLocaleDateString('en-US', { weekday: 'long' });
+                          date = `${dateStr}\n${dayName}`;
                         }
                       }
                       // Map response fields to display format
@@ -881,6 +894,7 @@ const BillableReport = ({ userId }) => {
                         date,
                         date_time: date, // Also set date_time for compatibility
                         work_date: r.work_date, // Keep original work_date for filtering
+                        day: r.day, // Pass day field for color styling
                         assigned_hours, // Use actual value from API
                         assign_hours: assigned_hours, // Alternative field name
                         assignHours: assigned_hours, // Alternative field name

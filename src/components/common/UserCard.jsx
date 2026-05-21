@@ -59,6 +59,16 @@ export default function UserCard({
     if (numCount >= 7) return 'text-yellow-700 bg-yellow-100 font-bold';
     return 'text-red-700 bg-red-200 font-bold';
   };
+
+  // Helper function to get day color class (Saturday/Sunday in red)
+  const getDayColorClass = (dayName) => {
+    if (!dayName) return '';
+    const day = dayName.toLowerCase();
+    if (day === 'saturday' || day === 'sunday') {
+      return 'text-red-600 font-bold';
+    }
+    return '';
+  };
   
   // Helper function to get month's first and last day
   const getMonthDateRange = (monthStr) => {
@@ -207,7 +217,9 @@ export default function UserCard({
           <tbody className="bg-white">
             {filteredRows.map((row, idx) => (
               <tr key={row.date_time || row.date || idx} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 border-b border-slate-100 last:border-0">
-                <td className="px-6 py-4 text-slate-900 font-medium whitespace-nowrap">{row.date_time || row.date || row.work_date || '-'}</td>
+                <td className={`px-6 py-4 font-medium whitespace-pre-line ${getDayColorClass(row.day)}`}>
+                  {row.date_time || row.date || row.work_date || '-'}
+                </td>
                 <td className="px-6 py-4 text-center text-slate-700 font-semibold">{row.assigned_hours !== null && row.assigned_hours !== undefined ? Number(row.assigned_hours).toFixed(2) : '-'}</td>
                 <td className="px-6 py-4 text-center text-slate-700 font-semibold">{row.billable_hours || row.total_billable_hours_day ? Number(row.billable_hours || row.total_billable_hours_day).toFixed(2) : '-'}</td>
                 <td className="px-6 py-4 text-center">
@@ -475,7 +487,7 @@ export default function UserCard({
                   <>
                     {filteredRows.map((row, idx) => (
                       <tr key={row.date_time || row.date || idx} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200">
-                        <td className="px-6 py-4 text-slate-900 font-medium whitespace-nowrap">{row.date_time || row.date || '-'}</td>
+                        <td className={`px-6 py-4 font-medium whitespace-pre-line ${getDayColorClass(row.day)}`}>{row.date_time || row.date || '-'}</td>
                         <td className="px-6 py-4 text-center text-slate-700">
                           {row.assign_hours === '-' || row.assignHours === '-' ? '-' : (row.assign_hours !== undefined && row.assign_hours !== null && !isNaN(Number(row.assign_hours)) ? Number(row.assign_hours).toFixed(2) : (row.assignHours ?? row.assigned_hour ?? "-"))}
                         </td>

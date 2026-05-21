@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check, Search, X } from 'lucide-react';
 
 /**
@@ -29,29 +30,18 @@ const SearchableSelect = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showTooltip, setShowTooltip] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
+  const buttonRef = useRef(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target) &&
+          buttonRef.current && !buttonRef.current.contains(event.target)) {
         setIsOpen(false);
         setSearchTerm('');
-      }
-    };
-    
-    const handleScroll = (event) => {
-      if (isOpen) {
-        // Check if scroll is happening within the dropdown
-        const scrollingElement = event.target;
-        const isDropdownScroll = dropdownRef.current?.contains(scrollingElement);
-        
-        // Only close if scrolling outside the dropdown
-        if (!isDropdownScroll) {
-          setIsOpen(false);
-          setSearchTerm('');
-        }
       }
     };
     
@@ -63,12 +53,10 @@ const SearchableSelect = ({
     };
     
     document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', handleResize);
     
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleResize);
     };
   }, [isOpen]);
@@ -77,6 +65,21 @@ const SearchableSelect = ({
   useEffect(() => {
     if (isOpen && searchInputRef.current) {
       searchInputRef.current.focus();
+    }
+  }, [isOpen]);
+
+  // Calculate dropdown position when opening
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+      
+      setDropdownPosition({
+        top: rect.bottom + scrollTop + 8,
+        left: rect.left + scrollLeft,
+        width: rect.width
+      });
     }
   }, [isOpen]);
 
@@ -110,9 +113,10 @@ const SearchableSelect = ({
   };
 
   return (
-    <div className={`relative w-full ${className}`} ref={dropdownRef}>
+    <div className={`relative w-full ${className}`}>
       {/* Main Button */}
       <button
+        ref={buttonRef}
         type="button"
         onClick={(e) => {
           e.stopPropagation();
@@ -185,16 +189,16 @@ const SearchableSelect = ({
         </p>
       )}
 
-      {/* Dropdown Menu */}
-      {isOpen && !disabled && (
+      {/* Dropdown Menu - Rendered via Portal */}
+      {isOpen && !disabled && createPortal(
         <div 
-          className="absolute bg-white rounded-lg shadow-2xl border-2 border-blue-400 py-1 max-h-80 overflow-hidden flex flex-col min-w-[250px]"
+          ref={dropdownRef}
+          className="fixed bg-white rounded-lg shadow-2xl border-2 border-blue-400 py-1 max-h-80 overflow-hidden flex flex-col min-w-[250px]"
           style={{
             zIndex: 9999,
-            top: '100%',
-            left: '0',
-            marginTop: '8px',
-            width: '100%'
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            width: `${dropdownPosition.width}px`
           }}
         >
           {/* Search Input */}
@@ -244,7 +248,8 @@ const SearchableSelect = ({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
