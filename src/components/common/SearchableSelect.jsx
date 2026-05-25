@@ -34,12 +34,13 @@ const SearchableSelect = ({
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
   const buttonRef = useRef(null);
+  const containerRef = useRef(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target) &&
-          buttonRef.current && !buttonRef.current.contains(event.target)) {
+      if (containerRef.current && !containerRef.current.contains(event.target) &&
+          dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
         setSearchTerm('');
       }
@@ -72,12 +73,12 @@ const SearchableSelect = ({
   useEffect(() => {
     if (isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+      // Use viewport coordinates directly since dropdown is fixed positioned
+      
       
       setDropdownPosition({
-        top: rect.bottom + scrollTop + 8,
-        left: rect.left + scrollLeft,
+        top: rect.bottom + 8,
+        left: rect.left,
         width: rect.width
       });
     }
@@ -113,7 +114,7 @@ const SearchableSelect = ({
   };
 
   return (
-    <div className={`relative w-full ${className}`}>
+    <div className={`relative w-full ${className}`} ref={containerRef}>
       {/* Main Button */}
       <button
         ref={buttonRef}
@@ -195,7 +196,7 @@ const SearchableSelect = ({
           ref={dropdownRef}
           className="fixed bg-white rounded-lg shadow-2xl border-2 border-blue-400 py-1 max-h-80 overflow-hidden flex flex-col min-w-[250px]"
           style={{
-            zIndex: 9999,
+            zIndex: 99999,
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
             width: `${dropdownPosition.width}px`
@@ -218,7 +219,11 @@ const SearchableSelect = ({
           </div>
 
           {/* Options List */}
-          <div className="overflow-y-auto max-h-60">
+          <div 
+            className="overflow-y-auto max-h-60"
+            onWheel={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+          >
             {filteredOptions.length === 0 ? (
               <div className="px-4 py-3 text-sm text-slate-400 text-center">
                 No options found
@@ -248,9 +253,8 @@ const SearchableSelect = ({
               })
             )}
           </div>
-        </div>,
-        document.body
-      )}
+        </div>
+      , document.body)}
     </div>
   );
 };

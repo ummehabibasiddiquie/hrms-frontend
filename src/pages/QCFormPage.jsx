@@ -1092,15 +1092,26 @@ const QCFormPage = () => {
                           showSelectAll={true}
                           icon={AlertCircle}
                         />
+                        {console.log('[QCFormPage] Dropdown disabled check - row.id:', row.id, 'pendingSelections[row.id]:', pendingSelections[row.id], 'disabled:', !pendingSelections[row.id]?.category)}
 
                         <button
                           onClick={() => {
                             const pending = pendingSelections[row.id];
+                            console.log('[QCFormPage] Before adding errors - pending:', pending);
                             if (pending?.category && pending?.subcategories?.length > 0) {
                               pending.subcategories.forEach(subcategoryId => {
                                 handleAddError(actualRowIndex, parseInt(pending.category), subcategoryId);
                               });
-                              clearPendingSelection(row.id);
+                              // Keep category selected, only clear subcategories
+                              setPendingSelections(prev => {
+                                console.log('[QCFormPage] Before state update - prev:', prev);
+                                const newState = {
+                                  ...prev,
+                                  [row.id]: { category: pending.category, subcategories: [] }
+                                };
+                                console.log('[QCFormPage] After state update - newState:', newState);
+                                return newState;
+                              });
                             }
                           }}
                           disabled={!pendingSelections[row.id]?.category || !pendingSelections[row.id]?.subcategories?.length}
