@@ -123,15 +123,32 @@ const DailyEntryFormModal = ({
     // If no errors, submit
     if (Object.keys(newErrors).length === 0) {
       try {
-        // Convert date from DD-MM-YYYY to YYYY-MM-DD if needed
+        // Convert date to YYYY-MM-DD format
         let formattedDate = date;
-        if (date && date.includes('-')) {
-          const parts = date.split('-');
-          // Check if it's DD-MM-YYYY format (first part is day <= 31)
-          if (parts.length === 3 && parseInt(parts[0]) <= 31 && parseInt(parts[2]) > 31) {
-            formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`; // Convert to YYYY-MM-DD
+        console.log('Original date:', date);
+        if (date) {
+          // Remove newline characters and day names
+          let cleanDate = date.toString().replace(/\n/g, '').trim();
+          // Remove day names (Monday, Tuesday, etc.)
+          cleanDate = cleanDate.replace(/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/gi, '').trim();
+          console.log('Cleaned date:', cleanDate);
+          
+          // Extract date part if it contains day names like "Friday"
+          const dateMatch = cleanDate.match(/(\d{4})[^\d]*(\d{2})[^\d]*(\d{2})/);
+          if (dateMatch) {
+            formattedDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+            console.log('Extracted date parts:', dateMatch);
+            console.log('Formatted date from regex:', formattedDate);
+          } else if (cleanDate.includes('-')) {
+            const parts = cleanDate.split('-');
+            // Check if it's DD-MM-YYYY format (first part is day <= 31)
+            if (parts.length === 3 && parseInt(parts[0]) <= 31 && parseInt(parts[2]) > 31) {
+              formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`; // Convert to YYYY-MM-DD
+              console.log('Formatted date from DD-MM-YYYY:', formattedDate);
+            }
           }
         }
+        console.log('Final formatted date:', formattedDate);
 
         // Build payload with only fields that have values
         const payload = {
