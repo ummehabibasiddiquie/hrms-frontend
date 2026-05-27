@@ -620,7 +620,7 @@ const QATrackerReport = () => {
       case 'production':
         if (!value) newErrors.production = 'Production is required';
         // else if (isNaN(value) || Number(value) <= 0) newErrors.production = 'Enter valid production';
-        else if (addFormData.base_target && Number(value) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42') {
+        else if (addFormData.base_target && Number(value) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42' && !['160', '161'].includes(String(addFormData.agent_id))) {
           newErrors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
         }
         else delete newErrors.production;
@@ -682,7 +682,7 @@ const QATrackerReport = () => {
     // else if (isNaN(addFormData.production) || Number(addFormData.production) <= 0) {
     //   errors.production = 'Enter valid production';
     // } 
-    else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42') {
+    else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42' && !['160', '161'].includes(String(addFormData.agent_id))) {
       errors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
     }
     
@@ -914,7 +914,7 @@ const QATrackerReport = () => {
         setEditProductionError('Please enter a valid number');
       } else if (productionValue < 0) {
         setEditProductionError('Production cannot be negative');
-      } else if (baseTarget && productionValue > (baseTarget * 2) && String(editFormData.task_id) !== '42') {
+      } else if (baseTarget && productionValue > (baseTarget * 2) && String(editFormData.task_id) !== '42' && !['160', '161'].includes(String(editingTracker?.user_id))) {
         setEditProductionError(`Production cannot exceed ${(baseTarget * 2).toFixed(2)} (double of base target)`);
       } else {
         setEditProductionError('');
