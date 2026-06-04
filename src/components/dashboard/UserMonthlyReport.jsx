@@ -71,23 +71,29 @@ const UserMonthlyReport = () => {
     const fetchUsers = async () => {
       try {
         setLoadingUsers(true);
-        const response = await api.post('/user/list', {
-          user_id: String(user?.user_id),
-          device_id: user?.device_id || 'web',
-          device_type: user?.device_type || 'Laptop',
-          is_active: 1
-        });
+        const requestBody = {
+          logged_in_user_id: user?.user_id
+        };
+        
+        // Add month_year filter if a specific month is selected
+        if (selectedMonthFilter && selectedMonthFilter !== 'all') {
+          requestBody.month_year = selectedMonthFilter;
+        }
+        
+        // Add team_id filter if a specific team is selected
+        if (selectedTeam && selectedTeam !== 'all') {
+          requestBody.team_id = selectedTeam;
+        }
+        
+        const response = await api.post('/user_monthly_report/list_users', requestBody);
         
         if (response.data?.data) {
-          // Map user data to expected format and filter for agents only (role_id = 6)
-          const usersList = response.data.data
-            .filter(u => u.role_id === 6 || String(u.role || u.role_name || '').toUpperCase() === 'AGENT')
-            .map(u => ({
-              user_id: u.user_id,
-              user_name: u.user_name,
-              role_id: u.role_id,
-              team_name: u.team_name
-            }));
+          // Map user data to expected format
+          const usersList = response.data.data.map(u => ({
+            user_id: u.user_id,
+            user_name: u.user_name,
+            team_name: u.team_name
+          }));
           setUsers(usersList);
         } else {
           setUsers([]);
@@ -104,7 +110,7 @@ const UserMonthlyReport = () => {
     if (user?.user_id) {
       fetchUsers();
     }
-  }, [user?.user_id, user?.device_id, user?.device_type]);
+  }, [user?.user_id, selectedMonthFilter, selectedTeam]);
 
   // Fetch teams dropdown data
   useEffect(() => {
@@ -132,7 +138,7 @@ const UserMonthlyReport = () => {
   }, [canViewTeamFilter, user?.user_id]);
 
   // Fetch report data function
-  const fetchReportData = useCallback(async () => {
+  const fetchReportData = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -183,12 +189,12 @@ const UserMonthlyReport = () => {
       setError('Failed to fetch report data');
       setLoading(false);
     }
-  }, [user?.user_id, selectedMonthFilter, selectedTeam]);
+  };
 
-  // Fetch report data on mount
+  // Fetch report data on mount and when filters change
   useEffect(() => {
     fetchReportData();
-  }, [fetchReportData]);
+  }, [user?.user_id, selectedMonthFilter, selectedTeam]);
 
   // Auto-expand current month on initial load
   useEffect(() => {
