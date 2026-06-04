@@ -25,6 +25,6 @@ export const fetchDailyBillableReport = async (payload = {}) => {
 export const fetchMonthlyBillableReport = async (payload = {}) => {
   const user_id = getLoggedInUserId();
   const reqBody = { logged_in_user_id: user_id, ...payload };
-  const res = await api.post("/user_monthly_tracker/list", reqBody);
+  const res = await api.post("/user_monthly_report/list", reqBody);
   return res.data;
 };

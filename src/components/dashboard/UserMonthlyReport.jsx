@@ -74,7 +74,8 @@ const UserMonthlyReport = () => {
         const response = await api.post('/user/list', {
           user_id: String(user?.user_id),
           device_id: user?.device_id || 'web',
-          device_type: user?.device_type || 'Laptop'
+          device_type: user?.device_type || 'Laptop',
+          is_active: 1
         });
         
         if (response.data?.data) {
@@ -137,7 +138,8 @@ const UserMonthlyReport = () => {
       setError(null);
       
       const requestBody = {
-        logged_in_user_id: user?.user_id
+        logged_in_user_id: user?.user_id,
+        is_active: 1
       };
       
       // Add month_year filter if a specific month is selected
