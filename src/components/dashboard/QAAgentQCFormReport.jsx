@@ -367,19 +367,15 @@ const QAAgentQCFormReport = () => {
 
         // Transform data for export
         const exportData = records.map(record => {
-          // Format dates to DD/MM/YYYY format with apostrophe to prevent Excel auto-conversion
-          const formatDate = (dateStr) => {
-            if (!dateStr) return 'N/A';
-            const date = new Date(dateStr);
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            // Prepend apostrophe to force Excel to treat as text
-            return `'${day}/${month}/${year}`;
-          };
+          // Format dates to Excel-friendly format (YYYY-MM-DD)
+          // Use UTC to avoid timezone issues
+          const evalDate = record.evaluation_date ? 
+            new Date(record.evaluation_date).toLocaleDateString('en-GB', { timeZone: 'UTC' }) : 'N/A';
+          const workDate = record.work_date ? 
+            new Date(record.work_date).toLocaleDateString('en-GB', { timeZone: 'UTC' }) : 'N/A';
           
-          const evalDate = formatDate(record.evaluation_date);
-          const workDate = formatDate(record.work_date);
+          console.log('Original evalDate:', record.evaluation_date);
+          console.log('Formatted evalDate:', evalDate);
           
           // Format error types
           const errorTypes = record.error_type && record.error_type.length > 0 
