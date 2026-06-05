@@ -368,14 +368,10 @@ const QAAgentQCFormReport = () => {
         // Transform data for export
         const exportData = records.map(record => {
           // Format dates to Excel-friendly format (YYYY-MM-DD)
-          // Use UTC to avoid timezone issues
           const evalDate = record.evaluation_date ? 
-            new Date(record.evaluation_date).toLocaleDateString('en-GB', { timeZone: 'UTC' }) : 'N/A';
+            new Date(record.evaluation_date).toISOString().split('T')[0] : 'N/A';
           const workDate = record.work_date ? 
-            new Date(record.work_date).toLocaleDateString('en-GB', { timeZone: 'UTC' }) : 'N/A';
-          
-          console.log('Original evalDate:', record.evaluation_date);
-          console.log('Formatted evalDate:', evalDate);
+            new Date(record.work_date).toISOString().split('T')[0] : 'N/A';
           
           // Format error types
           const errorTypes = record.error_type && record.error_type.length > 0 
