@@ -367,11 +367,11 @@ const QAAgentQCFormReport = () => {
 
         // Transform data for export
         const exportData = records.map(record => {
-          // Format dates
+          // Format dates to Excel-friendly format (YYYY-MM-DD)
           const evalDate = record.evaluation_date ? 
-            new Date(record.evaluation_date).toLocaleDateString('en-GB') : 'N/A';
+            new Date(record.evaluation_date).toISOString().split('T')[0] : 'N/A';
           const workDate = record.work_date ? 
-            new Date(record.work_date).toLocaleDateString('en-GB') : 'N/A';
+            new Date(record.work_date).toISOString().split('T')[0] : 'N/A';
           
           // Format error types
           const errorTypes = record.error_type && record.error_type.length > 0 
