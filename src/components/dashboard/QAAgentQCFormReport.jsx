@@ -367,11 +367,18 @@ const QAAgentQCFormReport = () => {
 
         // Transform data for export
         const exportData = records.map(record => {
-          // Format dates to Excel-friendly format (YYYY-MM-DD)
-          const evalDate = record.evaluation_date ? 
-            new Date(record.evaluation_date).toISOString().split('T')[0] : 'N/A';
-          const workDate = record.work_date ? 
-            new Date(record.work_date).toISOString().split('T')[0] : 'N/A';
+          // Format dates to DD/MM/YYYY format
+          const formatDate = (dateStr) => {
+            if (!dateStr) return 'N/A';
+            const date = new Date(dateStr);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+          };
+          
+          const evalDate = formatDate(record.evaluation_date);
+          const workDate = formatDate(record.work_date);
           
           // Format error types
           const errorTypes = record.error_type && record.error_type.length > 0 
