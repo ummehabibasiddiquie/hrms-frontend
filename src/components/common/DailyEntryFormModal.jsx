@@ -21,7 +21,8 @@ const DailyEntryFormModal = ({
   userRole = null,
   roleId = null,
   userId = null,
-  date = null
+  date = null,
+  logged_in_user_id = null
 }) => {
   const [formData, setFormData] = useState({
     assignHours: "",
@@ -153,7 +154,8 @@ const DailyEntryFormModal = ({
         // Build payload with only fields that have values
         const payload = {
           user_id: userId,
-          date: formattedDate
+          date: formattedDate,
+          logged_in_user_id: logged_in_user_id
         };
 
         // Only add fields that have actual values

@@ -39,8 +39,8 @@ export default function UserCard({
   // Get role_id - could be from role (if it's a number) or from currentUser.role_id
   const roleId = typeof role === 'number' ? role : currentUser?.role_id;
   
-  // Check if user is Assistant Manager (role_id = 4) or QA Agent (role_id = 5)
-  const canSeeActions = roleId === 4 || roleId === 5 || role === "ASSISTANT_MANAGER" || role === "QA_AGENT";
+  // Check if user is Assistant Manager (role_id = 4), Project Manager (role_id = 3), or QA Agent (role_id = 5)
+  const canSeeActions = roleId === 4 || roleId === 3 || roleId === 5 || role === "ASSISTANT_MANAGER" || role === "PROJECT_MANAGER" || role === "QA_AGENT";
   
   // Helper function to get QC score color classes
   const getQCScoreColorClass = (score) => {
@@ -597,6 +597,7 @@ export default function UserCard({
         roleId={roleId}
         userId={user?.user_id || user?.id}
         date={selectedDate}
+        logged_in_user_id={currentUser?.user_id || currentUser?.id}
       />
     </div>
   );
