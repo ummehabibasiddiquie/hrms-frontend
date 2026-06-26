@@ -67,8 +67,23 @@ const DashboardPage = ({
   const designation = currentUser?.designation || currentUser?.user_designation || '';
   const roleId = Number(currentUser?.role_id ?? currentUser?.user_role_id ?? 0);
   const designationId = Number(currentUser?.designation_id ?? currentUser?.user_designation_id ?? 0);
-  const isAdmin = roleId === 1 || roleId === 2 || String(role).toLowerCase() === 'admin' || String(userRole).toUpperCase() === 'ADMIN' || String(designation).toLowerCase() === 'admin';
-  const isSuperAdmin = String(role).toLowerCase().includes('super') || String(userRole).toUpperCase().includes('SUPER') || String(designation).toLowerCase().includes('super');
+
+  const roleText = String(role).trim().toLowerCase();
+  const userRoleText = String(userRole).trim().toLowerCase();
+  const designationText = String(designation).trim().toLowerCase();
+
+  const isSuperAdmin =
+    roleId === 1 ||
+    roleText.includes('super') ||
+    userRoleText.includes('super') ||
+    designationText.includes('super');
+
+  const isAdmin =
+    !isSuperAdmin &&
+    (roleId === 2 ||
+      roleText.includes('admin') ||
+      userRoleText === 'admin' ||
+      designationText.includes('admin'));
   const isAgent = roleId === 6 || String(role).toLowerCase() === 'agent' || String(userRole).toUpperCase() === 'AGENT' || String(designation).toLowerCase() === 'agent';
   const isQA = roleId === 5 || String(currentUser?.user_designation).toLowerCase() === 'qa' || String(designation).toLowerCase() === 'qa' || String(role).toLowerCase().includes('qa');
   const isAssistantManager = roleId === 4 || String(designation).toLowerCase() === 'assistant manager' || String(role).toLowerCase().includes('assistant');
