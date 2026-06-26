@@ -36,7 +36,7 @@ const QATrackerReport = () => {
   
   // Check if user is PM, Admin, or Super Admin (for team filter visibility)
   const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
-  const isAdmin = roleId === 1 || String(role).toLowerCase() === 'admin' || String(designation).toLowerCase() === 'admin';
+  const isAdmin = roleId === 2 || String(role).toLowerCase() === 'admin' || String(designation).toLowerCase() === 'admin';
   const isSuperAdmin = String(role).toLowerCase().includes('super') || String(designation).toLowerCase().includes('super');
   const canViewTeamFilter = isProjectManager || isAdmin || isSuperAdmin;
   

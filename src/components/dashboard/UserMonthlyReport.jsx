@@ -24,7 +24,7 @@ const UserMonthlyReport = () => {
   // Role checking
   const roleId = user?.role_id;
   const role = user?.role || user?.role_name || '';
-  const isAdmin = roleId === 1 || String(role).toLowerCase() === 'admin';
+  const isAdmin = roleId === 2 || String(role).toLowerCase() === 'admin';
   const isSuperAdmin = String(role).toLowerCase().includes('super');
   const isProjectManager = roleId === 3 || String(role).toLowerCase().includes('project manager');
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
