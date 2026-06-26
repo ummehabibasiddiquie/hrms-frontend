@@ -182,9 +182,10 @@ export const AuthProvider = ({ children }) => {
 
     // Check if user is Admin, Project Manager, or Assistant Manager
     // PRIORITY: roleId check first (most reliable), then fallback to name checks
-    const isAdmin = 
-      roleId === 1 || 
-      roleName === 'admin' || 
+    const isAdmin =
+      roleId === 1 ||
+      roleId === 2 ||
+      roleName === 'admin' ||
       designation === 'admin';
     
     const isProjectManager = 

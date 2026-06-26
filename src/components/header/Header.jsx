@@ -144,8 +144,8 @@ const Header = ({
       return;
     }
     
-    // Handle Manage tab for Assistant Managers - route to /dashboard with tab=manage
-    if (view === ViewState.ADMIN_PANEL && roleId === 4) {
+    // Manage now lives inside the dashboard for all supported roles.
+    if (view === ViewState.ADMIN_PANEL) {
       navigate('/dashboard?tab=manage');
       setIsMobileMenuOpen(false);
       return;

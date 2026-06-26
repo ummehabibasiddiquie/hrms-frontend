@@ -67,7 +67,7 @@ const DashboardPage = ({
   const designation = currentUser?.designation || currentUser?.user_designation || '';
   const roleId = currentUser?.role_id;
   const designationId = currentUser?.designation_id;
-  const isAdmin = roleId === 2 || String(role).toLowerCase() === 'admin' || String(userRole).toUpperCase() === 'ADMIN' || String(designation).toLowerCase() === 'admin';
+  const isAdmin = roleId === 1 || roleId === 2 || String(role).toLowerCase() === 'admin' || String(userRole).toUpperCase() === 'ADMIN' || String(designation).toLowerCase() === 'admin';
   const isSuperAdmin = String(role).toLowerCase().includes('super') || String(userRole).toUpperCase().includes('SUPER') || String(designation).toLowerCase().includes('super');
   const isAgent = roleId === 6 || String(role).toLowerCase() === 'agent' || String(userRole).toUpperCase() === 'AGENT' || String(designation).toLowerCase() === 'agent';
   const isQA = roleId === 5 || String(currentUser?.user_designation).toLowerCase() === 'qa' || String(designation).toLowerCase() === 'qa' || String(role).toLowerCase().includes('qa');

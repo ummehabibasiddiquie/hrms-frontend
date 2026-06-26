@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import AssistantManagerTabsNavigation from "./AssistantManagerTabsNavigation";
+import AdminTabsNavigation from "./AdminTabsNavigation";
 import { format } from "date-fns";
 import { FileText, Users, Clock, TrendingUp, Download, Filter, CheckCircle2, Calendar, RotateCcw, Funnel } from "lucide-react";
 
@@ -199,7 +199,7 @@ const AdminDashboard = () => {
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-10">
       {/* Navigation Tabs */}
-      <AssistantManagerTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+      <AdminTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
       
       {/* Overview Tab Content */}
       {activeTab === 'overview' && (

@@ -4,7 +4,7 @@ import { useCurrentUserRole } from "../../hooks/useCurrentUserRole";
 import { useAuth } from "../../context/AuthContext";
 import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
-import { User, Download, ChevronUp, Calendar, X, RotateCcw, Edit, Plus } from "lucide-react";
+import { User, Download, ChevronUp, Calendar, X, RotateCcw, Edit } from "lucide-react";
 import DailyEntryFormModal from "./DailyEntryFormModal";
 import { DateRangePicker } from "./CustomCalendar";
 
@@ -37,10 +37,36 @@ export default function UserCard({
   const { user: currentUser } = useAuth();
   
   // Get role_id - could be from role (if it's a number) or from currentUser.role_id
-  const roleId = typeof role === 'number' ? role : currentUser?.role_id;
+  const roleId = Number(typeof role === 'number' ? role : currentUser?.role_id);
+  const normalizedRole = String(
+    role || currentUser?.role || currentUser?.role_name || currentUser?.user_role || ''
+  ).toUpperCase();
+  const normalizedDesignation = String(
+    currentUser?.designation || currentUser?.user_designation || ''
+  ).toUpperCase();
+
+  // IMPORTANT: In this app, Super Admin vs Admin must be decided by role (not by permission flags),
+  // because Admin users can also have both permissions enabled.
+  const isSuperAdmin =
+    roleId === 1 ||
+    normalizedRole.includes("SUPER_ADMIN") ||
+    normalizedRole.includes("SUPER ADMIN") ||
+    normalizedDesignation.includes("SUPER");
+
+  const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === "ADMIN");
+  const isProjectManager =
+    roleId === 3 ||
+    normalizedRole.includes("PROJECT_MANAGER") ||
+    normalizedRole.includes("PROJECT MANAGER");
+  const isAssistantManager =
+    roleId === 4 ||
+    normalizedRole.includes("ASSISTANT") ||
+    normalizedRole.includes("ASST") ||
+    normalizedDesignation.includes("ASSISTANT") ||
+    normalizedDesignation.includes("ASST");
   
-  // Check if user is Admin (role_id = 2), Assistant Manager (role_id = 4), Project Manager (role_id = 3), or QA Agent (role_id = 5)
-  const canSeeActions = roleId === 2 || roleId === 4 || roleId === 3 || roleId === 5 || role === "ADMIN" || role === "ASSISTANT_MANAGER" || role === "PROJECT_MANAGER" || role === "QA_AGENT";
+  // Only Admin, Project Manager, and Assistant Manager can edit assigned hours in Billable Report.
+  const canSeeActions = isAdmin || isProjectManager || isAssistantManager;
   
   // Helper function to get QC score color classes
   const getQCScoreColorClass = (score) => {
@@ -156,14 +182,6 @@ export default function UserCard({
     return true;
   });
 
-  // Handle Add button click
-  const handleAddClick = (rowData = null) => {
-    setModalMode('add');
-    setSelectedEntry(rowData);
-    setSelectedDate(rowData?.date_time || rowData?.date || null);
-    setShowEntryModal(true);
-  };
-
   // Handle Edit button click
   const handleEditClick = (rowData) => {
     setModalMode('edit');
@@ -236,16 +254,9 @@ export default function UserCard({
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => handleAddClick(row)}
-                        className="group relative p-2 rounded-lg bg-gradient-to-br from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-200 hover:border-emerald-300 transition-all duration-200 hover:shadow-md"
-                        title="Add Entry"
-                      >
-                        <Plus className="w-4 h-4 text-emerald-600 group-hover:text-emerald-700" />
-                      </button>
-                      <button
                         onClick={() => handleEditClick(row)}
                         className="group relative p-2 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 transition-all duration-200 hover:shadow-md"
-                        title="Edit Entry"
+                        title="Edit Assigned Hours"
                       >
                         <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                       </button>
@@ -510,16 +521,9 @@ export default function UserCard({
                           <td className="px-6 py-4 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <button
-                                onClick={() => handleAddClick(row)}
-                                className="group relative p-2 rounded-lg bg-gradient-to-br from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 border border-emerald-200 hover:border-emerald-300 transition-all duration-200 hover:shadow-md"
-                                title="Add Entry"
-                              >
-                                <Plus className="w-4 h-4 text-emerald-600 group-hover:text-emerald-700" />
-                              </button>
-                              <button
                                 onClick={() => handleEditClick(row)}
                                 className="group relative p-2 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 transition-all duration-200 hover:shadow-md"
-                                title="Edit Entry"
+                                title="Edit Assigned Hours"
                               >
                                 <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                               </button>

@@ -70,9 +70,10 @@ const BillableReport = ({ userId }) => {
     (user?.role_name || user?.role || '').toLowerCase().includes('assistant');
 
   // Check if user can view team filter (Admin, Super Admin, Project Manager)
-  const isAdmin = user?.role_id === 1;
-  const isSuperAdmin = (user?.role_name || user?.role || '').toLowerCase().includes('super');
-  const isProjectManager = user?.role_id === 3;
+  const normalizedRole = (user?.role_name || user?.role || user?.user_role || '').toLowerCase();
+  const isAdmin = user?.role_id === 1 || user?.role_id === 2 || normalizedRole === 'admin';
+  const isSuperAdmin = normalizedRole.includes('super');
+  const isProjectManager = user?.role_id === 3 || normalizedRole.includes('project manager');
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
 
   // Export all users' daily data (filtered by search query if set)

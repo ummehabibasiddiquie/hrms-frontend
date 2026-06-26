@@ -24,9 +24,12 @@ const UserMonthlyReport = () => {
   // Role checking
   const roleId = user?.role_id;
   const role = user?.role || user?.role_name || '';
-  const isAdmin = roleId === 2 || String(role).toLowerCase() === 'admin';
-  const isSuperAdmin = String(role).toLowerCase().includes('super');
-  const isProjectManager = roleId === 3 || String(role).toLowerCase().includes('project manager');
+  const normalizedRole = String(role).toLowerCase();
+  const isSuperAdmin = roleId === 1 || normalizedRole.includes('super');
+  const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === 'admin');
+  const isProjectManager = roleId === 3 || normalizedRole.includes('project manager');
+  const isAssistantManager = roleId === 4 || normalizedRole.includes('assistant');
+  const canManageAssignedHours = isAssistantManager || isProjectManager || isAdmin;
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
   const canViewTeamColumn = isAdmin || isSuperAdmin || isProjectManager; // Show team column for these roles, hide for assistant manager (role_id 4)
   
@@ -233,6 +236,10 @@ const UserMonthlyReport = () => {
 
   // Handle edit click
   const handleEditClick = (record) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to edit assigned hours');
+      return;
+    }
     setEditingId(record.id);
     setEditData({
       user_id: record.user_id,
@@ -245,6 +252,10 @@ const UserMonthlyReport = () => {
 
   // Handle edit save
   const handleEditSave = async (id) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to update assigned hours');
+      return;
+    }
     try {
       const payload = {
         user_monthly_tracker_id: id,
@@ -279,12 +290,20 @@ const UserMonthlyReport = () => {
 
   // Handle delete
   const handleDeleteClick = (record) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to delete assigned hours');
+      return;
+    }
     setRecordToDelete(record);
     setDeleteModalOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
     if (!recordToDelete) return;
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to delete assigned hours');
+      return;
+    }
 
     setIsDeleting(true);
     try {
@@ -337,6 +356,10 @@ const UserMonthlyReport = () => {
 
   // Handle Apply All - copy first user's data to all users in the same month
   const handleApplyAll = (monthYear) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to add assigned hours');
+      return;
+    }
     const monthData = groupedData[monthYear];
     if (!monthData || monthData.length === 0) return;
 
@@ -371,6 +394,10 @@ const UserMonthlyReport = () => {
 
   // Handle Submit All - submit all unsaved records with data
   const handleSubmitAll = async (monthYear) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to add assigned hours');
+      return;
+    }
     const monthFormData = formData[monthYear];
     if (!monthFormData) {
       toast.error('No data to submit');
@@ -728,24 +755,26 @@ const UserMonthlyReport = () => {
                 {isExpanded && (
                   <div className="p-6">
                     {/* Apply All and Submit All Buttons */}
-                    <div className="mb-4 flex gap-3">
-                      <button
-                        onClick={() => handleApplyAll(monthYear)}
-                        disabled={submitting}
-                        className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
-                        title="Apply first user's data to all users"
-                      >
-                        Apply First User to All
-                      </button>
-                      <button
-                        onClick={() => handleSubmitAll(monthYear)}
-                        disabled={submitting}
-                        className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
-                        title="Submit all unsaved records"
-                      >
-                        {submitting ? 'Submitting...' : 'Submit All'}
-                      </button>
-                    </div>
+                    {canManageAssignedHours && (
+                      <div className="mb-4 flex gap-3">
+                        <button
+                          onClick={() => handleApplyAll(monthYear)}
+                          disabled={submitting}
+                          className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
+                          title="Apply first user's data to all users"
+                        >
+                          Apply First User to All
+                        </button>
+                        <button
+                          onClick={() => handleSubmitAll(monthYear)}
+                          disabled={submitting}
+                          className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
+                          title="Submit all unsaved records"
+                        >
+                          {submitting ? 'Submitting...' : 'Submit All'}
+                        </button>
+                      </div>
+                    )}
 
                     {/* Search Filter and Export Button */}
                     <div className="mb-4 flex gap-3">
@@ -882,6 +911,26 @@ const UserMonthlyReport = () => {
                                   </tr>
                                 );
                               } else if (!hasData) {
+                                // Super Admin can view this page but cannot add assigned hours.
+                                if (!canManageAssignedHours) {
+                                  return (
+                                    <tr key={`view-empty-${record.user_id}`} className="transition-all duration-200 border-b border-slate-300 bg-white">
+                                      <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300">{record.user_name}</td>
+                                      {canViewTeamColumn && (
+                                        <td className="px-6 py-4 text-slate-600 border border-slate-300">{record.team_name || '-'}</td>
+                                      )}
+                                      <td className="px-6 py-4 text-center text-slate-400 font-medium border border-slate-300">-</td>
+                                      <td className="px-6 py-4 text-center text-slate-400 font-medium border border-slate-300">-</td>
+                                      <td className="px-6 py-4 text-center text-slate-400 font-medium border border-slate-300">-</td>
+                                      <td className="px-6 py-4 border border-slate-300">
+                                        <div className="flex items-center justify-center">
+                                          <span className="text-xs text-slate-400 italic font-semibold">View only</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+
                                 // Input Mode - Show input fields for records without data
                                 return (
                                   <tr key={`input-${record.user_id}`} className="transition-all duration-200 border-b border-slate-300 bg-white">
@@ -941,22 +990,28 @@ const UserMonthlyReport = () => {
                                       {record.working_days}
                                     </td>
                                     <td className="px-6 py-4 border border-slate-300">
-                                      <div className="flex items-center justify-center gap-2">
-                                        <button
-                                          onClick={() => handleEditClick(record)}
-                                          className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all hover:shadow-md"
-                                          title="Edit"
-                                        >
-                                          <Edit2 className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteClick(record)}
-                                          className="p-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 transition-all hover:shadow-md"
-                                          title="Delete"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
-                                      </div>
+                                      {canManageAssignedHours ? (
+                                        <div className="flex items-center justify-center gap-2">
+                                          <button
+                                            onClick={() => handleEditClick(record)}
+                                            className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all hover:shadow-md"
+                                            title="Edit"
+                                          >
+                                            <Edit2 className="w-4 h-4" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteClick(record)}
+                                            className="p-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 transition-all hover:shadow-md"
+                                            title="Delete"
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center justify-center">
+                                          <span className="text-xs text-slate-400 italic font-semibold">View only</span>
+                                        </div>
+                                      )}
                                     </td>
                                   </tr>
                                 );

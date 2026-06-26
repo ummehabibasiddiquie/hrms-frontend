@@ -1,12 +1,12 @@
 /**
  * File Name: DailyEntryFormModal.jsx
  * Author: Naitik Maisuriya
- * Description: A reusable modal component for adding/editing daily work entries
- * including Total Monthly Working Days, Assign Hours, and QC Score.
+ * Description: A reusable modal component for adding/editing Billable Report
+ * assigned hours entries.
  */
 
 import React, { useState, useEffect } from "react";
-import { X, Save, Calendar, Clock, Award } from "lucide-react";
+import { X, Save, Calendar, Clock } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { saveTempQC } from "../../services/qcService";
 
@@ -25,8 +25,7 @@ const DailyEntryFormModal = ({
   logged_in_user_id = null
 }) => {
   const [formData, setFormData] = useState({
-    assignHours: "",
-    qcScore: ""
+    assignHours: ""
   });
 
   const [errors, setErrors] = useState({});
@@ -46,14 +45,12 @@ const DailyEntryFormModal = ({
         };
 
         setFormData({
-          assignHours: parseNumericValue(initialData.assignHours || initialData.assign_hours),
-          qcScore: parseNumericValue(initialData.qcScore || initialData.qc_score)
+          assignHours: parseNumericValue(initialData.assignHours || initialData.assign_hours)
         });
       } else {
         // Reset for add mode
         setFormData({
-          assignHours: "",
-          qcScore: ""
+          assignHours: ""
         });
       }
       setErrors({});
@@ -69,14 +66,6 @@ const DailyEntryFormModal = ({
           const hours = Number(value);
           if (isNaN(hours) || hours < 0) return "Must be a non-negative number";
           if (hours > 24) return "Cannot exceed 24 hours";
-        }
-        return "";
-
-      case "qcScore":
-        if (value && value !== "") {
-          const score = Number(value);
-          if (isNaN(score) || score < 0) return "Must be a non-negative number";
-          if (score > 100) return "Cannot exceed 100";
         }
         return "";
 
@@ -117,8 +106,7 @@ const DailyEntryFormModal = ({
 
     setErrors(newErrors);
     setTouched({
-      assignHours: true,
-      qcScore: true
+      assignHours: true
     });
 
     // If no errors, submit
@@ -158,31 +146,27 @@ const DailyEntryFormModal = ({
           logged_in_user_id: logged_in_user_id
         };
 
-        // Only add fields that have actual values
+        // Only assigned hours are editable from Billable Report.
         if (formData.assignHours && formData.assignHours !== '') {
           payload.assigned_hours = Number(formData.assignHours);
         }
-        if (formData.qcScore && formData.qcScore !== '') {
-          payload.qc_score = Number(formData.qcScore);
-        }
 
-        // Log data being sent
-        console.log('Submitting QC data:', payload);
+        console.log('Submitting assigned hours data:', payload);
 
-        // Call API to save QC data
+        // Save the assigned hours update.
         const response = await saveTempQC(payload);
         
         if (response.status) {
-          toast.success(response.message || 'QC saved successfully!');
+          toast.success(response.message || 'Assigned hours saved successfully!');
           onSubmit(formData); // Call parent's onSubmit for additional handling (triggers refresh)
           handleClose(); // Close modal after successful save
         } else {
-          toast.error(response.message || 'Failed to save QC data');
+          toast.error(response.message || 'Failed to save assigned hours');
         }
       } catch (error) {
-        console.error('Error saving QC data:', error);
+        console.error('Error saving assigned hours data:', error);
         console.error('Error response:', error.response?.data);
-        const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to save QC data. Please try again.';
+        const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to save assigned hours. Please try again.';
         toast.error(errorMessage);
       }
     }
@@ -190,8 +174,7 @@ const DailyEntryFormModal = ({
 
   const handleClose = () => {
     setFormData({
-      assignHours: "",
-      qcScore: ""
+      assignHours: ""
     });
     setErrors({});
     setTouched({});
@@ -273,42 +256,6 @@ const DailyEntryFormModal = ({
               {touched.assignHours && errors.assignHours && (
                 <p className="mt-2 text-xs text-red-600 flex items-center gap-1">
                   <span className="font-semibold">⚠</span> {errors.assignHours}
-                </p>
-              )}
-            </div>
-
-            {/* QC Score */}
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
-                <Award className="w-4 h-4 text-blue-600" />
-                QC Score
-                {(roleId === 4 || userRole === "ASSISTANT_MANAGER") && (
-                  <span className="text-xs font-normal text-slate-500 ml-2">(Read-only for Assistant Manager)</span>
-                )}
-              </label>
-              <input
-                type="number"
-                name="qcScore"
-                value={formData.qcScore}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={`block w-full px-4 py-3 text-sm bg-slate-50 border ${
-                  touched.qcScore && errors.qcScore
-                    ? 'border-red-500 focus:ring-red-500'
-                    : 'border-slate-200 focus:ring-blue-500'
-                } rounded-xl focus:outline-none focus:ring-2 transition-all duration-200 ${
-                  (roleId === 4 || userRole === "ASSISTANT_MANAGER") ? 'bg-slate-100 cursor-not-allowed' : ''
-                }`}
-                placeholder="Enter QC score (0-100)"
-                min="0"
-                max="100"
-                step="0.01"
-                disabled={isSubmitting || roleId === 4 || userRole === "ASSISTANT_MANAGER"}
-                readOnly={roleId === 4 || userRole === "ASSISTANT_MANAGER"}
-              />
-              {touched.qcScore && errors.qcScore && (
-                <p className="mt-2 text-xs text-red-600 flex items-center gap-1">
-                  <span className="font-semibold">⚠</span> {errors.qcScore}
                 </p>
               )}
             </div>
