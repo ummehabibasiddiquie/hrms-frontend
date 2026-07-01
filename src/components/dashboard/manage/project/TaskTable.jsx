@@ -34,7 +34,14 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
           task={deleteModal.task}
           onClose={() => setDeleteModal({ open: false, task: null })}
           onConfirm={() => {
-            onDeleteTask(project.id, deleteModal.task.id || deleteModal.task.task_id);
+            const taskId = deleteModal.task.id || deleteModal.task.task_id;
+            console.log('[TaskTable] Deleting task:', { projectId: project.id, taskId, task: deleteModal.task });
+            if (!taskId) {
+              console.error('[TaskTable] No task_id found in task object:', deleteModal.task);
+              alert('Task ID is missing. Cannot delete task.');
+              return;
+            }
+            onDeleteTask(project.id, taskId);
             setDeleteModal({ open: false, task: null });
           }}
           isDeleting={false}

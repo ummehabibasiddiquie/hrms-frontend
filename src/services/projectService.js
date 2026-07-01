@@ -81,7 +81,9 @@ export const deleteTask = async (projectId, taskId, qcPercentage) => {
     task_id: taskId,
   };
   if (qcPercentage) payload.qc_percentage = qcPercentage;
+  console.log('[deleteTask] Sending payload:', payload);
   const res = await api.put("/task/delete", payload);
+  console.log('[deleteTask] Response:', res);
   return res.data;
 };
 

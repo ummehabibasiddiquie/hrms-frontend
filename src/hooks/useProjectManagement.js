@@ -792,12 +792,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
           if (!taskId) return false;
 
           try {
-               const response = await deleteTaskApi({ 
-                    project_id: projectId, 
-                    task_id: taskId,
-                    device_id: deviceInfo.deviceId || 'web',
-                    device_type: deviceInfo.deviceType || 'Laptop'
-               });
+               const response = await deleteTaskApi(projectId, taskId);
 
                if (response?.status === 200 || response?.status === 201) {
                     toast.success("Task deleted successfully", {
