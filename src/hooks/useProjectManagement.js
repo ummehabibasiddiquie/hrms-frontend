@@ -213,10 +213,6 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                errors.name = "This field is required";
           }
 
-          if (!newProject.projectManagerId) {
-               errors.projectManagerId = "This field is required";
-          }
-
           if (!newProject.assistantManagerIds?.length) {
                errors.assistantManagerIds = "This field is required";
           }
@@ -244,7 +240,9 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                formData.append('project_name', newProject.name.trim());
                formData.append('project_code', newProject.code.trim());
                formData.append('project_description', newProject.description?.trim() || '');
-               formData.append('project_manager_id', Number(newProject.projectManagerId));
+               if (newProject.projectManagerId) {
+                    formData.append('project_manager_id', Number(newProject.projectManagerId));
+               }
                
                // Append project category if selected
                if (newProject.projectCategoryId) {
@@ -412,10 +410,6 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                errors.code = "This field is required";
           }
 
-          if (!projectData.projectManagerId) {
-               errors.projectManagerId = "This field is required";
-          }
-
           if (!projectData.assistantManagerIds?.length) {
                errors.assistantManagerIds = "This field is required";
           }
@@ -443,7 +437,9 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                formData.append('project_name', projectData.name.trim());
                formData.append('project_code', projectData.code.trim());
                formData.append('project_description', projectData.description?.trim() || '');
-               formData.append('project_manager_id', Number(projectData.projectManagerId));
+               if (projectData.projectManagerId) {
+                    formData.append('project_manager_id', Number(projectData.projectManagerId));
+               }
                
                // Append project category if provided
                if (projectData.projectCategoryId) {

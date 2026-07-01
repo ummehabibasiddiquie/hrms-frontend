@@ -361,7 +361,7 @@ const EditProjectModal = ({
 					{/* Project Manager */}
 						<div>
 							<label className="block text-sm font-semibold text-gray-700 mb-2">
-								Project Manager <span className="text-red-600">*</span>
+								Project Manager
 							</label>
 							<SearchableSelect
 							value={editProject.projectManagerId || ""}
