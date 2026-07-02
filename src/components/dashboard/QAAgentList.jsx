@@ -3,7 +3,7 @@
  * Author: Naitik Maisuriya
  * Description: QA Agent List - Shows assigned agents with their tracker data (files only)
  */
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2, RefreshCw, AlertTriangle, XCircle, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -289,6 +289,10 @@ const QAAgentList = () => {
   const { user } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
   const [searchParams] = useSearchParams();
+  const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
+  const roleText = String(user?.role_name || user?.role || user?.user_role || '').trim().toLowerCase();
+  const designationText = String(user?.designation || user?.user_designation || '').trim().toLowerCase();
+  const isQA = roleId === 5 || designationText === 'qa' || roleText.includes('qa');
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
@@ -298,11 +302,28 @@ const QAAgentList = () => {
   
   // Tab state - read from URL parameter if available
   const subtabParam = searchParams.get('subtab');
+  const hasSyncedSubtab = useRef(false);
   const [activeTab, setActiveTab] = useState(
-    subtabParam === 'qc_report' ? 'qc_report' :
+    (subtabParam === 'qc_report' && isQA) ? 'qc_report' :
     subtabParam === 'rework_review' ? 'rework_review' :
     'agent_files'
   );
+
+  useEffect(() => {
+    if (!hasSyncedSubtab.current && subtabParam) {
+      if (subtabParam === 'qc_report') {
+        setActiveTab(isQA ? 'qc_report' : 'agent_files');
+      } else if (subtabParam === 'rework_review') {
+        setActiveTab('rework_review');
+      } else {
+        setActiveTab('agent_files');
+      }
+      hasSyncedSubtab.current = true;
+    }
+    if (!isQA && activeTab === 'qc_report') {
+      setActiveTab('agent_files');
+    }
+  }, [activeTab, isQA, subtabParam]);
   
   // Selected agent for split view
   const [selectedAgentId, setSelectedAgentId] = useState(null);
@@ -1036,17 +1057,19 @@ const QAAgentList = () => {
                   <RefreshCw className="w-4 h-4" />
                   <span>Agent's Rework & Correction File</span>
                 </button>
-                <button
-                  onClick={() => setActiveTab('qc_report')}
-                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
-                    activeTab === 'qc_report'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <FileCheck className="w-4 h-4" />
-                  <span>QC Report</span>
-                </button>
+                {isQA && (
+                  <button
+                    onClick={() => setActiveTab('qc_report')}
+                    className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
+                      activeTab === 'qc_report'
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <FileCheck className="w-4 h-4" />
+                    <span>QC Report</span>
+                  </button>
+                )}
               </div>
             </div>
               {/* Bottom Row - Global Date Filter */}
