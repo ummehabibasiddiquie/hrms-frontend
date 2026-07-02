@@ -58,12 +58,10 @@ const QATrackerReport = () => {
   const isAdmin = roleId === 1 || roleId === 2 || String(role).toLowerCase() === 'admin' || String(designation).toLowerCase() === 'admin';
   const isSuperAdmin = String(role).toLowerCase().includes('super') || String(designation).toLowerCase().includes('super');
   const canViewTeamFilter = isProjectManager || isAdmin || isSuperAdmin;
-  const canAccessTaskEODReport =
-    isAssistantManager ||
-    isProjectManager ||
-    roleId === 2 ||
-    String(role).toLowerCase() === 'admin' ||
-    String(designation).toLowerCase() === 'admin';
+  const isAgent =
+    String(role).toLowerCase() === 'agent' ||
+    String(designation).toLowerCase() === 'agent';
+  const canAccessTaskEODReport = !isAgent;
   
   const [trackers, setTrackers] = useState([]);
   const [loading, setLoading] = useState(false);
