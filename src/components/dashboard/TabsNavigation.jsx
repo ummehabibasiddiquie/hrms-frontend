@@ -1,13 +1,15 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import UserMonthlyReport from './UserMonthlyReport';
 import ProjectMonthlyReport from './ProjectMonthlyReport';
+import TaskEODReport from './TaskEODReport';
 import {
   LayoutGrid,
   Briefcase,
   Users,
   FolderKanban,
   DollarSign,
-  Gem
+  Gem,
+  FileText
 } from 'lucide-react';
 
 const TabsNavigation = ({
@@ -19,19 +21,19 @@ const TabsNavigation = ({
   isAssistantManager,
   isProjectManager,
   isSuperAdmin,
-  canViewIncentivesTab,
-  canViewAdherence
+  canViewIncentivesTab
 }) => {
-  const tabsRef = useRef(null);
+  const canAccessTaskEODReport = isAdmin || isAssistantManager || isProjectManager;
     
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid, alwaysVisible: true },
+    { id: 'task_eod_report', label: 'Task EOD Report', icon: FileText, visible: canAccessTaskEODReport },
     // Billable Report tab: for agents and for QA, Assistant Manager, Project Manager, Admin, Super Admin
     ...(isAgent
       ? [{ id: 'billable_report', label: 'Billable Report', icon: Briefcase, visible: true }]
       : [{ id: 'bookings', label: 'Billable Report', icon: Briefcase, visible: (isQA || isAssistantManager || isProjectManager || isAdmin || isSuperAdmin) }]),
     // Show all required tabs for project manager
-    ...(isProjectManager || isAssistantManager || isAdmin || isSuperAdmin ? [
+    ...(isProjectManager || isAssistantManager || isAdmin || isSuperAdmin || isQA ? [
       { id: 'user_monthly_report', label: 'User Monthly Report', icon: Users, visible: true, disabled: false },
       { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban, visible: true, disabled: false },
       { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, visible: true, disabled: false },
@@ -91,6 +93,13 @@ const TabsNavigation = ({
       {activeTab === 'project_monthly_report' && (
         <div className="mt-4">
           <ProjectMonthlyReport />
+        </div>
+	  )}
+
+      {/* Render TaskEODReport below the tab bar when active */}
+      {activeTab === 'task_eod_report' && canAccessTaskEODReport && (
+        <div className="mt-4">
+          <TaskEODReport />
         </div>
 	  )}
 

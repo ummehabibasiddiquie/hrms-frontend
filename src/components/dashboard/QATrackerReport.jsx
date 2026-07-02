@@ -4,8 +4,7 @@
  * Description: QA Tracker Report - Shows tracker entries for assigned agents with filters
  */
 import React, { useEffect, useState, useMemo } from "react";
-import { format } from "date-fns";
-import { Download, Filter, FileDown, Users as UsersIcon, Calendar, RotateCcw, RefreshCw, Edit, Trash2, X, ChevronDown, Briefcase, ListTodo, Info, Plus, ListChecks, Clock, TrendingUp, Target } from "lucide-react";
+import { Download, Filter, FileDown, Users as UsersIcon, Calendar, RotateCcw, RefreshCw, Edit, Trash2, X, ChevronDown, Briefcase, ListTodo, Info, Plus, ListChecks, Clock, TrendingUp, Target, FileText } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { downloadCSV, jsonToCSV } from "../../utils/csvExport";
 import api from "../../services/api";
@@ -15,6 +14,16 @@ import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { DateRangePicker } from "../common/CustomCalendar";
 import MultiSelectWithCheckbox from "../common/MultiSelectWithCheckbox";
 import SearchableSelect from "../common/SearchableSelect";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "../ui/pagination";
+import TaskEODReport from "./TaskEODReport";
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -22,9 +31,15 @@ const getTodayDate = () => {
   return today.toISOString().split('T')[0];
 };
 
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
 const QATrackerReport = () => {
   const { user } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
+  
+  // Sub-tab state
+  const [activeSubTab, setActiveSubTab] = useState('tracker_report');
   
   // Check if user is QA agent (QA agents should not see edit/delete actions)
   const roleId = user?.role_id;
@@ -33,17 +48,37 @@ const QATrackerReport = () => {
   const isQAAgent = roleId === 5 || 
                     String(designation).toLowerCase() === 'qa' || 
                     String(role).toLowerCase().includes('qa');
+  const isAssistantManager =
+    roleId === 4 ||
+    String(designation).toLowerCase() === 'assistant manager' ||
+    String(role).toLowerCase().includes('assistant');
   
   // Check if user is PM, Admin, or Super Admin (for team filter visibility)
   const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
   const isAdmin = roleId === 1 || roleId === 2 || String(role).toLowerCase() === 'admin' || String(designation).toLowerCase() === 'admin';
   const isSuperAdmin = String(role).toLowerCase().includes('super') || String(designation).toLowerCase().includes('super');
   const canViewTeamFilter = isProjectManager || isAdmin || isSuperAdmin;
+  const canAccessTaskEODReport =
+    isAssistantManager ||
+    isProjectManager ||
+    roleId === 2 ||
+    String(role).toLowerCase() === 'admin' ||
+    String(designation).toLowerCase() === 'admin';
   
   const [trackers, setTrackers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, _setError] = useState("");
   const [apiTotals, setApiTotals] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_PAGE_SIZE);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    pageSize: DEFAULT_PAGE_SIZE,
+    totalRecords: 0,
+    totalPages: 1,
+    hasPrevious: false,
+    hasNext: false,
+  });
 
   // Filter states
   const [selectedAgents, setSelectedAgents] = useState([]);
@@ -52,14 +87,20 @@ const QATrackerReport = () => {
   const [selectedTask, setSelectedTask] = useState('');
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getTodayDate());
-  const [summary, setSummary] = useState([]);
+  const [_summary, setSummary] = useState([]);
+
+  useEffect(() => {
+    if (activeSubTab === 'task_eod_report' && !canAccessTaskEODReport) {
+      setActiveSubTab('tracker_report');
+    }
+  }, [activeSubTab, canAccessTaskEODReport]);
   
   // Edit modal dropdown states
   const [showEditProjectDropdown, setShowEditProjectDropdown] = useState(false);
   const [showEditTaskDropdown, setShowEditTaskDropdown] = useState(false);
 
   // Store per-hour targets from dropdown API
-  const [dropdownTaskMap, setDropdownTaskMap] = useState({});
+  const [dropdownTaskMap, _setDropdownTaskMap] = useState({});
 
   // Edit modal states
   const [showEditModal, setShowEditModal] = useState(false);
@@ -77,7 +118,7 @@ const QATrackerReport = () => {
     tracker_file: null,
   });
   const [editFilePreview, setEditFilePreview] = useState(null);
-  const [editFileBase64, setEditFileBase64] = useState(null);
+  const [_editFileBase64, setEditFileBase64] = useState(null);
   const [editFileError, setEditFileError] = useState("");
   const [loadingEditData, setLoadingEditData] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
@@ -106,13 +147,13 @@ const QATrackerReport = () => {
   const [addFileError, setAddFileError] = useState("");
   const [loadingAddData, setLoadingAddData] = useState(false);
   const [submittingAdd, setSubmittingAdd] = useState(false);
-  const [addProductionError, setAddProductionError] = useState("");
+  const [_addProductionError, setAddProductionError] = useState("");
   const [addTouched, setAddTouched] = useState({});
   const [addErrors, setAddErrors] = useState({});
 
   // Users list for agent dropdown filter
   const [usersList, setUsersList] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [_loadingUsers, setLoadingUsers] = useState(false);
 
   // Teams list for team dropdown filter
   const [teamsList, setTeamsList] = useState([]);
@@ -262,49 +303,92 @@ const QATrackerReport = () => {
     }
   };
 
+  const buildTrackerPayload = ({ includePagination = true, page = currentPage, pageSize = itemsPerPage } = {}) => {
+    const payload = {
+      logged_in_user_id: user?.user_id,
+      device_id: device_id,
+      device_type: device_type
+    };
+
+    if (startDate) payload.date_from = startDate;
+    if (endDate) payload.date_to = endDate;
+    if (!startDate && !endDate) {
+      const today = getTodayDate();
+      payload.date_from = today;
+      payload.date_to = today;
+    }
+
+    if (selectedAgents.length > 0) {
+      payload.user_id = selectedAgents.map(id => Number(id));
+    }
+
+    if (selectedTeams) {
+      payload.team_id = Number(selectedTeams);
+    }
+
+    if (selectedProject) {
+      payload.project_id = Number(selectedProject);
+    }
+
+    if (selectedTask) {
+      payload.task_id = Number(selectedTask);
+    }
+
+    if (includePagination) {
+      payload.paginate = true;
+      payload.page = page;
+      payload.page_size = pageSize;
+    }
+
+    return payload;
+  };
+
+  const getPaginationState = (paginationData, fallbackPage = currentPage, fallbackPageSize = itemsPerPage, trackerCount = 0) => {
+    if (!paginationData) {
+      const totalPages = trackerCount > 0 ? Math.ceil(trackerCount / fallbackPageSize) : 1;
+      return {
+        currentPage: fallbackPage,
+        pageSize: fallbackPageSize,
+        totalRecords: trackerCount,
+        totalPages,
+        hasPrevious: fallbackPage > 1,
+        hasNext: fallbackPage < totalPages,
+      };
+    }
+
+    return {
+      currentPage: paginationData.current_page || fallbackPage,
+      pageSize: paginationData.page_size || fallbackPageSize,
+      totalRecords: paginationData.total_records || 0,
+      totalPages: paginationData.total_pages || 1,
+      hasPrevious: Boolean(paginationData.has_previous),
+      hasNext: Boolean(paginationData.has_next),
+    };
+  };
+
   // Fetch trackers and summary from tracker/view API with filters
-  const fetchData = async () => {
+  const fetchData = async ({ page = currentPage, pageSize = itemsPerPage, includePagination = true } = {}) => {
     try {
       setLoading(true);
-      let payload = {
-        logged_in_user_id: user?.user_id,
-        device_id: device_id,
-        device_type: device_type
-      };
-      
-      if (startDate) payload.date_from = startDate;
-      if (endDate) payload.date_to = endDate;
-      if (!startDate && !endDate) {
-        const today = getTodayDate();
-        payload.date_from = today;
-        payload.date_to = today;
-      }
-      
-      if (selectedAgents.length > 0) {
-        payload.user_id = selectedAgents.map(id => Number(id));
-      }
-      
-      if (selectedTeams) {
-        payload.team_id = Number(selectedTeams);
-      }
-      
-      if (selectedProject) {
-        payload.project_id = Number(selectedProject);
-      }
-      
-      if (selectedTask) {
-        payload.task_id = Number(selectedTask);
-      }
-      
+      let payload = buildTrackerPayload({ includePagination, page, pageSize });
+
       log('[QATrackerReport] Fetching tracker data with payload:', payload);
       const res = await api.post("/tracker/view", payload);
       const data = res.data?.data || {};
       const fetchedTrackers = Array.isArray(data.trackers) ? data.trackers : [];
       setTrackers(fetchedTrackers);
       setSummary(Array.isArray(data.month_summary) ? data.month_summary : []);
-      if (data.totals) {
-        setApiTotals(data.totals);
+      setApiTotals(data.totals || null);
+
+      if (includePagination) {
+        const nextPagination = getPaginationState(data.pagination, page, pageSize, fetchedTrackers.length);
+        setPagination(nextPagination);
+
+        if (nextPagination.currentPage !== currentPage) {
+          setCurrentPage(nextPagination.currentPage);
+        }
       }
+
       log('[QATrackerReport] Fetched trackers:', fetchedTrackers.length, 'totals:', data.totals);
     } catch (err) {
       logError('[QATrackerReport] Error fetching tracker/view:', err);
@@ -312,6 +396,13 @@ const QATrackerReport = () => {
       setTrackers([]);
       setSummary([]);
       setApiTotals(null);
+      setPagination(prev => ({
+        ...prev,
+        totalRecords: 0,
+        totalPages: 1,
+        hasPrevious: false,
+        hasNext: false,
+      }));
     } finally {
       setLoading(false);
     }
@@ -334,6 +425,7 @@ const QATrackerReport = () => {
     if (!user?.user_id) return;
     
     console.log('[QATrackerReport] Team selection changed:', selectedTeams);
+    setCurrentPage(1);
     
     if (selectedTeams) {
       console.log('[QATrackerReport] Fetching agents for team_id:', selectedTeams);
@@ -352,14 +444,7 @@ const QATrackerReport = () => {
       fetchData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTask]);
-
-  // Clear selected task when project changes
-  useEffect(() => {
-    if (selectedProject) {
-      setSelectedTask('');
-    }
-  }, [selectedProject]);
+  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTask, currentPage, itemsPerPage]);
 
   // Filter tasks based on selected project for cascading dropdown
   const filteredTasksList = useMemo(() => {
@@ -390,7 +475,7 @@ const QATrackerReport = () => {
       const time = `${hours}:${minutes} ${ampm}`;
       
       return { date, time };
-    } catch (error) {
+    } catch {
       return { date: '-', time: '-' };
     }
   };
@@ -472,7 +557,95 @@ const QATrackerReport = () => {
     setSelectedTask('');
     setStartDate(today);
     setEndDate(today);
+    setCurrentPage(1);
   };
+
+  const handleStartDateChange = (value) => {
+    setCurrentPage(1);
+    setStartDate(value);
+  };
+
+  const handleEndDateChange = (value) => {
+    setCurrentPage(1);
+    setEndDate(value);
+  };
+
+  const handleAgentsChange = (value) => {
+    setCurrentPage(1);
+    setSelectedAgents(value);
+  };
+
+  const handleTeamChange = (value) => {
+    setCurrentPage(1);
+    setSelectedTeams(value);
+  };
+
+  const handleProjectChange = (value) => {
+    setCurrentPage(1);
+    setSelectedProject(value);
+    setSelectedTask('');
+  };
+
+  const handleTaskChange = (value) => {
+    setCurrentPage(1);
+    setSelectedTask(value);
+  };
+
+  const handlePageChange = (page) => {
+    if (page < 1 || page > pagination.totalPages || page === currentPage) {
+      return;
+    }
+
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (value) => {
+    const nextPageSize = Number(value);
+    setItemsPerPage(nextPageSize);
+    setCurrentPage(1);
+  };
+
+  const pageNumbers = useMemo(() => {
+    const totalPages = pagination.totalPages;
+    const pages = [];
+
+    if (totalPages <= 7) {
+      for (let page = 1; page <= totalPages; page += 1) {
+        pages.push(page);
+      }
+      return pages;
+    }
+
+    pages.push(1);
+
+    if (currentPage > 3) {
+      pages.push('ellipsis-start');
+    }
+
+    const middleStart = Math.max(2, currentPage - 1);
+    const middleEnd = Math.min(totalPages - 1, currentPage + 1);
+
+    for (let page = middleStart; page <= middleEnd; page += 1) {
+      if (!pages.includes(page)) {
+        pages.push(page);
+      }
+    }
+
+    if (currentPage < totalPages - 2) {
+      pages.push('ellipsis-end');
+    }
+
+    if (!pages.includes(totalPages)) {
+      pages.push(totalPages);
+    }
+
+    return pages;
+  }, [currentPage, pagination.totalPages]);
+
+  const pageStartRecord = pagination.totalRecords === 0
+    ? 0
+    : ((pagination.currentPage - 1) * pagination.pageSize) + 1;
+  const pageEndRecord = Math.min(pagination.currentPage * pagination.pageSize, pagination.totalRecords);
 
   // Handle open add tracker modal
   const handleOpenAddModal = async () => {
@@ -846,11 +1019,20 @@ const QATrackerReport = () => {
     setSubmittingDelete(true);
     try {
       await api.post("/tracker/delete", { tracker_id: deletingTracker.tracker_id });
-      setTrackers(trackers.filter(t => t.tracker_id !== deletingTracker.tracker_id));
       toast.success("Tracker deleted successfully!");
       log('[QATrackerReport] Tracker deleted:', deletingTracker.tracker_id);
       setShowDeleteModal(false);
       setDeletingTracker(null);
+
+      const nextTotalRecords = Math.max((pagination.totalRecords || trackers.length) - 1, 0);
+      const nextTotalPages = Math.max(Math.ceil(nextTotalRecords / itemsPerPage), 1);
+      const nextPage = Math.min(currentPage, nextTotalPages);
+
+      if (nextPage !== currentPage) {
+        setCurrentPage(nextPage);
+      } else {
+        fetchData({ page: nextPage });
+      }
     } catch (error) {
       logError('[QATrackerReport] Delete error:', error);
       toast.error("Failed to delete tracker.");
@@ -1095,7 +1277,7 @@ const QATrackerReport = () => {
   }, [trackers, apiTotals]);
 
   // Calculate monthly summary from filtered trackers
-  const monthlySummary = useMemo(() => {
+  const _monthlySummary = useMemo(() => {
     const monthlyData = {};
     
     trackers.forEach(tracker => {
@@ -1129,18 +1311,33 @@ const QATrackerReport = () => {
   }, [trackers]);
 
   // Export to Excel function
-  const handleExportToExcel = () => {
+  const handleExportToExcel = async () => {
     console.log('[QATrackerReport] Export function called');
     console.log('[QATrackerReport] Trackers length:', trackers.length);
     console.log('[QATrackerReport] Totals:', totals);
     
-    if (trackers.length === 0) {
+    if (pagination.totalRecords === 0) {
       toast.error("No data to export");
       return;
     }
 
     try {
-      const exportData = trackers.map((tracker) => {
+      const exportPayload = buildTrackerPayload({ includePagination: false });
+      const exportResponse = await api.post("/tracker/view", exportPayload);
+      const exportRows = Array.isArray(exportResponse.data?.data?.trackers) ? exportResponse.data.data.trackers : [];
+      const exportTotals = exportResponse.data?.data?.totals
+        ? {
+            production: Number(exportResponse.data.data.totals.total_production || 0),
+            billableHours: Number(exportResponse.data.data.totals.total_billable_hours || 0),
+          }
+        : totals;
+
+      if (exportRows.length === 0) {
+        toast.error("No data to export");
+        return;
+      }
+
+      const exportData = exportRows.map((tracker) => {
         const agentName = tracker.user_name || "-";
         const projectName = tracker.project_name || "-";
         const taskName = tracker.task_name || "-";
@@ -1186,8 +1383,8 @@ const QATrackerReport = () => {
         'Task': 'TOTALS',
         'Shift': '',
         'Per Hour Target': '',
-        'Production': totals.production.toFixed(2),
-        'Billable Hours': totals.billableHours.toFixed(2),
+        'Production': Number(exportTotals.production || 0).toFixed(2),
+        'Billable Hours': Number(exportTotals.billableHours || 0).toFixed(2),
         'Notes': '',
         'Has File': ''
       });
@@ -1226,7 +1423,7 @@ const QATrackerReport = () => {
             </div>
             <button
               onClick={handleExportToExcel}
-              disabled={loading || trackers.length === 0}
+              disabled={loading || pagination.totalRecords === 0}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
               title="Export filtered data to CSV"
             >
@@ -1236,6 +1433,51 @@ const QATrackerReport = () => {
           </div>
         </div>
 
+        {/* Sub-tab Navigation */}
+        <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
+          <div className="flex overflow-x-auto border-b border-slate-200 scrollbar-hide">
+            <button
+              onClick={() => setActiveSubTab('tracker_report')}
+              className={`flex-1 min-w-fit px-6 py-4 text-sm font-bold transition-all relative whitespace-nowrap ${
+                activeSubTab === 'tracker_report'
+                  ? 'text-blue-600 bg-blue-50'
+                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <UsersIcon className="w-4 h-4" />
+                <span>Tracker Entries</span>
+              </div>
+              {activeSubTab === 'tracker_report' && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+              )}
+            </button>
+            {canAccessTaskEODReport && (
+              <button
+                onClick={() => setActiveSubTab('task_eod_report')}
+                className={`flex-1 min-w-fit px-6 py-4 text-sm font-bold transition-all relative whitespace-nowrap ${
+                  activeSubTab === 'task_eod_report'
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  <span>Task EOD Report</span>
+                </div>
+                {activeSubTab === 'task_eod_report' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Sub-tab Content */}
+        {activeSubTab === 'task_eod_report' && canAccessTaskEODReport ? (
+          <TaskEODReport />
+        ) : (
+          <>
         {/* Filter Section */}
         <div className="bg-white rounded-2xl shadow-lg p-3 mb-6 border border-slate-200">
           <div className="flex flex-wrap items-end gap-3 mb-3">
@@ -1244,8 +1486,8 @@ const QATrackerReport = () => {
               <DateRangePicker
                 startDate={startDate}
                 endDate={endDate}
-                onStartDateChange={setStartDate}
-                onEndDateChange={setEndDate}
+                onStartDateChange={handleStartDateChange}
+                onEndDateChange={handleEndDateChange}
                 label=""
                 description={null}
                 showClearButton={false}
@@ -1264,7 +1506,7 @@ const QATrackerReport = () => {
               <MultiSelectWithCheckbox
                 icon={UsersIcon}
                 value={selectedAgents}
-                onChange={setSelectedAgents}
+                onChange={handleAgentsChange}
                 options={usersList.map(agent => ({ 
                   value: String(agent.user_id), 
                   label: agent.label 
@@ -1285,7 +1527,7 @@ const QATrackerReport = () => {
                 <SearchableSelect
                   icon={UsersIcon}
                   value={selectedTeams}
-                  onChange={setSelectedTeams}
+                  onChange={handleTeamChange}
                   options={teamsList.map(team => ({ 
                     value: String(team.team_id || team.value), 
                     label: team.label 
@@ -1306,7 +1548,7 @@ const QATrackerReport = () => {
               <SearchableSelect
                 icon={Briefcase}
                 value={selectedProject}
-                onChange={setSelectedProject}
+                onChange={handleProjectChange}
                 options={projectsList.map(project => ({ 
                   value: String(project.project_id), 
                   label: project.project_name 
@@ -1326,7 +1568,7 @@ const QATrackerReport = () => {
               <SearchableSelect
                 icon={ListTodo}
                 value={selectedTask}
-                onChange={setSelectedTask}
+                onChange={handleTaskChange}
                 options={filteredTasksList.map(task => ({ 
                   value: String(task.task_id), 
                   label: task.task_name 
@@ -1593,6 +1835,91 @@ const QATrackerReport = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+          <div className="border-t-2 border-slate-200 bg-gradient-to-r from-slate-50 via-blue-50 to-slate-50 px-6 py-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-4">
+                <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-2.5 shadow-sm">
+                  <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">Show</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => handleItemsPerPageChange(e.target.value)}
+                    className="rounded-lg border border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-1.5 text-sm font-bold text-blue-700 outline-none transition-all hover:from-blue-100 hover:to-indigo-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>{size}</option>
+                    ))}
+                  </select>
+                  <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">entries</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-slate-700 shadow-sm border border-slate-200">
+                    Showing {pageStartRecord}-{pageEndRecord}
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-slate-700 shadow-sm border border-slate-200">
+                    {pagination.totalRecords} total records
+                  </span>
+                  <span className="rounded-full bg-blue-600 px-3 py-1.5 font-semibold text-white shadow-sm">
+                    Page {pagination.currentPage} of {pagination.totalPages}
+                  </span>
+                </div>
+              </div>
+
+              {pagination.totalPages > 1 && (
+                <Pagination className="w-full justify-start xl:w-auto xl:justify-end">
+                  <PaginationContent className="flex-wrap justify-start gap-2 xl:justify-end">
+                    <PaginationItem>
+                      <PaginationLink
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        size="default"
+                        className={`h-10 rounded-lg px-4 font-semibold transition-all ${
+                          pagination.hasPrevious
+                            ? 'border-slate-300 bg-white text-slate-700 shadow-sm hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700'
+                            : 'pointer-events-none border-slate-200 bg-slate-100 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        Previous
+                      </PaginationLink>
+                    </PaginationItem>
+
+                    {pageNumbers.map((pageNumber) => (
+                      <PaginationItem key={pageNumber}>
+                        {String(pageNumber).startsWith('ellipsis') ? (
+                          <PaginationEllipsis className="text-slate-500" />
+                        ) : (
+                          <PaginationLink
+                            onClick={() => handlePageChange(pageNumber)}
+                            isActive={currentPage === pageNumber}
+                            className={`h-10 min-w-[40px] rounded-lg font-bold transition-all ${
+                              currentPage === pageNumber
+                                ? 'border-blue-400 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                                : 'border-slate-300 bg-white text-slate-700 shadow-sm hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700'
+                            }`}
+                          >
+                            {pageNumber}
+                          </PaginationLink>
+                        )}
+                      </PaginationItem>
+                    ))}
+
+                    <PaginationItem>
+                      <PaginationLink
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        size="default"
+                        className={`h-10 rounded-lg px-4 font-semibold transition-all ${
+                          pagination.hasNext
+                            ? 'border-slate-300 bg-white text-slate-700 shadow-sm hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700'
+                            : 'pointer-events-none border-slate-200 bg-slate-100 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        Next
+                      </PaginationLink>
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              )}
             </div>
           </div>
         </div>
@@ -2686,8 +3013,10 @@ const QATrackerReport = () => {
             </div>
           </div>
         )}
-      </div>
+      </>
+      )}
     </div>
+  </div>
   );
 };
 

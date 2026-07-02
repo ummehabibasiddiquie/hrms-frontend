@@ -16,6 +16,7 @@ import ManagerQCReportsOverview from '../components/dashboard/ManagerQCReportsOv
 import QAAgentDashboard from '../components/QAAgentDashboard/QAAgentDashboard';
 import AssistantManagerDashboard from '../components/dashboard/AssistantManagerDashboard';
 import AdminDashboard from '../components/dashboard/AdminDashboard';
+import TaskEODReport from '../components/dashboard/TaskEODReport';
 import { useAuth } from '../context/AuthContext'; // Updated to use AuthContext
 import { useDeviceInfo } from '../hooks/useDeviceInfo';
 import { useUserDropdowns } from '../hooks/useUserDropdowns';
@@ -89,6 +90,7 @@ const DashboardPage = ({
   const isAssistantManager = roleId === 4 || String(designation).toLowerCase() === 'assistant manager' || String(role).toLowerCase().includes('assistant');
   const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
   const canViewTrackerReport = isQA || isAssistantManager || isProjectManager;
+  const canAccessTaskEODReport = isAdmin || isAssistantManager || isProjectManager;
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') || 'overview';
@@ -102,6 +104,12 @@ const DashboardPage = ({
       setActiveTab(tabParam);
     }
   }, [window.location.search]);
+
+  useEffect(() => {
+    if (activeTab === 'task_eod_report' && !canAccessTaskEODReport) {
+      setActiveTab('overview');
+    }
+  }, [activeTab, canAccessTaskEODReport]);
   const [adminRequests, setAdminRequests] = useState([]);
   const [managedUsers, setManagedUsers] = useState([]);
   const [loadingManagedUsers, setLoadingManagedUsers] = useState(false);
@@ -401,6 +409,13 @@ const DashboardPage = ({
       {activeTab === 'tracker_report' && (isAssistantManager || isQA) && (
         <div className="max-w-7xl mx-auto mt-6">
           <QATrackerReport />
+        </div>
+      )}
+
+      {/* Task EOD Report tab */}
+      {activeTab === 'task_eod_report' && canAccessTaskEODReport && (
+        <div className="max-w-7xl mx-auto mt-6">
+          <TaskEODReport />
         </div>
       )}
 

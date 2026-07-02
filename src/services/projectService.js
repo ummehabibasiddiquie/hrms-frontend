@@ -145,3 +145,22 @@ export const deleteProject = async (projectId) => {
   });
   return res.data;
 };
+
+/**
+ * Fetch Task EOD Report List API
+ */
+export const fetchEODReportList = async (filters = {}) => {
+  const res = await api.post("/tracker/eod-report/list", filters);
+  return res.data;
+};
+
+/**
+ * Generate Task EOD Report API
+ * @param {object} data - { task_id, project_id, date }
+ */
+export const generateEODReport = async (data) => {
+  const res = await api.post("/tracker/eod-report/generate", data, {
+    responseType: 'blob'
+  });
+  return res.data;
+};
