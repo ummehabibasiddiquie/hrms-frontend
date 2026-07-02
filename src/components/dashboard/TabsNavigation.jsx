@@ -1,15 +1,13 @@
 import React from 'react';
 import UserMonthlyReport from './UserMonthlyReport';
 import ProjectMonthlyReport from './ProjectMonthlyReport';
-import TaskEODReport from './TaskEODReport';
 import {
   LayoutGrid,
   Briefcase,
   Users,
   FolderKanban,
   DollarSign,
-  Gem,
-  FileText
+  Gem
 } from 'lucide-react';
 
 const TabsNavigation = ({
@@ -23,11 +21,8 @@ const TabsNavigation = ({
   isSuperAdmin,
   canViewIncentivesTab
 }) => {
-  const canAccessTaskEODReport = isAdmin || isAssistantManager || isProjectManager;
-    
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid, alwaysVisible: true },
-    { id: 'task_eod_report', label: 'Task EOD Report', icon: FileText, visible: canAccessTaskEODReport },
     // Billable Report tab: for agents and for QA, Assistant Manager, Project Manager, Admin, Super Admin
     ...(isAgent
       ? [{ id: 'billable_report', label: 'Billable Report', icon: Briefcase, visible: true }]
@@ -93,13 +88,6 @@ const TabsNavigation = ({
       {activeTab === 'project_monthly_report' && (
         <div className="mt-4">
           <ProjectMonthlyReport />
-        </div>
-	  )}
-
-      {/* Render TaskEODReport below the tab bar when active */}
-      {activeTab === 'task_eod_report' && canAccessTaskEODReport && (
-        <div className="mt-4">
-          <TaskEODReport />
         </div>
 	  )}
 

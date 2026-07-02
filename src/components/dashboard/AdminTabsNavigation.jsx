@@ -1,14 +1,12 @@
 import React from 'react';
 import UserMonthlyReport from './UserMonthlyReport';
 import ProjectMonthlyReport from './ProjectMonthlyReport';
-import TaskEODReport from './TaskEODReport';
 import {
   LayoutGrid,
   Briefcase,
   Users,
   FolderKanban,
-  DollarSign,
-  FileText
+  DollarSign
 } from 'lucide-react';
 
 const AdminTabsNavigation = ({ activeTab, setActiveTab }) => {
@@ -17,7 +15,6 @@ const AdminTabsNavigation = ({ activeTab, setActiveTab }) => {
     { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
     { id: 'user_monthly_report', label: 'User Monthly Report', icon: Users },
     { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
-    { id: 'task_eod_report', label: 'Task EOD Report', icon: FileText },
     { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, disabled: true }
   ];
 
