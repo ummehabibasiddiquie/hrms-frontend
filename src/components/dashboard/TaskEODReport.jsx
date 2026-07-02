@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Calendar, Download, FileText, Loader2 } from 'lucide-react';
-import { fetchEODReportList, generateEODReport } from '../../services/projectService';
+import { Calendar, Download, FileText, Loader2, X } from 'lucide-react';
+import { fetchEODReportList, fetchEODReportTrackers, generateEODReport } from '../../services/projectService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 
@@ -41,6 +41,13 @@ const TaskEODReport = () => {
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(null);
+  const [trackerModal, setTrackerModal] = useState({
+    open: false,
+    loading: false,
+    task: null,
+    data: null,
+    activeTab: 'valid'
+  });
   const loggedInUserId = user?.user_id || user?.id;
 
   const fetchReportList = useCallback(async () => {
@@ -138,6 +145,45 @@ const TaskEODReport = () => {
       toast.error('Failed to generate EOD report');
     } finally {
       setGenerating(null);
+    }
+  };
+
+  const handleViewTrackers = async (task) => {
+    if (!loggedInUserId) {
+      toast.error('User session not found');
+      return;
+    }
+
+    setTrackerModal({
+      open: true,
+      loading: true,
+      task,
+      data: null,
+      activeTab: 'valid'
+    });
+
+    try {
+      const response = await fetchEODReportTrackers({
+        logged_in_user_id: loggedInUserId,
+        task_id: task.task_id,
+        project_id: task.project_id,
+        date: task.report_date
+      });
+
+      if (response?.status === 200) {
+        setTrackerModal(prev => ({
+          ...prev,
+          loading: false,
+          data: response.data
+        }));
+      } else {
+        toast.error(response?.message || 'Failed to fetch tracker list');
+        setTrackerModal(prev => ({ ...prev, loading: false }));
+      }
+    } catch (error) {
+      console.error('Error fetching tracker list:', error);
+      toast.error('Failed to fetch tracker list');
+      setTrackerModal(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -256,9 +302,13 @@ const TaskEODReport = () => {
                     </td>
                     <td className="py-4 px-4 text-slate-800 font-medium">{task.task_name}</td>
                     <td className="py-4 px-4 text-center">
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-200">
+                      <button
+                        type="button"
+                        onClick={() => handleViewTrackers(task)}
+                        className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-200 hover:from-green-200 hover:to-emerald-200 transition-colors"
+                      >
                         {task.tracker_count}
-                      </span>
+                      </button>
                     </td>
                     <td className="py-4 px-4 text-center">
                       <button
@@ -286,6 +336,132 @@ const TaskEODReport = () => {
           </div>
         )}
       </div>
+
+      {trackerModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="flex items-start justify-between p-5 border-b border-slate-200 bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Tracker List</h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  {trackerModal.task?.task_name} • {trackerModal.task?.project_name} • {trackerModal.task?.date}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTrackerModal({ open: false, loading: false, task: null, data: null, activeTab: 'valid' })}
+                className="p-2 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-700" />
+              </button>
+            </div>
+
+            <div className="p-5 flex-1 overflow-y-auto">
+              {trackerModal.loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
+                  <span className="ml-3 text-slate-600">Loading trackers...</span>
+                </div>
+              ) : !trackerModal.data ? (
+                <div className="text-center py-12 text-slate-600">No data</div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+                    <div className="text-sm text-slate-600 font-medium">
+                      Total: {trackerModal.data.total_all} • Valid: {trackerModal.data.total_valid} • Excluded: {trackerModal.data.total_invalid}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTrackerModal(prev => ({ ...prev, activeTab: 'valid' }))}
+                        className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${
+                          trackerModal.activeTab === 'valid'
+                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Valid ({trackerModal.data.total_valid})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTrackerModal(prev => ({ ...prev, activeTab: 'invalid' }))}
+                        className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${
+                          trackerModal.activeTab === 'invalid'
+                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        Excluded ({trackerModal.data.total_invalid})
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700">
+                          <th className="text-left py-3 px-4 font-bold uppercase tracking-wide">Tracker ID</th>
+                          <th className="text-left py-3 px-4 font-bold uppercase tracking-wide">User</th>
+                          <th className="text-left py-3 px-4 font-bold uppercase tracking-wide">Work Date</th>
+                          <th className="text-left py-3 px-4 font-bold uppercase tracking-wide">Shift</th>
+                          <th className="text-right py-3 px-4 font-bold uppercase tracking-wide">Production</th>
+                          <th className="text-left py-3 px-4 font-bold uppercase tracking-wide">File</th>
+                          {trackerModal.activeTab === 'invalid' && (
+                            <th className="text-left py-3 px-4 font-bold uppercase tracking-wide">Reason</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {(trackerModal.activeTab === 'valid'
+                          ? trackerModal.data.valid_trackers
+                          : trackerModal.data.invalid_trackers
+                        ).map((t) => (
+                          <tr key={t.tracker_id} className="hover:bg-blue-50 transition-colors">
+                            <td className="py-3 px-4 font-semibold text-slate-800">{t.tracker_id}</td>
+                            <td className="py-3 px-4 text-slate-700">{t.user_name}</td>
+                            <td className="py-3 px-4 text-slate-700">{t.date_time_display || t.date_time || '-'}</td>
+                            <td className="py-3 px-4 text-slate-700">{t.shift || '-'}</td>
+                            <td className="py-3 px-4 text-right text-slate-700">{t.production ?? '-'}</td>
+                            <td className="py-3 px-4">
+                              {t.tracker_file ? (
+                                <a
+                                  href={t.tracker_file}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-blue-700 font-semibold hover:underline"
+                                >
+                                  Open
+                                </a>
+                              ) : (
+                                <span className="text-slate-400">-</span>
+                              )}
+                            </td>
+                            {trackerModal.activeTab === 'invalid' && (
+                              <td className="py-3 px-4 text-slate-700">
+                                {(t.reasons || []).join(', ') || '-'}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setTrackerModal({ open: false, loading: false, task: null, data: null, activeTab: 'valid' })}
+                className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Info Box */}
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">

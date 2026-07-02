@@ -154,6 +154,11 @@ export const fetchEODReportList = async (filters = {}) => {
   return res.data;
 };
 
+export const fetchEODReportTrackers = async (filters = {}) => {
+  const res = await api.post("/tracker/eod-report/trackers", filters);
+  return res.data;
+};
+
 /**
  * Generate Task EOD Report API
  * @param {object} data - { task_id, project_id, date }
