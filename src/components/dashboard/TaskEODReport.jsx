@@ -4,6 +4,27 @@ import { fetchEODReportList, fetchEODReportTrackers, generateEODReport } from '.
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 
+const REASON_LABELS = {
+  inactive: 'Inactive',
+  actual_target_missing: 'Actual target missing',
+  tenure_target_missing: 'Tenure target missing',
+  tenure_target_zero: 'Tenure target is 0',
+  tracker_file_missing: 'Tracker file missing',
+  file_not_found: 'File not found on Cloudinary',
+  file_unreachable: 'File unreachable on Cloudinary'
+};
+
+const formatReasons = (reasons = []) => {
+  if (!Array.isArray(reasons) || reasons.length === 0) {
+    return '-';
+  }
+
+  return reasons
+    .filter(Boolean)
+    .map((reason) => REASON_LABELS[reason] || String(reason).replace(/_/g, ' '))
+    .join(', ') || '-';
+};
+
 const formatLocalDate = (date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -128,6 +149,30 @@ const TaskEODReport = () => {
 
       // Handle file download
       if (response && response instanceof Blob) {
+        // If backend returned a JSON error blob (common when responseType is 'blob'),
+        // parse it and show the message instead of downloading a broken file.
+        const isJsonBlob = response.type && response.type.includes('application/json');
+        if (isJsonBlob) {
+          const text = await response.text();
+          try {
+            const parsed = JSON.parse(text);
+            const failedFiles = parsed?.data?.failed_files || [];
+            if (Array.isArray(failedFiles) && failedFiles.length > 0) {
+              const preview = failedFiles
+                .slice(0, 3)
+                .map((f) => `#${f?.tracker_id} (${f?.user_name || 'Unknown'})`)
+                .join(', ');
+              const more = failedFiles.length > 3 ? ` +${failedFiles.length - 3} more` : '';
+              toast.error(`${parsed?.message || 'Failed to generate EOD report'} Missing/unreadable: ${preview}${more}.`);
+            } else {
+              toast.error(parsed?.message || 'Failed to generate EOD report');
+            }
+          } catch (e) {
+            toast.error('Failed to generate EOD report');
+          }
+          return;
+        }
+
         const url = window.URL.createObjectURL(response);
         const a = document.createElement('a');
         a.href = url;
@@ -142,7 +187,29 @@ const TaskEODReport = () => {
       }
     } catch (error) {
       console.error('Error generating EOD report:', error);
-      toast.error('Failed to generate EOD report');
+      // When responseType is blob, error body may still be a JSON blob
+      const errBlob = error?.response?.data;
+      if (errBlob instanceof Blob && errBlob.type && errBlob.type.includes('application/json')) {
+        try {
+          const text = await errBlob.text();
+          const parsed = JSON.parse(text);
+          const failedFiles = parsed?.data?.failed_files || [];
+          if (Array.isArray(failedFiles) && failedFiles.length > 0) {
+            const preview = failedFiles
+              .slice(0, 3)
+              .map((f) => `#${f?.tracker_id} (${f?.user_name || 'Unknown'})`)
+              .join(', ');
+            const more = failedFiles.length > 3 ? ` +${failedFiles.length - 3} more` : '';
+            toast.error(`${parsed?.message || 'Failed to generate EOD report'} Missing/unreadable: ${preview}${more}.`);
+          } else {
+            toast.error(parsed?.message || 'Failed to generate EOD report');
+          }
+          return;
+        } catch (e) {
+          // fall through to generic
+        }
+      }
+      toast.error(error?.response?.data?.message || 'Failed to generate EOD report');
     } finally {
       setGenerating(null);
     }
@@ -438,7 +505,7 @@ const TaskEODReport = () => {
                             </td>
                             {trackerModal.activeTab === 'invalid' && (
                               <td className="py-3 px-4 text-slate-700">
-                                {(t.reasons || []).join(', ') || '-'}
+                                {formatReasons(t.reasons)}
                               </td>
                             )}
                           </tr>
