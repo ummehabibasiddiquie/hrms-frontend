@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import {
   ArrowLeft,
@@ -785,22 +786,31 @@ const QCFormPage = () => {
 
   // Handle file download
   const handleDownload = () => {
-    if (trackerData?.tracker_id) {
-      const backendUrl = config.apiNodeBaseUrl || 'http://localhost:8000/api/v1';
-      // Strip /v1 if present to form route, though typically routes start without /v1 here if backend is set up directly. 
-      // Checking the qcService.js, it uses nodeApi.post("/qc-records/generate-sample").
-      // nodeApi probably configures baseURL as VITE_API_NODE_BASE_URL.
-      // So this URL is correct:
-      const params = new URLSearchParams({
-        logged_in_user_id: String(user?.user_id || ''),
-        sampling_percentage: String(samplingPercentage)
-      });
-      const fileUrl = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?${params.toString()}`;
-      // Open the streaming API endpoint directly to trigger browser download
-      window.open(fileUrl, '_blank');
-      toast.success(`Downloading ${samplingPercentage}% sample file...`);
-    } else {
+    if (!trackerData?.tracker_id) {
       toast.error('No file available for download');
+      return;
+    }
+
+    if (!Array.isArray(formData) || formData.length === 0) {
+      toast.error('No generated sample data available for download');
+      return;
+    }
+
+    try {
+      const worksheet = XLSX.utils.json_to_sheet(formData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, `QC Sample ${samplingPercentage}%`);
+
+      const taskName = String(trackerData?.task_name || 'QC_Sample')
+        .replace(/[\\/:*?"<>|]+/g, '_')
+        .replace(/\s+/g, '_');
+      const fileName = `${taskName}_${samplingPercentage}_percent_sample.xlsx`;
+
+      XLSX.writeFile(workbook, fileName);
+      toast.success(`Downloading ${samplingPercentage}% sample file...`);
+    } catch (error) {
+      console.error('[QCFormPage] Error downloading sample file:', error);
+      toast.error('Failed to download sample file');
     }
   };
 
