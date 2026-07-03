@@ -75,6 +75,9 @@ const QCFormPage = () => {
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
   const [sampleSize, setSampleSize] = useState(0); // Sample size from API
   const [sampleFilePath, setSampleFilePath] = useState(''); // Sample file path from API
+  const [samplingPercentage, setSamplingPercentage] = useState(
+    Number(trackerData?.qc_percentage) || 10
+  );
   
   // Use ref as backup for file path to avoid React state timing issues
   const sampleFilePathRef = useRef('');
@@ -100,7 +103,6 @@ const QCFormPage = () => {
   // Calculate error metrics
   const errorMetrics = useMemo(() => {
     const recordCount = formRows.length;
-    const samplingPercentage = trackerData?.qc_percentage || 10;
     const sampleCount = Math.ceil(recordCount * (samplingPercentage / 100));
     
     // Count total errors marked
@@ -141,7 +143,7 @@ const QCFormPage = () => {
       errorList,
       status
     };
-  }, [formRows, afdData, qcScore, trackerData?.qc_percentage]);
+  }, [formRows, afdData, qcScore, samplingPercentage]);
 
   // Lazy loading - calculate visible rows and pagination
   const visibleFormRows = formRows.slice(0, displayedRows);
@@ -210,7 +212,7 @@ const QCFormPage = () => {
           const sampleResponse = await generateQCSample(
             trackerData.tracker_id,
             user.user_id,
-            trackerData.qc_percentage || 10
+            Number(trackerData.qc_percentage) || undefined
           );
           
           // Log full response structure to debug - IMMEDIATELY after receiving
@@ -239,6 +241,7 @@ const QCFormPage = () => {
             // Extract total_records, sample_size, and file_path from API response
             const apiTotalRecords = sampleResponse.data.total_records || 0;
             const apiSampleSize = sampleResponse.data.sample_size || 0;
+            const apiSamplingPercentage = Number(sampleResponse.data.sampling_percentage);
             
             // Try multiple possible locations for the file path
             let apiFilePath = sampleResponse.data.file_path 
@@ -255,12 +258,17 @@ const QCFormPage = () => {
             // If no file path from API, construct download URL as fallback
             if (!apiFilePath && trackerData?.tracker_id) {
               const backendUrl = config.apiNodeBaseUrl || 'http://localhost:8000/api/v1';
-              apiFilePath = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?logged_in_user_id=${user?.user_id}`;
+              const params = new URLSearchParams({
+                logged_in_user_id: String(user?.user_id || ''),
+                sampling_percentage: String(apiSamplingPercentage || Number(trackerData?.qc_percentage) || 10)
+              });
+              apiFilePath = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?${params.toString()}`;
               console.log('[QCFormPage] No file path in API response, using download URL as fallback:', apiFilePath);
             }
             
             setTotalRecords(apiTotalRecords);
             setSampleSize(apiSampleSize);
+            setSamplingPercentage(apiSamplingPercentage || Number(trackerData?.qc_percentage) || 10);
             setSampleFilePath(apiFilePath);
             sampleFilePathRef.current = apiFilePath; // Also store in ref
             
@@ -673,7 +681,7 @@ const QCFormPage = () => {
         qc_file_records: formData, 
         error_list: errorList, 
         comments: comments || '',
-        sampling_percentage: trackerData.qc_percentage || 10
+        sampling_percentage: samplingPercentage
       };
 
       console.log('[QCFormPage] Tracker Data:', trackerData);
@@ -783,10 +791,14 @@ const QCFormPage = () => {
       // Checking the qcService.js, it uses nodeApi.post("/qc-records/generate-sample").
       // nodeApi probably configures baseURL as VITE_API_NODE_BASE_URL.
       // So this URL is correct:
-      const fileUrl = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?logged_in_user_id=${user?.user_id}`;
+      const params = new URLSearchParams({
+        logged_in_user_id: String(user?.user_id || ''),
+        sampling_percentage: String(samplingPercentage)
+      });
+      const fileUrl = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?${params.toString()}`;
       // Open the streaming API endpoint directly to trigger browser download
       window.open(fileUrl, '_blank');
-      toast.success(`Downloading ${trackerData.qc_percentage || 10}% sample file...`);
+      toast.success(`Downloading ${samplingPercentage}% sample file...`);
     } else {
       toast.error('No file available for download');
     }
@@ -1366,7 +1378,7 @@ const QCFormPage = () => {
               <div>
                 <p className="text-sm text-slate-600 font-medium">Data Generated for QC</p>
                 <p className="text-2xl font-bold text-slate-800">
-                  {sampleSize || errorMetrics.tenPercentCount}
+                  {sampleSize || errorMetrics.sampleCount}
                 </p>
               </div>
             </div>

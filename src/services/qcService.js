@@ -81,13 +81,13 @@ export const fetchQCAFDList = async () => {
  * Generate sample data from tracker file
  * @param {number} tracker_id - Tracker ID
  * @param {number} logged_in_user_id - Logged in user ID
- * @param {number} sampling_percentage - Sampling percentage (optional, defaults to 10 if not provided)
+ * @param {number} sampling_percentage - Sampling percentage (optional; backend resolves task-specific value if not provided)
  * @returns {Promise} Sample data response with file URL and records
  */
 export const generateQCSample = async (
   tracker_id,
   logged_in_user_id,
-  sampling_percentage = 10,
+  sampling_percentage,
 ) => {
   try {
     log(
