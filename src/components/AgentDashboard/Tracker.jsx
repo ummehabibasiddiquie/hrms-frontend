@@ -2,6 +2,9 @@
 function filterApiErrorMessage(msg) {
   if (!msg) return "Something went wrong. Please try again.";
   const lower = msg.toLowerCase();
+  if (lower.includes("file upload failed") || lower.includes("tracker has not been submitted")) {
+    return "File upload failed. Your tracker has not been submitted. Please upload the file again and retry.";
+  }
   if (lower.includes("file") && lower.includes("type")) return "Uploaded file type is not allowed. Only Excel files are accepted.";
   if (lower.includes("file") && lower.includes("size")) return "Uploaded file is too large. Max allowed size is 10MB.";
   if (lower.includes("required")) return "Some required fields are missing. Please check your input.";
@@ -619,6 +622,8 @@ const Tracker = ({ embedded = false }) => {
       
       try {
         log('[Tracker] Submitting tracker with FormData');
+        // Use a single toast id so we don't show "success" and "failed" together
+        const fileStageToastId = 'tracker_file_stage';
         
         // If file is uploaded, run process-excel first to create hashes
         if (file) {
@@ -658,17 +663,17 @@ const Tracker = ({ embedded = false }) => {
             
             if (!isSuccess) {
               logError('[Tracker] File processing failed:', processRes.data);
-              toast.error("File processing failed. Please check your file and try again.");
+              toast.error("File processing failed. Please check your file and try again.", { id: fileStageToastId });
               setSubmitting(false);
               return;
             }
             
             log('[Tracker] File processed successfully, proceeding to add tracker');
-            toast.success("File processed successfully!");
+            toast.success("File processed successfully!", { id: fileStageToastId });
           } catch (processError) {
             logError('[Tracker] Error in process-excel:', processError);
             const errorMsg = processError?.response?.data?.message || processError?.message || "File processing failed.";
-            toast.error(filterApiErrorMessage(errorMsg));
+            toast.error(filterApiErrorMessage(errorMsg), { id: fileStageToastId });
             setSubmitting(false);
             return;
           }
@@ -683,6 +688,8 @@ const Tracker = ({ embedded = false }) => {
         
         if (res.data?.status === 201 || res.status === 201 || res.status === 200) {
           log('[Tracker] Tracker added successfully');
+          // Clear any staged file toast before showing final success
+          toast.dismiss(fileStageToastId);
           toast.success("Tracker added successfully!");
           resetModalForm();
           setShowModal(false);
@@ -694,7 +701,8 @@ const Tracker = ({ embedded = false }) => {
       } catch (err) {
         logError('[Tracker] Error submitting tracker:', err);
         const backendMsg = err?.response?.data?.message || err?.message || "Failed to add tracker.";
-        toast.error(filterApiErrorMessage(backendMsg));
+        // Replace any earlier "file processed successfully" toast with the actual failure reason
+        toast.error(filterApiErrorMessage(backendMsg), { id: 'tracker_file_stage' });
       } finally {
         setSubmitting(false);
       }
