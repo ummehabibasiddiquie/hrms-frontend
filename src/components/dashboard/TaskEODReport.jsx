@@ -46,6 +46,36 @@ const formatDisplayDate = (dateString) => {
   return `${month}-${day}-${year}`;
 };
 
+const formatDisplayDateWithDay = (dateString) => {
+  if (!dateString) {
+    return '';
+  }
+
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) {
+    return dateString;
+  }
+
+  const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+  const [year, month, day] = String(dateString).split('-');
+  if (!year || !month || !day) {
+    return dateString;
+  }
+
+  const dateStr = `${month}-${day}-${year}`;
+  return `${dateStr}\n${dayName}`;
+};
+
+// Helper function to get day color class (Saturday/Sunday in red)
+const getDayColorClass = (dateString) => {
+  if (!dateString) return '';
+  const dayName = dateString.split('\n')[1]?.toLowerCase();
+  if (dayName === 'saturday' || dayName === 'sunday') {
+    return 'text-red-600 font-bold';
+  }
+  return '';
+};
+
 const getDefaultDateRange = () => {
   const today = new Date();
   const toDate = formatLocalDate(today);
@@ -359,8 +389,10 @@ const TaskEODReport = () => {
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {reportData.tasks.map((task, index) => (
-                  <tr key={`${task.task_id}-${task.project_id}-${index}`} className="hover:bg-blue-50 transition-colors">
-                    <td className="py-4 px-4 text-slate-800 font-semibold">{task.date}</td>
+                  <tr key={`${task.task_id}-${task.project_id}-${index}`} className={`${getDayColorClass(formatDisplayDateWithDay(task.date)) ? 'bg-orange-50 border-l-4 border-l-orange-800' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
+                    <td className="py-4 px-4 text-slate-800 font-semibold whitespace-pre-line">
+                      <div className={getDayColorClass(formatDisplayDateWithDay(task.date))}>{formatDisplayDateWithDay(task.date)}</div>
+                    </td>
                     <td className="py-4 px-4 text-slate-600">
                       <div>
                         <span className="font-medium text-slate-800">{task.project_name}</span>
@@ -410,8 +442,8 @@ const TaskEODReport = () => {
             <div className="flex items-start justify-between p-5 border-b border-slate-200 bg-slate-50">
               <div>
                 <h3 className="text-lg font-bold text-slate-800">Tracker List</h3>
-                <p className="text-sm text-slate-600 mt-1">
-                  {trackerModal.task?.task_name} • {trackerModal.task?.project_name} • {trackerModal.task?.date}
+                <p className="text-sm text-slate-600 mt-1 whitespace-pre-line">
+                  {trackerModal.task?.task_name} • {trackerModal.task?.project_name} • {formatDisplayDateWithDay(trackerModal.task?.date)}
                 </p>
               </div>
               <button

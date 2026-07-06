@@ -55,7 +55,7 @@ const AddUserFormModal = ({
           // Agent (role_id = 6): Show tenure field
           if (roleId === 6) {
                return {
-                    projectManager: { visible: true, required: true },
+                    projectManager: { visible: true, required: false },
                     assistantManager: { visible: true, required: true },
                     qualityAnalyst: { visible: true, required: true },
                     tenure: { visible: true, required: true },
@@ -65,7 +65,7 @@ const AddUserFormModal = ({
           // Default: hide tenure field (Super Admin, Admin)
           if (!roleId || roleId === 1 || roleId === 2) {
                return {
-                    projectManager: { visible: true, required: true },
+                    projectManager: { visible: true, required: false },
                     assistantManager: { visible: true, required: true },
                     qualityAnalyst: { visible: true, required: true },
                     tenure: { visible: false, required: false },
@@ -75,7 +75,7 @@ const AddUserFormModal = ({
           // QA Agent (role_id = 5): Hide qualityAnalyst and tenure fields
           if (roleId === 5) {
                return {
-                    projectManager: { visible: true, required: true },
+                    projectManager: { visible: true, required: false },
                     assistantManager: { visible: true, required: true },
                     qualityAnalyst: { visible: false, required: false },
                     tenure: { visible: false, required: false },
@@ -85,7 +85,7 @@ const AddUserFormModal = ({
           // Assistant Manager (role_id = 4): Hide assistantManager, qualityAnalyst and tenure fields
           if (roleId === 4) {
                return {
-                    projectManager: { visible: true, required: true },
+                    projectManager: { visible: true, required: false },
                     assistantManager: { visible: false, required: false },
                     qualityAnalyst: { visible: false, required: false },
                     tenure: { visible: false, required: false },
@@ -104,7 +104,7 @@ const AddUserFormModal = ({
           
           // Fallback: hide tenure field
           return {
-               projectManager: { visible: true, required: true },
+               projectManager: { visible: true, required: false },
                assistantManager: { visible: true, required: true },
                qualityAnalyst: { visible: true, required: true },
                tenure: { visible: false, required: false },

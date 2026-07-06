@@ -372,8 +372,6 @@ const EditProjectModal = ({
 								]}
 								icon={User}
 								placeholder="Select Project Manager"
-								error={!!formErrors.projectManagerId}
-								errorMessage={formErrors.projectManagerId}
 							/>
 						</div>
 						{/* Assistant Project Manager - Multi Select */}

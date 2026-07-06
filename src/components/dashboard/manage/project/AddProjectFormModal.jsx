@@ -387,13 +387,10 @@ const AddProjectFormModal = ({
                                         value={newProject.projectManagerId ? String(newProject.projectManagerId) : ""}
                                         onChange={(val) => {
                                              onFieldChange("projectManagerId", val);
-                                             clearFieldError?.("projectManagerId");
                                         }}
                                         options={projectManagerOptions}
                                         icon={User}
                                         placeholder="Select Project Manager"
-                                        error={!!formErrors.projectManagerId}
-                                        errorMessage={formErrors.projectManagerId}
                                    />
                               </div>
 
