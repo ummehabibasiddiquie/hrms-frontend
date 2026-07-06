@@ -450,6 +450,101 @@ const ManagerQCReportsOverview = () => {
     }
   };
 
+  // Export Consolidated Report
+  const handleConsolidatedExport = async () => {
+    try {
+      if (!user?.user_id) {
+        toast.error('User not authenticated');
+        return;
+      }
+
+      const loadingToast = toast.loading('Generating consolidated report...');
+
+      const payload = {
+        logged_in_user_id: user.user_id
+      };
+
+      if (startDate && endDate) {
+        payload.start_date = startDate;
+        payload.end_date = endDate;
+      }
+
+      const response = await api.post('qc_history_user/consolidated_qc_report', payload);
+
+      if (response.data?.status === 200 && response.data?.data?.records) {
+        const records = response.data.data.records;
+        
+        if (records.length === 0) {
+          toast.dismiss(loadingToast);
+          toast.error('No data found for the selected criteria');
+          return;
+        }
+
+        const exportData = records.map(record => {
+          const evalDate = record.evaluation_date ? 
+            new Date(record.evaluation_date).toISOString().split('T')[0] : 'N/A';
+          const workDate = record.work_date ? 
+            new Date(record.work_date).toISOString().split('T')[0] : 'N/A';
+          const errorTypes = record.error_type && record.error_type.length > 0 
+            ? record.error_type.join(', ') : '-';
+
+          return {
+            'Evaluation Date': evalDate,
+            'Work Date': workDate,
+            'Team Lead': record.team_lead || 'N/A',
+            'Agent Name': record.agent_name || 'N/A',
+            'Project Name': record.project_name || 'N/A',
+            'Task Name': record.task_name || 'N/A',
+            'Records': record.records || 0,
+            'QC Records': record.qc_records || 0,
+            'No. of Errors': record.no_of_errors || 0,
+            'Avg QC Score': record.final_qc_score ? `${record.final_qc_score}%` : '0%',
+            'Error Types': errorTypes,
+            'QA Name': record.qa_name || 'N/A'
+          };
+        });
+
+        const totalRecords = records.reduce((sum, r) => sum + (r.records || 0), 0);
+        const totalQCRecords = records.reduce((sum, r) => sum + (r.qc_records || 0), 0);
+        const totalErrors = records.reduce((sum, r) => sum + (r.no_of_errors || 0), 0);
+        const avgScore = records.length > 0 
+          ? (records.reduce((sum, r) => sum + (r.final_qc_score || 0), 0) / records.length).toFixed(2)
+          : '0.00';
+
+        exportData.push({
+          'Evaluation Date': 'SUMMARY',
+          'Work Date': '',
+          'Team Lead': '',
+          'Agent Name': `Total Records: ${totalRecords}`,
+          'Project Name': `Total QC Records: ${totalQCRecords}`,
+          'Task Name': `Total Errors: ${totalErrors}`,
+          'Records': '',
+          'QC Records': '',
+          'No. of Errors': '',
+          'Avg QC Score': `${avgScore}%`,
+          'Error Types': '',
+          'QA Name': ''
+        });
+
+        const dateRangeStr = (startDate && endDate) 
+          ? `_${startDate}_to_${endDate}` 
+          : '';
+        const filename = `Consolidated_QC_Report${dateRangeStr}_${new Date().toISOString().split('T')[0]}.csv`;
+
+        exportToCSV(exportData, filename);
+        
+        toast.dismiss(loadingToast);
+        toast.success(`Exported ${records.length} consolidated records!`);
+      } else {
+        toast.dismiss(loadingToast);
+        toast.error('Failed to fetch consolidated data');
+      }
+    } catch (err) {
+      console.error('Consolidated export error:', err);
+      toast.error('Failed to generate consolidated report');
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -494,6 +589,13 @@ const ManagerQCReportsOverview = () => {
             >
               <Download className="w-4 h-4" />
               Export History
+            </button>
+            <button
+              onClick={handleConsolidatedExport}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md"
+            >
+              <Download className="w-4 h-4" />
+              Consolidated Export
             </button>
             <button
               onClick={handleReset}
