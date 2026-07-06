@@ -804,7 +804,11 @@ const QCFormPage = () => {
       const taskName = String(trackerData?.task_name || 'QC_Sample')
         .replace(/[\\/:*?"<>|]+/g, '_')
         .replace(/\s+/g, '_');
-      const fileName = `${taskName}_${samplingPercentage}_percent_sample.xlsx`;
+      const userName = String(trackerData?.user_name || 'User')
+        .replace(/[\\/:*?"<>|]+/g, '_')
+        .replace(/\s+/g, '_');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const fileName = `${userName}_${taskName}_${timestamp}_${samplingPercentage}_percent_sample.xlsx`;
 
       XLSX.writeFile(workbook, fileName);
       toast.success(`Downloading ${samplingPercentage}% sample file...`);
