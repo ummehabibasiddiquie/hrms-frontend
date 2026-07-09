@@ -807,7 +807,33 @@ const QCFormPage = () => {
       const userName = String(trackerData?.user_name || 'User')
         .replace(/[\\/:*?"<>|]+/g, '_')
         .replace(/\s+/g, '_');
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      
+      // Use tracker submission time instead of current time
+      const trackerDateTime = trackerData?.date_time || trackerData?.date_of_file_submission || trackerData?.tracker_date;
+      let timestamp;
+      if (trackerDateTime) {
+        const date = new Date(trackerDateTime);
+        // Format to 12-hour format with AM/PM using UTC to avoid timezone conversion
+        const hours = date.getUTCHours();
+        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const hours12 = hours % 12 || 12;
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        timestamp = `${year}-${month}-${day}-${hours12}-${minutes}-${ampm}`;
+      } else {
+        const date = new Date();
+        const hours = date.getUTCHours();
+        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const hours12 = hours % 12 || 12;
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        timestamp = `${year}-${month}-${day}-${hours12}-${minutes}-${ampm}`;
+      }
+      
       const fileName = `${userName}_${taskName}_${timestamp}_${samplingPercentage}_percent_sample.xlsx`;
 
       XLSX.writeFile(workbook, fileName);
