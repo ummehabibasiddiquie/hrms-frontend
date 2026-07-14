@@ -357,8 +357,18 @@ const RosterManagement = () => {
     try {
       setActionLoading(key);
       await fn();
-      await Promise.all([loadRosters(), loadPendingRequests(), loadMonthSummary()]);
-      await checkCanGenerateNextMonth();
+      try {
+        await Promise.all([
+          loadRosters({ silent: true }),
+          loadPendingRequests(),
+          loadMonthSummary(),
+        ]);
+        await checkCanGenerateNextMonth();
+      } catch (refreshErr) {
+        toast.error(
+          `Action completed, but refresh timed out. Reload the page if data looks stale.`
+        );
+      }
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
     } finally {

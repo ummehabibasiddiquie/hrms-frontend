@@ -1,5 +1,7 @@
 import api from "./api";
 
+const ROSTER_TIMEOUT_MS = 120000;
+
 function getLoggedInUserId() {
   try {
     const user = JSON.parse(sessionStorage.getItem("user") || "{}");
@@ -24,102 +26,87 @@ function unwrap(response) {
   return body;
 }
 
-export async function canGenerateRoster(payload = {}) {
-  const res = await api.post("/roster/can_generate", withUser(payload));
+async function rosterPost(url, payload = {}) {
+  const res = await api.post(url, withUser(payload), { timeout: ROSTER_TIMEOUT_MS });
   return unwrap(res);
+}
+
+export async function canGenerateRoster(payload = {}) {
+  return rosterPost("/roster/can_generate", payload);
 }
 
 export async function generateRoster(payload = {}) {
-  const res = await api.post("/roster/generate", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/generate", payload);
 }
 
 export async function generateEmployeeRoster(payload) {
-  const res = await api.post("/roster/generate_employee", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/generate_employee", payload);
 }
 
 export async function resetRegenerateRoster(payload) {
-  const res = await api.post("/roster/reset_regenerate", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/reset_regenerate", payload);
 }
 
 export async function listRosters(payload) {
-  const res = await api.post("/roster/list", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/list", payload);
 }
 
 export async function listRosterEmployees(payload) {
-  const res = await api.post("/roster/list_employees", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/list_employees", payload);
 }
 
 export async function weekoffSwapPreview(payload) {
-  const res = await api.post("/roster/weekoff/swap_preview", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/weekoff/swap_preview", payload);
 }
 
 export async function createChangeRequest(payload) {
-  const res = await api.post("/roster/change_request/create", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/change_request/create", payload);
 }
 
 export async function submitRosterBatch(payload) {
-  const res = await api.post("/roster/submit", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/submit", payload);
 }
 
 export async function withdrawRosterSubmission(payload) {
-  const res = await api.post("/roster/withdraw", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/withdraw", payload);
 }
 
 export async function approveChangeRequest(payload) {
-  const res = await api.post("/roster/requests/approve", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/requests/approve", payload);
 }
 
 export async function rejectChangeRequest(payload) {
-  const res = await api.post("/roster/requests/reject", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/requests/reject", payload);
 }
 
 export async function listChangeRequests(payload = {}) {
-  const res = await api.post("/roster/requests/list", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/requests/list", payload);
 }
 
 export async function listRosterLeaves(payload) {
-  const res = await api.post("/roster/leave/list", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/leave/list", payload);
 }
 
 export async function lockRosterMonth(payload) {
-  const res = await api.post("/roster/lock", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/lock", payload);
 }
 
 export async function unlockRosterMonth(payload) {
-  const res = await api.post("/roster/unlock", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/unlock", payload);
 }
 
 export async function listRosterVersions(payload) {
-  const res = await api.post("/roster/versions/list", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/versions/list", payload);
 }
 
 export async function getRosterVersionDetail(payload) {
-  const res = await api.post("/roster/versions/detail", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/versions/detail", payload);
 }
 
 export async function listRosterAudit(payload = {}) {
-  const res = await api.post("/roster/audit/list", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/audit/list", payload);
 }
 
 export async function recalculateRosterPreview(payload) {
-  const res = await api.post("/roster/recalculate", withUser(payload));
-  return unwrap(res);
+  return rosterPost("/roster/recalculate", payload);
 }
