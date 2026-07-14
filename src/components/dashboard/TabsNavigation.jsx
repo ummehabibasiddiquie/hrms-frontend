@@ -7,7 +7,8 @@ import {
   Users,
   FolderKanban,
   DollarSign,
-  Gem
+  Gem,
+  CalendarDays
 } from 'lucide-react';
 
 const TabsNavigation = ({
@@ -37,6 +38,7 @@ const TabsNavigation = ({
       { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, visible: canViewIncentivesTab && !isQA, disabled: true },
       { id: 'mgmt_incentives', label: 'Management Incentives', icon: Gem, visible: !isAgent && !isQA, disabled: true },
     ]),
+    ...((isAgent || isQA) ? [{ id: 'my_roster', label: 'My Roster', icon: CalendarDays, visible: true }] : []),
   ];
 
   // Ensure 'overview' tab is always visible, regardless of any other logic

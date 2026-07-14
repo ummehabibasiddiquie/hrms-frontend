@@ -127,6 +127,7 @@ const EditUserFormModal = ({
             qualityAnalysts: qaIds, // Array for multi-select
             team: String(teamValue || ''), // Convert to string for select element
             tenure: user.user_tenure || user.tenure || "",
+            joining_date: user.joining_date ? String(user.joining_date).slice(0, 10) : "",
             address: user.user_address || user.address || "",
           };
           
@@ -187,6 +188,7 @@ const EditUserFormModal = ({
         phone: 'user_number',
         password: 'user_password',
         tenure: 'user_tenure',
+        joining_date: 'joining_date',
         address: 'user_address',
         role: 'role_id',
         designation: 'designation_id',

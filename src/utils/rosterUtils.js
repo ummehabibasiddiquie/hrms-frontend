@@ -1,0 +1,521 @@
+const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+export function getCurrentMonthYear() {
+  const date = new Date();
+  return `${MONTH_NAMES[date.getMonth()]}${date.getFullYear()}`;
+}
+
+export function getNextMonthYear() {
+  const date = new Date();
+  date.setMonth(date.getMonth() + 1);
+  return `${MONTH_NAMES[date.getMonth()]}${date.getFullYear()}`;
+}
+
+export function parseMonthYear(monthYear) {
+  if (!monthYear || monthYear.length < 5) return null;
+  const year = parseInt(monthYear.slice(-4), 10);
+  const monthStr = monthYear.slice(0, -4).toUpperCase();
+  const month = MONTH_NAMES.indexOf(monthStr);
+  if (month < 0 || Number.isNaN(year)) return null;
+  return { year, month, monthYear };
+}
+
+export function monthYearToDate(monthYear) {
+  const parsed = parseMonthYear(monthYear);
+  if (!parsed) return new Date();
+  return new Date(parsed.year, parsed.month, 1);
+}
+
+export function formatMonthYearLabel(monthYear) {
+  const parsed = parseMonthYear(monthYear);
+  if (!parsed) return monthYear;
+  const monthLabel = new Date(parsed.year, parsed.month, 1).toLocaleString("en-US", { month: "long" });
+  return `${monthLabel} ${parsed.year}`;
+}
+
+export function formatLocalDateString(year, monthIndex, day) {
+  const m = String(monthIndex + 1).padStart(2, "0");
+  const d = String(day).padStart(2, "0");
+  return `${year}-${m}-${d}`;
+}
+
+/** Normalize API / Date values to YYYY-MM-DD without UTC shift. */
+export function toDateOnlyString(value) {
+  if (!value) return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return formatLocalDateString(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  const str = String(value);
+  return str.length >= 10 ? str.slice(0, 10) : str;
+}
+
+export function getCalendarDays(monthYear) {
+  const parsed = parseMonthYear(monthYear);
+  if (!parsed) return [];
+  const { year, month } = parsed;
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startPad = firstDay.getDay();
+  const days = [];
+
+  for (let i = 0; i < startPad; i += 1) {
+    days.push({ date: null, pad: true });
+  }
+  for (let d = 1; d <= lastDay.getDate(); d += 1) {
+    const date = new Date(year, month, d);
+    days.push({
+      date,
+      dateStr: formatLocalDateString(year, month, d),
+      pad: false,
+    });
+  }
+  return days;
+}
+
+export function getDayDisplayInfo(day, options = null) {
+  const pending = options?.pending;
+  const leaveRemovalPending = options?.leaveRemovalPending;
+
+  let effectiveDay = day;
+  if (pending?.preview) {
+    const preview = { ...pending.preview };
+    const leaveType = preview._pendingLeaveType;
+    delete preview._pendingLeaveType;
+    effectiveDay = day
+      ? { ...day, ...preview }
+      : { roster_date: options?.dateStr, ...preview };
+    if (leaveType && effectiveDay.day_type === "Leave") {
+      effectiveDay.leave_type = leaveType;
+    }
+  }
+
+  if (!effectiveDay) {
+    return {
+      primaryLabel: "",
+      badges: [],
+      cellClass: "bg-slate-50",
+      isEditable: false,
+      hasPending: false,
+      pendingTooltip: "",
+    };
+  }
+
+  const badges = [];
+  let primaryLabel = effectiveDay.day_type || "";
+  let cellClass = "bg-white border-slate-200";
+
+  if (effectiveDay.day_type === "Leave") {
+    cellClass = "bg-amber-50 border-amber-200";
+    primaryLabel = effectiveDay.leave_type || "Leave";
+    if (effectiveDay.working_type === "Half") badges.push("Half Day");
+    else badges.push("Full Day");
+  } else if (effectiveDay.is_holiday_on_week_off) {
+    cellClass = "bg-slate-100 border-slate-300";
+    primaryLabel = "Week Off";
+    badges.push("Holiday");
+  } else if (effectiveDay.day_type === "WeekOff") {
+    cellClass = "bg-slate-100 border-slate-300";
+    primaryLabel = "Week Off";
+  } else if (effectiveDay.day_type === "Holiday") {
+    cellClass = "bg-purple-50 border-purple-200";
+    primaryLabel = "Holiday";
+  } else if (effectiveDay.day_type === "Working") {
+    cellClass = effectiveDay.working_type === "Half" ? "bg-emerald-50 border-emerald-200" : "bg-green-50 border-green-200";
+    primaryLabel = "Working";
+    if (effectiveDay.working_type === "Half") badges.push("Half Day");
+    else badges.push("Full Day");
+  }
+
+  if (effectiveDay.shift) badges.push(effectiveDay.shift === "NIGHT" ? "Night" : "Day");
+  if (effectiveDay.working_hours != null && effectiveDay.day_type === "Working") {
+    badges.push(`${effectiveDay.working_hours}h`);
+  }
+  if (effectiveDay.holiday_name && effectiveDay.day_type !== "Leave" && !effectiveDay.is_holiday_on_week_off) {
+    badges.push(effectiveDay.holiday_name);
+  }
+
+  const hasPending = Boolean(pending || leaveRemovalPending);
+  let pendingTooltip = pending?.tooltip || "";
+  if (leaveRemovalPending) {
+    pendingTooltip = pendingTooltip
+      ? `${pendingTooltip} • Leave removal pending approval`
+      : "Leave removal pending approval";
+    if (!badges.includes("Removal pending")) badges.push("Removal pending");
+  }
+
+  if (hasPending) {
+    cellClass = `${cellClass} ring-2 ring-dashed ${
+      pending?.submitted ? "ring-blue-400" : "ring-amber-400"
+    }`;
+    const pendingBadge = pending?.submitted ? "Awaiting approval" : "Draft change";
+    if (!badges.some((b) => b === pendingBadge)) {
+      badges.unshift(pendingBadge);
+    }
+  }
+
+  return {
+    primaryLabel,
+    badges,
+    cellClass,
+    isEditable: true,
+    hasPending,
+    pendingTooltip,
+  };
+}
+
+export function statusBadgeClass(status) {
+  switch ((status || "").toLowerCase()) {
+    case "draft":
+      return "bg-slate-100 text-slate-700";
+    case "pending approval":
+      return "bg-amber-100 text-amber-800";
+    case "approved":
+      return "bg-green-100 text-green-800";
+    case "locked":
+      return "bg-red-100 text-red-800";
+    case "pending":
+      return "bg-blue-100 text-blue-800";
+    case "rejected":
+      return "bg-red-100 text-red-700";
+    case "cancelled due to withdrawal":
+    case "cancelled due to regeneration":
+      return "bg-slate-100 text-slate-600";
+    default:
+      return "bg-slate-100 text-slate-600";
+  }
+}
+
+export function isRosterEditable(roster, readOnly) {
+  if (readOnly || !roster) return false;
+  const status = roster.status || "";
+  return status === "Draft" || status === "Approved";
+}
+
+export function isRosterLocked(roster) {
+  return (roster?.status || "").toLowerCase() === "locked";
+}
+
+export function isRosterLockable(roster) {
+  const status = (roster?.status || "").trim();
+  return status === "Draft" || status === "Approved";
+}
+
+/** Last calendar day of the roster month (local time). */
+export function getRosterMonthLastDate(monthYear) {
+  const parsed = parseMonthYear(monthYear);
+  if (!parsed) return null;
+  const { year, month } = parsed;
+  return new Date(year, month + 1, 0);
+}
+
+function toLocalDateOnly(value = new Date()) {
+  const d = value instanceof Date ? value : new Date(value);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/**
+ * Lock is allowed on or after the last day of the roster month.
+ * e.g. JUL2026 from 31 Jul; JUN2026 remains lockable throughout July.
+ */
+export function canLockRosterMonthByDate(monthYear, referenceDate = new Date()) {
+  const lastDate = getRosterMonthLastDate(monthYear);
+  if (!lastDate) return false;
+  return toLocalDateOnly(referenceDate).getTime() >= toLocalDateOnly(lastDate).getTime();
+}
+
+export function getRosterLockDateHint(monthYear) {
+  const lastDate = getRosterMonthLastDate(monthYear);
+  if (!lastDate) return "Invalid roster month.";
+  const label = lastDate.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  return `Lock is available on or after ${label} (last day of ${monthYear}). Previous months stay lockable after their last day.`;
+}
+
+export function formatRosterMonthLastDate(monthYear) {
+  const lastDate = getRosterMonthLastDate(monthYear);
+  if (!lastDate) return monthYear;
+  return lastDate.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export function formatLockedDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function getRosterLockMessage(roster) {
+  if (!isRosterLocked(roster)) return null;
+  const locker = roster.locked_by_name || "Super Admin / Admin";
+  const when = formatLockedDate(roster.locked_date);
+  return when
+    ? `This roster is locked by ${locker} on ${when}. No changes or new requests can be made until it is unlocked.`
+    : `This roster is locked by ${locker}. No changes or new requests can be made until it is unlocked.`;
+}
+
+export function getMonthCalendarLockMessage(monthYear, lockInfo) {
+  const locker = lockInfo?.locked_by_name || "Super Admin / Admin";
+  const when = formatLockedDate(lockInfo?.locked_date);
+  return when
+    ? `The ${monthYear} calendar has been locked by ${locker} on ${when}. No changes can be made until it is unlocked.`
+    : `The ${monthYear} calendar has been locked by ${locker}. No changes can be made until it is unlocked.`;
+}
+
+export function isMonthCalendarLocked(rosterList, monthCalendarLockedFlag) {
+  if (monthCalendarLockedFlag) return true;
+  return (rosterList || []).some((r) => isRosterLocked(r));
+}
+
+export function countWorkingDaysFromCalendar(days) {
+  if (!Array.isArray(days)) return null;
+  return days.filter((d) => d.day_type === "Working").length;
+}
+
+export function filterEmployeesByTeam(employees, teamId, teams = []) {
+  if (!teamId || teamId === "all") return employees;
+  const team = teams.find(
+    (t) => String(t.team_id ?? t.value ?? "") === String(teamId)
+  );
+  const teamName = team?.team_name || team?.label || "";
+  return employees.filter((e) => {
+    const idMatch = String(e.team_id ?? e.team ?? "") === String(teamId);
+    const nameMatch = teamName && String(e.team_name || "") === String(teamName);
+    return idMatch || nameMatch;
+  });
+}
+
+export function isAgentOrQA(user) {
+  if (!user) return false;
+  const roleName = String(user.role_name || user.role || "").trim().toLowerCase();
+  const designation = String(user.designation || user.designation_name || "").trim().toLowerCase();
+  const roleId = Number(user.role_id);
+  return (
+    roleName === "agent" ||
+    roleName === "qa" ||
+    designation === "agent" ||
+    designation === "qa" ||
+    roleId === 5 ||
+    roleId === 6
+  );
+}
+
+const CHANGE_TYPE_LABELS = {
+  DAY_UPDATE: "Day Update",
+  WEEKOFF_SWAP: "Week-Off Swap",
+  LEAVE_ADD: "Add Leave",
+  LEAVE_UPDATE: "Update Leave",
+  LEAVE_DELETE: "Delete Leave",
+  EXTRA_HOURS_UPDATE: "Extra Hours (Monthly)",
+};
+
+export function getChangeTypeLabel(changeType) {
+  return CHANGE_TYPE_LABELS[changeType] || changeType || "Change";
+}
+
+function parsePayload(payload) {
+  if (!payload) return {};
+  if (typeof payload === "string") {
+    try {
+      return JSON.parse(payload);
+    } catch {
+      return {};
+    }
+  }
+  return payload;
+}
+
+export function formatChangeRequestSummary(changeType, payload) {
+  const p = parsePayload(payload);
+  switch (changeType) {
+    case "DAY_UPDATE": {
+      const parts = [p.roster_date || "—"];
+      if (p.day_type) parts.push(p.day_type);
+      if (p.working_type) parts.push(p.working_type);
+      if (p.working_hours != null) parts.push(`${p.working_hours}h`);
+      if (p.shift) parts.push(`${p.shift} shift`);
+      return parts.join(" · ");
+    }
+    case "WEEKOFF_SWAP": {
+      const changes = p.changes || [];
+      if (changes.length === 0) return "No day changes";
+      if (changes.length === 1) {
+        const c = changes[0];
+        return `${c.roster_date}: ${c.current_day_type} → ${c.proposed_day_type}`;
+      }
+      return `${changes.length} days updated (week-off swap)`;
+    }
+    case "LEAVE_ADD":
+    case "LEAVE_UPDATE": {
+      const range = [p.start_date, p.end_date].filter(Boolean).join(" → ") || "—";
+      const flags = [
+        p.is_half_day ? "Half day" : null,
+        p.affect_target ? "Affects target" : null,
+      ].filter(Boolean);
+      const reason = p.reason ? ` — ${p.reason}` : "";
+      return `${p.leave_type || "Leave"} (${range})${flags.length ? ` [${flags.join(", ")}]` : ""}${reason}`;
+    }
+    case "LEAVE_DELETE":
+      return `Remove leave record #${p.leave_id ?? "—"}`;
+    case "EXTRA_HOURS_UPDATE":
+      return `Monthly extra hours → ${p.extra_assigned_hours ?? "—"}h`;
+    default:
+      return Object.keys(p).length ? JSON.stringify(p) : "—";
+  }
+}
+
+export function getChangeRequestDetailLines(changeType, payload) {
+  const p = parsePayload(payload);
+  const lines = [];
+
+  switch (changeType) {
+    case "DAY_UPDATE":
+      if (p.roster_date) lines.push({ label: "Date", value: p.roster_date });
+      if (p.day_type) lines.push({ label: "Day type", value: p.day_type });
+      if (p.shift) lines.push({ label: "Shift", value: p.shift });
+      if (p.working_type) lines.push({ label: "Working type", value: p.working_type });
+      if (p.working_hours != null) lines.push({ label: "Working hours", value: `${p.working_hours}h` });
+      break;
+    case "WEEKOFF_SWAP":
+      (p.changes || []).forEach((c) => {
+        lines.push({
+          label: c.roster_date || "Date",
+          value: `${c.current_day_type || "—"} → ${c.proposed_day_type || "—"}`,
+        });
+      });
+      if (!lines.length) lines.push({ label: "Changes", value: "None" });
+      break;
+    case "LEAVE_ADD":
+    case "LEAVE_UPDATE":
+      if (p.leave_type) lines.push({ label: "Leave type", value: p.leave_type });
+      if (p.start_date) lines.push({ label: "Start date", value: p.start_date });
+      if (p.end_date) lines.push({ label: "End date", value: p.end_date });
+      if (p.reason) lines.push({ label: "Reason", value: p.reason });
+      lines.push({ label: "Half day", value: p.is_half_day ? "Yes" : "No" });
+      lines.push({ label: "Affects target", value: p.affect_target ? "Yes" : "No" });
+      lines.push({ label: "Rostered leave", value: p.is_rostered !== 0 ? "Yes" : "No" });
+      if (p.leave_id) lines.push({ label: "Leave ID", value: String(p.leave_id) });
+      break;
+    case "LEAVE_DELETE":
+      lines.push({ label: "Leave ID to remove", value: String(p.leave_id ?? "—") });
+      break;
+    case "EXTRA_HOURS_UPDATE":
+      lines.push({
+        label: "Extra assigned hours (monthly)",
+        value: p.extra_assigned_hours != null ? `${p.extra_assigned_hours}h` : "—",
+      });
+      break;
+    default:
+      Object.entries(p).forEach(([key, val]) => {
+        lines.push({ label: key, value: typeof val === "object" ? JSON.stringify(val) : String(val) });
+      });
+  }
+
+  return lines;
+}
+
+function eachDateInRange(startStr, endStr) {
+  if (!startStr || !endStr) return [];
+  const dates = [];
+  const [sy, sm, sd] = startStr.slice(0, 10).split("-").map(Number);
+  const [ey, em, ed] = endStr.slice(0, 10).split("-").map(Number);
+  const cur = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+  while (cur <= end) {
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, "0");
+    const d = String(cur.getDate()).padStart(2, "0");
+    dates.push(`${y}-${m}-${d}`);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
+function mergePendingDate(byDate, dateStr, preview, summary, { submitted = false } = {}) {
+  if (!dateStr) return;
+  const key = dateStr.slice(0, 10);
+  const existing = byDate[key] || { preview: {}, summaries: [], submitted: false };
+  const summaries = [...existing.summaries, summary];
+  const isSubmitted = submitted || existing.submitted;
+  const phaseLabel = isSubmitted
+    ? "Submitted — awaiting approval"
+    : "Draft — not submitted yet";
+  byDate[key] = {
+    preview: { ...existing.preview, ...preview },
+    summaries,
+    submitted: isSubmitted,
+    tooltip: `${phaseLabel}: ${summaries.join(" • ")}`,
+  };
+}
+
+/**
+ * Build a per-date overlay from pending change requests for calendar preview.
+ */
+export function buildPendingCalendarOverlay(requests, rosterMonthId) {
+  const byDate = {};
+  const leaveDeleteIds = new Set();
+
+  const relevant = (requests || []).filter(
+    (r) =>
+      r.status === "Pending" &&
+      (!rosterMonthId || String(r.roster_month_id) === String(rosterMonthId))
+  );
+
+  for (const req of relevant) {
+    const p = parsePayload(req.change_payload);
+    const summary = formatChangeRequestSummary(req.change_type, p);
+    const submitted = Boolean(req.batch_id);
+    const overlayOpts = { submitted };
+
+    switch (req.change_type) {
+      case "DAY_UPDATE":
+        mergePendingDate(byDate, p.roster_date, {
+          day_type: p.day_type,
+          shift: p.shift,
+          working_type: p.working_type,
+          working_hours: p.working_hours,
+        }, summary, overlayOpts);
+        break;
+      case "WEEKOFF_SWAP":
+        (p.changes || []).forEach((c) => {
+          mergePendingDate(
+            byDate,
+            c.roster_date,
+            { day_type: c.proposed_day_type },
+            `${c.roster_date}: ${c.current_day_type} → ${c.proposed_day_type}`,
+            overlayOpts
+          );
+        });
+        break;
+      case "LEAVE_ADD":
+      case "LEAVE_UPDATE":
+        eachDateInRange(p.start_date, p.end_date).forEach((d) => {
+          mergePendingDate(byDate, d, {
+            day_type: "Leave",
+            working_type: p.is_half_day ? "Half" : "Full",
+            _pendingLeaveType: p.leave_type || "Leave",
+          }, summary, overlayOpts);
+        });
+        break;
+      case "LEAVE_DELETE":
+        if (p.leave_id != null) leaveDeleteIds.add(Number(p.leave_id));
+        break;
+      default:
+        break;
+    }
+  }
+
+  return { byDate, leaveDeleteIds };
+}

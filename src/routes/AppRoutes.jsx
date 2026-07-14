@@ -71,12 +71,7 @@ const AppRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={[1,2,3,4,5,6]}>
               <AppLayout>
-                {/* Render OverviewTab for agents, DashboardPage for others */}
-                {user && user.role_id === 6 ? (
-                  <OverviewTab isAgent={true} />
-                ) : (
-                  <DashboardPage />
-                )}
+                <DashboardPage />
               </AppLayout>
             </ProtectedRoute>
           }

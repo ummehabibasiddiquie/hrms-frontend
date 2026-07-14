@@ -6,7 +6,7 @@ import {
   Briefcase,
   Users,
   FolderKanban,
-  DollarSign
+  DollarSign,
 } from 'lucide-react';
 
 const AdminTabsNavigation = ({ activeTab, setActiveTab }) => {

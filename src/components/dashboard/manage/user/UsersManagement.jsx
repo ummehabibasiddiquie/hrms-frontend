@@ -121,6 +121,7 @@ const UsersManagement = ({
           phone: "",
           address: "",
           tenure: "",
+          joining_date: "",
           profile_picture: null,
      };
 
@@ -276,6 +277,11 @@ const UsersManagement = ({
                errors.role = "Please enter role";
           }
 
+          const roleId = Number(newUser.role);
+          if ((roleId === 5 || roleId === 6) && !newUser.joining_date?.trim()) {
+               errors.joining_date = "Joining date is required for Agent and QA";
+          }
+
           if (!newUser.password?.trim()) {
                errors.password = "Please enter password";
           } else if (newUser.password.length < 6) {
@@ -324,6 +330,9 @@ const UsersManagement = ({
           formData.append('user_number', newUser.phone || '');
           formData.append('user_address', newUser.address || '');
           formData.append('user_tenure', newUser.tenure || '');
+          if (newUser.joining_date) {
+               formData.append('joining_date', newUser.joining_date);
+          }
           formData.append('device_id', deviceInfo.device_id);
           formData.append('device_type', deviceInfo.device_type);
 

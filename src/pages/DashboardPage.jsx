@@ -3,7 +3,7 @@
 import Tracker from '../components/AgentDashboard/Tracker';
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Settings, Lock, File } from 'lucide-react';
+import { Settings, Lock, File, CalendarDays } from 'lucide-react';
 import { MONTHLY_GOAL, SHIFT_START_HOUR, SHIFT_HOURS_COUNT } from '../utils/constants';
 import { isWithinRange, getComparisonRange } from '../utils/dateHelpers';
 import FilterBar from '../components/dashboard/FilterBar';
@@ -33,6 +33,9 @@ import { fetchProjectsList } from '../services/projectService';
 import { toast } from 'react-hot-toast';
 import { getFriendlyErrorMessage } from '../utils/errorMessages';
 import ErrorMessage from '../components/common/ErrorMessage';
+import AgentTabsNavigation from '../components/AgentDashboard/AgentTabsNavigation';
+import RosterManagement from '../components/roster/RosterManagement';
+import MyRoster from '../components/roster/MyRoster';
 
 // Import db if needed for admin operations
 import db from '../utils/db';
@@ -93,31 +96,69 @@ const DashboardPage = ({
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') || 'overview';
   });
+  const [adminRequests, setAdminRequests] = useState([]);
+  const [managedUsers, setManagedUsers] = useState([]);
+  const [loadingManagedUsers, setLoadingManagedUsers] = useState(false);
+  const [managedProjects, setManagedProjects] = useState([]);
+  const [loadingManagedProjects, setLoadingManagedProjects] = useState(false);
+  const [adminActiveTab, setAdminActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('adminTab') || 'users';
+  });
+  const [error, setError] = useState(null);
+  const canAccessRoster = isSuperAdmin || isAdmin || isProjectManager || isAssistantManager;
+  const canAccessManage = canManageUsers || canManageProjects || isSuperAdmin || canAccessRoster;
+  const canViewIncentivesTab = isAdmin || userRole === 'FINANCE_HR' || userRole === 'PROJECT_MANAGER' || isSuperAdmin;
+  const canViewAdherence = isAdmin || userRole === 'PROJECT_MANAGER' || isQA || isSuperAdmin;
 
   // Keep activeTab in sync with ?tab= param
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
+    if (tabParam === 'roster_management') {
+      params.set('tab', 'manage');
+      params.set('adminTab', 'roster');
+      window.history.replaceState({}, '', `/dashboard?${params.toString()}`);
+      setActiveTab('manage');
+      setAdminActiveTab('roster');
+      return;
+    }
     if (tabParam && tabParam !== activeTab) {
       setActiveTab(tabParam);
     }
+    const adminTabParam = params.get('adminTab');
+    if (adminTabParam && adminTabParam !== adminActiveTab) {
+      setAdminActiveTab(adminTabParam);
+    }
   }, [window.location.search]);
+
+  const setManageSubTab = useCallback((subTab) => {
+    setAdminActiveTab(subTab);
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', 'manage');
+    params.set('adminTab', subTab);
+    window.history.pushState({}, '', `/dashboard?${params.toString()}`);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'manage') return;
+    const visibleTabs = [
+      ...(canManageUsers || isSuperAdmin || isAdmin ? ['users'] : []),
+      ...(isAssistantManager || canManageProjects ? ['projects', 'afd'] : []),
+      ...(isSuperAdmin || isAdmin ? ['category', 'permissions'] : []),
+      ...(canAccessRoster ? ['roster'] : []),
+    ];
+    if (!visibleTabs.includes(adminActiveTab) && visibleTabs.length > 0) {
+      setManageSubTab(visibleTabs[0]);
+    }
+  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, canManageProjects, canAccessRoster, setManageSubTab]);
 
   useEffect(() => {
     if (activeTab === 'task_eod_report') {
       setActiveTab('overview');
     }
   }, [activeTab]);
-  const [adminRequests, setAdminRequests] = useState([]);
-  const [managedUsers, setManagedUsers] = useState([]);
-  const [loadingManagedUsers, setLoadingManagedUsers] = useState(false);
-  const [managedProjects, setManagedProjects] = useState([]);
-  const [loadingManagedProjects, setLoadingManagedProjects] = useState(false);
-  const [adminActiveTab, setAdminActiveTab] = useState('users');
-  const canAccessManage = canManageUsers || canManageProjects || isSuperAdmin;
-  const canViewIncentivesTab = isAdmin || userRole === 'FINANCE_HR' || userRole === 'PROJECT_MANAGER' || isSuperAdmin;
-  const canViewAdherence = isAdmin || userRole === 'PROJECT_MANAGER' || isQA || isSuperAdmin;
-  const [error, setError] = useState(null);
+
 
   // Initialize admin data when Manage tab is active
   useEffect(() => {
@@ -242,6 +283,7 @@ const DashboardPage = ({
             qa: u.qa || '',
             address: u.user_address || '',
             tenure: u.user_tenure ?? u.tenure ?? '',
+            joining_date: u.joining_date ? String(u.joining_date).slice(0, 10) : '',
             profile_picture: u.profile_picture || null,
             is_active: u.is_active ?? 1
           };
@@ -428,8 +470,9 @@ const DashboardPage = ({
               
             {/* Admin Tabs Navigation - Show tabs but they'll display permission messages if no access */}
             <div className="flex overflow-x-auto border-b border-slate-200 mb-6 scrollbar-hide">
+              {(canManageUsers || isSuperAdmin || isAdmin) && (
               <button 
-                onClick={() => setAdminActiveTab('users')}
+                onClick={() => setManageSubTab('users')}
                 className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
                   adminActiveTab === 'users' 
                     ? 'border-blue-600 text-blue-700' 
@@ -438,10 +481,11 @@ const DashboardPage = ({
               >
                 User Management
               </button>
+              )}
               {/* Show Projects & Targets tab for Assistant Manager */}
               {(isAssistantManager || canManageProjects) && (
                 <button 
-                  onClick={() => setAdminActiveTab('projects')}
+                  onClick={() => setManageSubTab('projects')}
                   className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
                     adminActiveTab === 'projects' 
                       ? 'border-blue-600 text-blue-700' 
@@ -454,7 +498,7 @@ const DashboardPage = ({
               {/* AFD Management tab */}
               {(isAssistantManager || canManageProjects) && (
                 <button 
-                  onClick={() => setAdminActiveTab('afd')}
+                  onClick={() => setManageSubTab('afd')}
                   className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
                     adminActiveTab === 'afd' 
                       ? 'border-blue-600 text-blue-700' 
@@ -465,8 +509,9 @@ const DashboardPage = ({
                 </button>
               )}
               {/* Project Category tab */}
+              {(isSuperAdmin || isAdmin) && (
               <button 
-                onClick={() => setAdminActiveTab('category')}
+                onClick={() => setManageSubTab('category')}
                 className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
                   adminActiveTab === 'category' 
                     ? 'border-blue-600 text-blue-700' 
@@ -475,9 +520,11 @@ const DashboardPage = ({
               >
                 Project Category
               </button>
+              )}
               {/* User Permission tab */}
+              {(isSuperAdmin || isAdmin) && (
               <button 
-                onClick={() => setAdminActiveTab('permissions')}
+                onClick={() => setManageSubTab('permissions')}
                 className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
                   adminActiveTab === 'permissions' 
                     ? 'border-blue-600 text-blue-700' 
@@ -486,6 +533,20 @@ const DashboardPage = ({
               >
                 User Permission
               </button>
+              )}
+              {canAccessRoster && (
+                <button
+                  onClick={() => setManageSubTab('roster')}
+                  className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-2 ${
+                    adminActiveTab === 'roster'
+                      ? 'border-blue-600 text-blue-700'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <CalendarDays className="w-4 h-4" />
+                  Roster Management
+                </button>
+              )}
             </div>
 
             {/* Admin Tab Content */}
@@ -574,6 +635,30 @@ const DashboardPage = ({
             {adminActiveTab === 'permissions' && (
               <UserTrackingView />
             )}
+
+            {adminActiveTab === 'roster' && canAccessRoster && (
+              <RosterManagement />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* My Roster — Agent & QA read-only */}
+      {activeTab === 'my_roster' && (isAgent || isQA) && (
+        <div className="max-w-7xl mx-auto mt-2">
+          {isAgent && (
+            <AgentTabsNavigation
+              activeTab={activeTab}
+              setActiveTab={(tab) => {
+                const params = new URLSearchParams(window.location.search);
+                params.set('tab', tab);
+                window.history.pushState({}, '', `/dashboard?${params.toString()}`);
+                setActiveTab(tab);
+              }}
+            />
+          )}
+          <div className={isAgent ? 'mt-4' : ''}>
+            <MyRoster />
           </div>
         </div>
       )}

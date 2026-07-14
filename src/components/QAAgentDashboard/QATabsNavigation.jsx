@@ -5,12 +5,14 @@ import {
   FileCheck,
   FileWarning,
   DollarSign,
-  RotateCcw
+  RotateCcw,
+  CalendarDays
 } from 'lucide-react';
 
 const QATabsNavigation = ({ activeTab, setActiveTab }) => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
+    { id: 'my_roster', label: 'My Roster', icon: CalendarDays },
     { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
     { id: 'audit_report', label: 'Audit Report', icon: FileCheck },
     { id: 'adherence', label: 'Reporting Adherence', icon: FileWarning, disabled: true },

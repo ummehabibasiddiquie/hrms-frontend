@@ -78,6 +78,11 @@ const UsersTable = ({
                         <Mail className="w-3 h-3 flex-shrink-0" />
                         <span className="truncate">{u.email ? u.email.toLowerCase() : <span className="text-slate-400 italic">No Email</span>}</span>
                       </div>
+                      {u.joining_date && (
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Joined: {String(u.joining_date).slice(0, 10)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </td>

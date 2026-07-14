@@ -14,14 +14,33 @@ import { DateRangePicker } from '../../common/CustomCalendar';
 // (must be inside the component, not before imports)
 import api from '../../../services/api';
 import { toast } from 'react-hot-toast';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: externalDateRange }) => {
 
   const { user } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleAgentTabChange = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'overview') {
+      navigate('/dashboard?tab=overview');
+    } else {
+      navigate(`/dashboard?tab=${tab}`);
+    }
+  };
   
   // Helper to get today's date in YYYY-MM-DD format
   const getTodayDateString = () => {
@@ -195,7 +214,7 @@ const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: ext
         {/* Agent tab navigation above all content */}
         {isAgent && (
           <div className="max-w-7xl mx-auto w-full">
-            <AgentTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+            <AgentTabsNavigation activeTab={activeTab} setActiveTab={handleAgentTabChange} />
           </div>
         )}
 

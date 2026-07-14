@@ -286,7 +286,8 @@ export const MonthYearPicker = ({
   label = 'Filter by Month/Year',
   availableMonthYears = [],
   showAllOption = true,
-  disabled = false
+  disabled = false,
+  compact = false,
 }) => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
@@ -309,31 +310,39 @@ export const MonthYearPicker = ({
     setShowCalendar(false);
   };
 
-  return (
-    <div className="bg-white rounded-xl shadow-md border-2 border-blue-100 p-6">
-      <div className="flex items-center gap-4 flex-wrap">
-        {/* Label */}
+  const pickerContent = (
+    <div className={cn("flex items-center gap-3 flex-wrap", !compact && "gap-4")}>
+      {!compact && (
         <div className="flex items-center gap-2">
           <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-sm">
             <CalendarIcon className="w-5 h-5 text-white" />
           </div>
           <label className="text-sm font-bold text-slate-700">{label}</label>
         </div>
-        
-        {/* Calendar Picker Button */}
-        <div className="relative">
+      )}
+
+      {compact && label && (
+        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0">
+          {label}
+        </label>
+      )}
+
+      <div className="relative">
           <Popover open={showCalendar} onOpenChange={setShowCalendar}>
             <PopoverTrigger asChild>
               <button
                 type="button"
                 disabled={disabled}
                 className={cn(
-                  "bg-slate-50 border-2 border-blue-200 rounded-lg px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-left flex items-center justify-between w-[180px]",
+                  "text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all text-left flex items-center justify-between",
+                  compact
+                    ? "bg-white border border-slate-300 rounded-lg px-3 py-2 w-[140px]"
+                    : "bg-slate-50 border-2 border-blue-200 rounded-lg px-4 py-2.5 hover:bg-blue-50 hover:border-blue-500 focus:border-blue-500 w-[180px]",
                   disabled && "opacity-50 cursor-not-allowed"
                 )}
               >
                 <span className="flex items-center gap-2">
-                  <CalendarIcon className="w-4 h-4 text-blue-600" />
+                  <CalendarIcon className={cn("text-blue-600", compact ? "w-3.5 h-3.5" : "w-4 h-4")} />
                   {selectedMonthYear === 'all' ? 'All Months' : selectedMonthYear || 'Select Month/Year'}
                 </span>
                 <ChevronRight className={cn("w-4 h-4 transition-transform", showCalendar && "rotate-90")} />
@@ -439,8 +448,7 @@ export const MonthYearPicker = ({
           </Popover>
         </div>
 
-        {/* Reset Filter Button */}
-        {selectedMonthYear && selectedMonthYear !== 'all' && (
+        {!compact && selectedMonthYear && selectedMonthYear !== 'all' && (
           <button
             type="button"
             disabled={disabled}
@@ -454,7 +462,16 @@ export const MonthYearPicker = ({
             Reset Filter
           </button>
         )}
-      </div>
+    </div>
+  );
+
+  if (compact) {
+    return pickerContent;
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-md border-2 border-blue-100 p-6">
+      {pickerContent}
     </div>
   );
 };

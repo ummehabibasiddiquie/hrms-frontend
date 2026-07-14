@@ -67,11 +67,9 @@ api.interceptors.response.use(
       logError('[API] Server error occurred');
     }
 
-    // Map backend error to friendly message
-    let friendlyMessage = getFriendlyErrorMessage(
-      error.response?.data?.code || error.response?.data?.message || error.message
-    );
-    error.friendlyMessage = friendlyMessage;
+    // Map backend error to friendly message (preserve backend text when available)
+    const backendMessage = error.response?.data?.message;
+    error.friendlyMessage = backendMessage || getFriendlyErrorMessage(error.message);
 
     return Promise.reject(error);
   }

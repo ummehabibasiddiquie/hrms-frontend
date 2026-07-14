@@ -26,7 +26,8 @@ import {
   Brain,
   UserCheck,
   BarChart3,
-  CheckCircle2
+  CheckCircle2,
+  CalendarDays
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import GeminiKeyModal from "../GeminiKeyModal";
@@ -143,6 +144,11 @@ const Header = ({
       setIsMobileMenuOpen(false);
       return;
     }
+    if (view === 'MY_ROSTER') {
+      navigate('/dashboard?tab=my_roster');
+      setIsMobileMenuOpen(false);
+      return;
+    }
     
     // Manage now lives inside the dashboard for all supported roles.
     if (view === ViewState.ADMIN_PANEL) {
@@ -205,11 +211,10 @@ const Header = ({
     if (roleId === 6 || role.includes('AGENT')) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
-        // Billable Report tab removed for agents in header
+        { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: ViewState.ENTRY, label: "Tracker", icon: PenTool },
         { view: "AI_EVALUATION", label: "AI Evaluation", icon: Brain },
         { view: "AGENT_PROJECTS", label: "Projects", icon: Database, disabled: true },
-        // Roster tab temporarily removed for agents
       ];
     }
     if (!role) {
@@ -218,6 +223,7 @@ const Header = ({
         if (roleId === 5) {
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+            { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
           ];
@@ -251,6 +257,7 @@ const Header = ({
     if (role.includes('QA')) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+        { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
       ];
@@ -312,6 +319,10 @@ const Header = ({
     // Check for QA Agent Audit
     if (view === 'QA_AGENT_AUDIT') {
       return currentPath === '/dashboard' && currentTab === 'qa_agent_audit';
+    }
+
+    if (view === 'MY_ROSTER') {
+      return currentPath === '/dashboard' && currentTab === 'my_roster';
     }
 
     // Check for Manage/Admin Panel
