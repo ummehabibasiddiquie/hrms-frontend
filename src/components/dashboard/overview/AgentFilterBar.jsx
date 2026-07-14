@@ -11,7 +11,7 @@ const AgentFilterBar = ({ dateRange, setDateRange }) => {
 
   return (
     <div className="bg-white p-4 rounded-xl shadow-md border border-slate-200 mb-4">
-      {/* Filter Controls */}
+      {/* Filter Controls  */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
         {/* Header with Filter Icon - Left side */}
         <div className="flex items-center gap-3">
