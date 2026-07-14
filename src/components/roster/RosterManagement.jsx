@@ -116,6 +116,7 @@ const RosterManagement = () => {
   const [monthSubmitPendingCount, setMonthSubmitPendingCount] = useState(0);
   const [monthCalendarLocked, setMonthCalendarLocked] = useState(false);
   const [monthLockInfo, setMonthLockInfo] = useState(null);
+  const [monthStatusRosters, setMonthStatusRosters] = useState([]);
   const [monthTotalPendingCount, setMonthTotalPendingCount] = useState(0);
   const [canWithdrawOwnSubmission, setCanWithdrawOwnSubmission] = useState(false);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -184,37 +185,69 @@ const RosterManagement = () => {
     }
   }, [monthYear, selectedTeam, isAssistantManager, user?.team_id]);
 
-  const loadRosters = useCallback(async () => {
+  /** Lightweight month statuses for Lock (no day rows — avoids timeout). */
+  const loadMonthSummary = useCallback(async () => {
+    if (!(isAdmin || isSuperAdmin)) {
+      setMonthStatusRosters([]);
+      return null;
+    }
+    try {
+      const res = await listRosters({
+        month_year: monthYear,
+        include_days: false,
+      });
+      const list = res.data?.rosters || [];
+      setMonthStatusRosters(list);
+      setMonthCalendarLocked(Boolean(res.data?.month_calendar_locked));
+      setMonthLockInfo(res.data?.month_lock_info || null);
+      return {
+        monthCalendarLocked: Boolean(res.data?.month_calendar_locked),
+        monthLockInfo: res.data?.month_lock_info || null,
+      };
+    } catch {
+      setMonthStatusRosters([]);
+      return null;
+    }
+  }, [monthYear, isAdmin, isSuperAdmin]);
+
+  /** Load only the selected employee's calendar (with days). */
+  const loadRosters = useCallback(async (options = {}) => {
+    const { silent = false } = options;
     const hasValidSelection =
       selectedUserId &&
       employees.some((e) => String(e.user_id) === String(selectedUserId));
 
+    if (!hasValidSelection) {
+      setRosters([]);
+      return { list: [], monthCalendarLocked: false, monthLockInfo: null };
+    }
+
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await listRosters({
         month_year: monthYear,
-        user_id: isAdmin || isSuperAdmin ? undefined : hasValidSelection ? selectedUserId : undefined,
+        user_id: selectedUserId,
         include_days: true,
       });
       const list = res.data?.rosters || [];
       setRosters(list);
-      setMonthCalendarLocked(Boolean(res.data?.month_calendar_locked));
-      setMonthLockInfo(res.data?.month_lock_info || null);
+      const locked = Boolean(res.data?.month_calendar_locked);
+      const lockInfo = res.data?.month_lock_info || null;
+      setMonthCalendarLocked(locked);
+      setMonthLockInfo(lockInfo);
       return {
         list,
-        monthCalendarLocked: Boolean(res.data?.month_calendar_locked),
-        monthLockInfo: res.data?.month_lock_info || null,
+        monthCalendarLocked: locked,
+        monthLockInfo: lockInfo,
       };
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
       setRosters([]);
-      setMonthCalendarLocked(false);
-      setMonthLockInfo(null);
       return { list: [], monthCalendarLocked: false, monthLockInfo: null };
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [monthYear, selectedUserId, employees, isAdmin, isSuperAdmin]);
+  }, [monthYear, selectedUserId, employees]);
 
   const loadPendingRequests = useCallback(async () => {
     try {
@@ -286,16 +319,18 @@ const RosterManagement = () => {
   useEffect(() => {
     loadRosters();
     loadPendingRequests();
-  }, [loadRosters, loadPendingRequests]);
+    loadMonthSummary();
+  }, [loadRosters, loadPendingRequests, loadMonthSummary]);
 
   useEffect(() => {
     const refreshOnFocus = () => {
-      loadRosters();
+      loadRosters({ silent: true });
       loadPendingRequests();
+      loadMonthSummary();
     };
     window.addEventListener("focus", refreshOnFocus);
     return () => window.removeEventListener("focus", refreshOnFocus);
-  }, [loadRosters, loadPendingRequests]);
+  }, [loadRosters, loadPendingRequests, loadMonthSummary]);
 
   const readOnly = selectedRoster?.access_mode === "read_only" || !isRosterEditable(selectedRoster, false);
   const status = selectedRoster?.status || "";
@@ -304,8 +339,11 @@ const RosterManagement = () => {
   const lockDateAllowed = canLockRosterMonthByDate(monthYear);
   const lockDateHint = getRosterLockDateHint(monthYear);
   const monthLockableCount = useMemo(
-    () => (lockDateAllowed ? rosters.filter((r) => isRosterLockable(r)).length : 0),
-    [rosters, lockDateAllowed]
+    () =>
+      lockDateAllowed
+        ? monthStatusRosters.filter((r) => isRosterLockable(r)).length
+        : 0,
+    [monthStatusRosters, lockDateAllowed]
   );
   const hasMonthPendingRequests = monthTotalPendingCount > 0;
   const canLockMonth =
@@ -319,8 +357,7 @@ const RosterManagement = () => {
     try {
       setActionLoading(key);
       await fn();
-      await loadRosters();
-      await loadPendingRequests();
+      await Promise.all([loadRosters(), loadPendingRequests(), loadMonthSummary()]);
       await checkCanGenerateNextMonth();
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
@@ -449,23 +486,19 @@ const RosterManagement = () => {
   };
 
   const handleDayClick = async (day) => {
-    const { list, monthCalendarLocked: frozen, monthLockInfo: lockInfo } = await loadRosters();
-    const fresh =
-      list.find((r) => String(r.user_id) === String(selectedUserId)) || selectedRoster;
-
-    if (frozen || isRosterLocked(fresh)) {
+    if (monthCalendarLocked || isRosterLocked(selectedRoster)) {
       toast.error(
-        frozen
-          ? getMonthCalendarLockMessage(monthYear, lockInfo)
-          : getRosterLockMessage(fresh)
+        monthCalendarLocked
+          ? getMonthCalendarLockMessage(monthYear, monthLockInfo)
+          : getRosterLockMessage(selectedRoster)
       );
       return;
     }
-    if ((fresh?.status || "") === "Pending Approval") {
+    if ((selectedRoster?.status || "") === "Pending Approval") {
       toast.error("This roster is pending approval and cannot be edited.");
       return;
     }
-    if (!isRosterEditable(fresh, readOnly)) {
+    if (!isRosterEditable(selectedRoster, readOnly)) {
       toast.error("This roster cannot be edited right now.");
       return;
     }
@@ -532,6 +565,7 @@ const RosterManagement = () => {
               onActionComplete={() => {
                 loadRosters();
                 loadPendingRequests();
+                loadMonthSummary();
               }}
             />
           </div>
@@ -789,8 +823,9 @@ const RosterManagement = () => {
         readOnly={readOnly || calendarFrozen || status === "Pending Approval"}
         onClose={() => setEditorDay(null)}
         onSaved={() => {
-          loadRosters();
+          loadRosters({ silent: true });
           loadPendingRequests();
+          loadMonthSummary();
         }}
       />
 
