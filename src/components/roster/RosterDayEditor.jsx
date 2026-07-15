@@ -119,9 +119,15 @@ const RosterDayEditor = ({
   };
 
   const handleDayUpdate = () => {
+    // Never submit day_type Leave via Day tab — Leave is managed on Leave tab.
+    // Restoring a leave day must send Working/WeekOff so backend drops leave coverage.
+    let dayType = dayForm.day_type;
+    if (dayType === "Leave" || dayType === "Holiday") {
+      dayType = "Working";
+    }
     submitChange("DAY_UPDATE", {
       roster_date: rosterDate,
-      day_type: dayForm.day_type,
+      day_type: dayType,
       shift: dayForm.shift,
       working_type: dayForm.working_type,
       working_hours: Number(dayForm.working_hours),
@@ -270,7 +276,9 @@ const RosterDayEditor = ({
                   </p>
                   {day?.day_type === "Leave" && (
                     <p className="sm:col-span-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      This day is on leave. Set Day Type to Working and submit for approval to restore it, or use the Leave tab to edit Affect Target / remove the leave.
+                      This day is on leave. Keep Day Type as Working and submit for approval to restore it
+                      (calendar + target update only after approve). Or open the Leave tab → Delete to cancel
+                      the leave request.
                     </p>
                   )}
                   <label className="block">
