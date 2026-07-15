@@ -281,7 +281,16 @@ export function isMonthCalendarLocked(rosterList, monthCalendarLockedFlag) {
 
 export function countWorkingDaysFromCalendar(days) {
   if (!Array.isArray(days)) return null;
-  return days.filter((d) => d.day_type === "Working").length;
+  let total = 0;
+  for (const d of days) {
+    if (d.day_type === "Working") {
+      total += (d.working_type || "Full") === "Half" ? 0.5 : 1;
+    } else if (d.day_type === "Leave" && (d.leave_is_half_day || d.is_half_day)) {
+      // Half-day leave: employee still worked half the day
+      total += 0.5;
+    }
+  }
+  return total;
 }
 
 export function filterEmployeesByTeam(employees, teamId, teams = []) {

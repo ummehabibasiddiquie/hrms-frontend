@@ -38,10 +38,23 @@ const RosterSummaryCards = ({
   }
 
   const dailyHours = inferDailyHoursFromRoster(roster);
+  // Prefer API metrics (includes half-day leave as 0.5); fall back to client count
   const workingDaysFromCalendar = countWorkingDaysFromCalendar(roster.days);
   const workingDays =
-    workingDaysFromCalendar != null ? workingDaysFromCalendar : roster.calendar_working_days;
+    roster.calendar_working_days != null && roster.calendar_working_days !== ""
+      ? Number(roster.calendar_working_days)
+      : workingDaysFromCalendar;
+  const targetedDays =
+    roster.target_working_days != null && roster.target_working_days !== ""
+      ? Number(roster.target_working_days)
+      : "—";
+  const monthlyHours =
+    roster.monthly_target_hours != null && roster.monthly_target_hours !== ""
+      ? Number(roster.monthly_target_hours)
+      : "—";
   const frozen = monthCalendarLocked || isRosterLocked(roster);
+
+  const fmt = (v) => (typeof v === "number" && Number.isFinite(v) ? v : v);
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -88,19 +101,19 @@ const RosterSummaryCards = ({
         <Stat
           icon={Calendar}
           label="Working Days"
-          value={workingDays ?? "—"}
-          sub="Scheduled working days"
+          value={fmt(workingDays) ?? "—"}
+          sub="Incl. half-day leave as 0.5"
         />
         <Stat
           icon={Target}
           label="Targeted Days"
-          value={roster.target_working_days ?? "—"}
+          value={fmt(targetedDays)}
           sub="After approved leave"
         />
         <Stat
           icon={Clock}
           label="Monthly Hours"
-          value={roster.monthly_target_hours ?? "—"}
+          value={fmt(monthlyHours)}
           sub="Working days × daily hrs"
         />
         <Stat icon={Clock} label="Daily Hours" value={dailyHours} sub="From monthly tracker" />
