@@ -1,6 +1,7 @@
 import api from "./api";
 
 const ROSTER_TIMEOUT_MS = 120000;
+const ROSTER_HEAVY_TIMEOUT_MS = 300000;
 
 function getLoggedInUserId() {
   try {
@@ -26,8 +27,8 @@ function unwrap(response) {
   return body;
 }
 
-async function rosterPost(url, payload = {}) {
-  const res = await api.post(url, withUser(payload), { timeout: ROSTER_TIMEOUT_MS });
+async function rosterPost(url, payload = {}, timeout = ROSTER_TIMEOUT_MS) {
+  const res = await api.post(url, withUser(payload), { timeout });
   return unwrap(res);
 }
 
@@ -36,15 +37,15 @@ export async function canGenerateRoster(payload = {}) {
 }
 
 export async function generateRoster(payload = {}) {
-  return rosterPost("/roster/generate", payload);
+  return rosterPost("/roster/generate", payload, ROSTER_HEAVY_TIMEOUT_MS);
 }
 
 export async function generateEmployeeRoster(payload) {
-  return rosterPost("/roster/generate_employee", payload);
+  return rosterPost("/roster/generate_employee", payload, ROSTER_HEAVY_TIMEOUT_MS);
 }
 
 export async function resetRegenerateRoster(payload) {
-  return rosterPost("/roster/reset_regenerate", payload);
+  return rosterPost("/roster/reset_regenerate", payload, ROSTER_HEAVY_TIMEOUT_MS);
 }
 
 export async function listRosters(payload) {

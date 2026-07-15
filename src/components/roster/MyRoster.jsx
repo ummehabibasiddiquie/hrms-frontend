@@ -108,7 +108,8 @@ const MyRoster = () => {
           <div>
             <h1 className="text-2xl font-bold">My Roster</h1>
             <p className="text-blue-100 text-sm mt-1">
-              View your roster and track changes requested by your manager
+              View-only calendar and request status. Only your manager, admin, or super admin can
+              edit roster days, leave, or week-offs.
             </p>
           </div>
         </div>
