@@ -682,78 +682,63 @@ const QATrackerReport = () => {
 
   // Handle add form field changes
   const handleAddFieldChange = (field, value) => {
-    setAddFormData(prev => ({ ...prev, [field]: value }));
+    setAddFormData(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'project_id') {
+        next.task_id = "";
+        next.base_target = "";
+      }
+      return next;
+    });
     setAddTouched(prev => ({ ...prev, [field]: true }));
-    
+
     if (field === 'production') {
       setAddProductionError("");
     }
-    
-    if (field === 'agent_id' && value) {
-      log('[QATrackerReport] Looking for agent_id:', value, 'in usersList of', usersList.length, 'agents');
-      log('[QATrackerReport] First agent in usersList:', usersList[0]);
-      const selectedAgent = usersList.find(u => String(u.user_id) === String(value));
-      log('[QATrackerReport] Found agent:', selectedAgent);
-      log('[QATrackerReport] Agent has user_tenure:', selectedAgent?.user_tenure);
-      if (selectedAgent && addFormData.task_id) {
-        const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
-        const task = project?.tasks?.find(t => String(t.task_id) === String(addFormData.task_id));
-        log('[QATrackerReport] Task for recalc:', task);
-        // user_tenure comes as string from API, convert to number
-        const userTenure = Number(selectedAgent.user_tenure) || Number(selectedAgent.tenure) || 1;
-        log('[QATrackerReport] User tenure:', userTenure, 'raw:', selectedAgent.user_tenure);
-        if (task && userTenure) {
-          const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
-          const calculated = Number(perHourTarget) * Number(userTenure);
-          log('[QATrackerReport] Recalculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
-          setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
-        }
-      }
-    }
-    
+
     if (field === 'project_id') {
       const project = addProjects.find(p => String(p.project_id) === String(value));
       setAddTasks(project?.tasks || []);
-      setAddFormData(prev => ({ ...prev, task_id: "", base_target: "" }));
     }
-    
-    if (field === 'task_id' && value) {
-      const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
-      const task = project?.tasks?.find(t => String(t.task_id) === String(value));
-      log('[QATrackerReport] Task changed in add modal:', value);
-      log('[QATrackerReport] Project:', addFormData.project_id, 'Found project:', project);
-      log('[QATrackerReport] Task details:', { 
-        task_id: task?.task_id, 
-        task_name: task?.task_name,
-        task_target: task?.task_target,
-        per_hour_target: task?.per_hour_target,
-        target: task?.target,
-        label_value: task?.label_value,
-        all_task_keys: task ? Object.keys(task) : null
-      });
-      const selectedAgent = usersList.find(u => String(u.user_id) === String(addFormData.agent_id));
-      log('[QATrackerReport] Selected agent for calc:', selectedAgent);
-      log('[QATrackerReport] Agent ID being searched:', addFormData.agent_id, 'type:', typeof addFormData.agent_id);
-      log('[QATrackerReport] usersList count:', usersList.length);
-      // user_tenure comes as string from API, convert to number
-      const userTenure = Number(selectedAgent?.user_tenure) || Number(selectedAgent?.tenure) || 1;
-      log('[QATrackerReport] User tenure from agent:', userTenure, 'agent_tenure_sources:', {
-        user_tenure: selectedAgent?.user_tenure,
-        tenure: selectedAgent?.tenure,
-        raw_agent: selectedAgent
-      });
-      if (task) {
-        const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
-        const calculated = Number(perHourTarget) * Number(userTenure);
-        log('[QATrackerReport] Calculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
-        setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
-      } else {
-        log('[QATrackerReport] Could not calculate - task not found');
-      }
-    }
-    
+
     validateAddField(field, value);
   };
+
+  // Base Target = task_target × tenure (if tenure < 1 → use 1)
+  useEffect(() => {
+    if (!showAddModal) return;
+
+    const agent = usersList.find((u) => String(u.user_id) === String(addFormData.agent_id));
+    const project = addProjects.find((p) => String(p.project_id) === String(addFormData.project_id));
+    const task =
+      project?.tasks?.find((t) => String(t.task_id) === String(addFormData.task_id)) ||
+      addTasks.find((t) => String(t.task_id) === String(addFormData.task_id));
+
+    if (!agent || !task) {
+      setAddFormData((prev) => (prev.base_target === "" ? prev : { ...prev, base_target: "" }));
+      return;
+    }
+
+    let tenure = Number(agent.user_tenure ?? agent.tenure) || 1;
+    if (tenure < 1) tenure = 1;
+    const perHourTarget = Number(
+      task.task_target ?? task.per_hour_target ?? task.target ?? task.label_value ?? 0
+    ) || 0;
+    const calculated = (perHourTarget * tenure).toFixed(2);
+
+    setAddFormData((prev) =>
+      prev.base_target === calculated ? prev : { ...prev, base_target: calculated }
+    );
+  }, [
+    showAddModal,
+    addFormData.agent_id,
+    addFormData.project_id,
+    addFormData.task_id,
+    usersList,
+    addProjects,
+    addTasks,
+  ]);
+
 
   // Validate add form field
   const validateAddField = (field, value) => {
@@ -877,8 +862,18 @@ const QATrackerReport = () => {
       formData.append('task_id', Number(addFormData.task_id));
       formData.append('shift', addFormData.shift_type);
       formData.append('production', Number(addFormData.production));
-      formData.append('tenure_target', Number(addFormData.base_target));
-      
+      {
+        const agent = usersList.find((u) => String(u.user_id) === String(addFormData.agent_id));
+        const project = addProjects.find((p) => String(p.project_id) === String(addFormData.project_id));
+        const task =
+          project?.tasks?.find((t) => String(t.task_id) === String(addFormData.task_id)) ||
+          addTasks.find((t) => String(t.task_id) === String(addFormData.task_id));
+        const perHour =
+          Number(task?.task_target ?? task?.per_hour_target ?? task?.target ?? 0) || 0;
+        let tenure = Number(agent?.user_tenure ?? agent?.tenure) || 1;
+        if (tenure < 1) tenure = 1;
+        formData.append('tenure_target', perHour * tenure);
+      }      
       if (addFormData.tracker_note && addFormData.tracker_note.trim()) {
         formData.append('tracker_note', addFormData.tracker_note.trim());
       }

@@ -167,6 +167,7 @@ const MyRoster = () => {
             monthYear={monthYear}
             days={roster.days}
             rosterMonthId={roster.roster_month_id}
+            rosterStartDate={roster.roster_start_date}
             pendingRequests={pendingRequests}
             readOnly
           />

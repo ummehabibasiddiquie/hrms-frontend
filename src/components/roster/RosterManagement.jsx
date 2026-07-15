@@ -880,6 +880,7 @@ const RosterManagement = () => {
                 monthYear={monthYear}
                 days={selectedRoster.days}
                 rosterMonthId={selectedRoster.roster_month_id}
+                rosterStartDate={selectedRoster.roster_start_date}
                 pendingRequests={pendingRequests}
                 readOnly={readOnly || calendarFrozen || status === "Pending Approval"}
                 onDayClick={handleDayClick}

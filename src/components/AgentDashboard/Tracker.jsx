@@ -234,20 +234,25 @@ const Tracker = ({ embedded = false }) => {
     setLoadingTasks(false);
   }, [selectedProject, projects, selectedTask]);
 
-  // Calculate base target as user_tenure * task_target
+  // Base Target = task_target × tenure (if tenure < 1 → use 1)
   useEffect(() => {
-    if (!selectedProject || !selectedTask || !user?.user_tenure) {
+    if (!selectedProject || !selectedTask) {
       setBaseTarget("");
       return;
     }
-    setBaseTargetLoading(true);
-    const project = projects.find(p => String(p.project_id) === String(selectedProject));
-    const task = project?.tasks?.find(t => String(t.task_id) === String(selectedTask));
-    if (task && user.user_tenure) {
-      setBaseTarget(Number(task.task_target) * Number(user.user_tenure));
-    } else {
+    const project = projects.find((p) => String(p.project_id) === String(selectedProject));
+    const task = project?.tasks?.find((t) => String(t.task_id) === String(selectedTask));
+    if (!task) {
       setBaseTarget("");
+      return;
     }
+
+    let tenure = Number(user?.user_tenure ?? user?.tenure) || 1;
+    if (tenure < 1) tenure = 1;
+    const taskTarget = Number(task.task_target ?? task.per_hour_target ?? task.target ?? 0) || 0;
+
+    setBaseTargetLoading(true);
+    setBaseTarget(taskTarget * tenure);
     setBaseTargetLoading(false);
   }, [selectedProject, selectedTask, projects, user]);
 
@@ -610,7 +615,14 @@ const Tracker = ({ embedded = false }) => {
       formData.append('shift', shiftType);
       formData.append('user_id', user?.user_id);
       formData.append('production', Number(productionTarget));
-      formData.append('tenure_target', Number(baseTarget));
+      {
+        const project = projects.find((p) => String(p.project_id) === String(selectedProject));
+        const task = project?.tasks?.find((t) => String(t.task_id) === String(selectedTask));
+        const taskTarget = Number(task?.task_target ?? task?.per_hour_target ?? task?.target ?? 0) || 0;
+        let tenure = Number(user?.user_tenure ?? user?.tenure) || 1;
+        if (tenure < 1) tenure = 1;
+        formData.append('tenure_target', taskTarget * tenure);
+      }
       
       if (notes && notes.trim()) {
         formData.append('tracker_note', notes.trim());
@@ -1469,9 +1481,12 @@ const Tracker = ({ embedded = false }) => {
                         setTimeout(() => {
                           const project = projects.find(p => String(p.project_id) === String(selectedProject));
                           const task = project?.tasks?.find(t => String(t.task_id) === String(taskValue));
-                          if (task && user?.user_tenure) {
-                            const calculated = Number(task.task_target) * Number(user.user_tenure);
-                            setBaseTarget(calculated.toFixed(2));
+                          if (task) {
+                            let tenure = Number(user?.user_tenure ?? user?.tenure) || 1;
+                            if (tenure < 1) tenure = 1;
+                            const taskTarget =
+                              Number(task.task_target ?? task.per_hour_target ?? task.target ?? 0) || 0;
+                            setBaseTarget((taskTarget * tenure).toFixed(2));
                           } else {
                             setBaseTarget("");
                           }

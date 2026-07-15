@@ -10,6 +10,7 @@ const RosterCalendar = ({
   onDayClick,
   pendingRequests = [],
   rosterMonthId = null,
+  rosterStartDate = null,
 }) => {
   const dayMap = React.useMemo(() => {
     const map = {};
@@ -27,6 +28,7 @@ const RosterCalendar = ({
 
   const calendarDays = getCalendarDays(monthYear);
   const hasPendingChanges = Object.keys(pendingOverlay.byDate).length > 0 || pendingOverlay.leaveDeleteIds.size > 0;
+  const startStr = rosterStartDate ? toDateOnlyString(rosterStartDate) : null;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -68,6 +70,7 @@ const RosterCalendar = ({
 
           const clickable = !readOnly && (day || pending) && onDayClick;
           const showContent = day || pending;
+          const beforeJoining = Boolean(startStr && cell.dateStr < startStr && !day && !pending);
 
           return (
             <button
@@ -76,7 +79,9 @@ const RosterCalendar = ({
               disabled={!clickable}
               title={info.pendingTooltip || undefined}
               onClick={() => clickable && onDayClick(day || { roster_date: cell.dateStr, ...pending?.preview })}
-              className={`min-h-[100px] p-2 text-left border transition-all relative ${info.cellClass} ${
+              className={`min-h-[100px] p-2 text-left border transition-all relative ${
+                beforeJoining ? "bg-slate-50 border-slate-100" : info.cellClass
+              } ${
                 clickable ? "hover:ring-2 hover:ring-blue-400 cursor-pointer" : "cursor-default"
               }`}
             >
@@ -110,7 +115,9 @@ const RosterCalendar = ({
                   )}
                 </>
               ) : (
-                <div className="text-xs text-slate-400 italic">No data</div>
+                <div className="text-xs text-slate-400 italic">
+                  {beforeJoining ? "Before joining" : "No data"}
+                </div>
               )}
             </button>
           );
