@@ -72,6 +72,18 @@ export function getCalendarDays(monthYear) {
   return days;
 }
 
+/** Hours shown on calendar; half-day days never display a full-day total. */
+function displayHoursForDay(day, treatAsHalf) {
+  if (day?.working_hours == null || day.working_hours === "") return null;
+  const wh = Number(day.working_hours);
+  if (!Number.isFinite(wh)) return null;
+  // Pending half-leave / stale DB can still hold full hours (e.g. 9) with Half type
+  if (treatAsHalf && wh > 5.4) {
+    return Math.round((wh / 2) * 100) / 100;
+  }
+  return wh;
+}
+
 export function getDayDisplayInfo(day, options = null) {
   const pending = options?.pending;
   const leaveRemovalPending = options?.leaveRemovalPending;
@@ -104,11 +116,31 @@ export function getDayDisplayInfo(day, options = null) {
   let primaryLabel = effectiveDay.day_type || "";
   let cellClass = "bg-white border-slate-200";
 
-  if (effectiveDay.day_type === "Leave") {
+  const isHalfLeave =
+    effectiveDay.day_type === "Leave" &&
+    (effectiveDay.working_type === "Half" ||
+      Number(effectiveDay.leave_is_half_day) === 1 ||
+      effectiveDay.leave_is_half_day === true ||
+      Number(effectiveDay.is_half_day) === 1 ||
+      effectiveDay.is_half_day === true ||
+      effectiveDay.display_as_half_working === true);
+
+  const isHalfWorking =
+    effectiveDay.day_type === "Working" && effectiveDay.working_type === "Half";
+
+  // Half-day leave and Half Working feel the same: Half Working + hours
+  if (isHalfLeave || isHalfWorking) {
+    cellClass = "bg-emerald-50 border-emerald-200";
+    primaryLabel = "Half Working";
+    badges.push("Half Day");
+    if (isHalfLeave) {
+      const leaveName = effectiveDay.leave_type || "Leave";
+      badges.push(leaveName);
+    }
+  } else if (effectiveDay.day_type === "Leave") {
     cellClass = "bg-amber-50 border-amber-200";
     primaryLabel = effectiveDay.leave_type || "Leave";
-    if (effectiveDay.working_type === "Half") badges.push("Half Day");
-    else badges.push("Full Day");
+    badges.push("Full Day");
   } else if (effectiveDay.is_holiday_on_week_off) {
     cellClass = "bg-slate-100 border-slate-300";
     primaryLabel = "Week Off";
@@ -120,15 +152,22 @@ export function getDayDisplayInfo(day, options = null) {
     cellClass = "bg-purple-50 border-purple-200";
     primaryLabel = "Holiday";
   } else if (effectiveDay.day_type === "Working") {
-    cellClass = effectiveDay.working_type === "Half" ? "bg-emerald-50 border-emerald-200" : "bg-green-50 border-green-200";
+    cellClass = "bg-green-50 border-green-200";
     primaryLabel = "Working";
-    if (effectiveDay.working_type === "Half") badges.push("Half Day");
-    else badges.push("Full Day");
+    badges.push("Full Day");
   }
 
   if (effectiveDay.shift) badges.push(effectiveDay.shift === "NIGHT" ? "Night" : "Day");
-  if (effectiveDay.working_hours != null && effectiveDay.day_type === "Working") {
-    badges.push(`${effectiveDay.working_hours}h`);
+  // Show hours for half working, half leave, and full working days
+  const hoursBadge = displayHoursForDay(
+    effectiveDay,
+    isHalfLeave || isHalfWorking
+  );
+  if (
+    hoursBadge != null &&
+    (isHalfLeave || isHalfWorking || effectiveDay.day_type === "Working")
+  ) {
+    badges.push(`${hoursBadge}h`);
   }
   if (effectiveDay.holiday_name && effectiveDay.day_type !== "Leave" && !effectiveDay.is_holiday_on_week_off) {
     badges.push(effectiveDay.holiday_name);
@@ -511,9 +550,13 @@ export function buildPendingCalendarOverlay(requests, rosterMonthId) {
       case "LEAVE_ADD":
       case "LEAVE_UPDATE":
         eachDateInRange(p.start_date, p.end_date).forEach((d) => {
+          const half = Boolean(Number(p.is_half_day) === 1 || p.is_half_day === true);
           mergePendingDate(byDate, d, {
             day_type: "Leave",
-            working_type: p.is_half_day ? "Half" : "Full",
+            working_type: half ? "Half" : "Full",
+            leave_is_half_day: half,
+            is_half_day: half,
+            display_as_half_working: half,
             _pendingLeaveType: p.leave_type || "Leave",
           }, summary, overlayOpts);
         });

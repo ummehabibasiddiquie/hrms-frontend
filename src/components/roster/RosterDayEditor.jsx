@@ -307,7 +307,19 @@ const RosterDayEditor = ({
                     <span className="text-sm font-medium text-slate-700">Working Type</span>
                     <select
                       value={dayForm.working_type}
-                      onChange={(e) => setDayForm({ ...dayForm, working_type: e.target.value })}
+                      onChange={(e) => {
+                        const nextType = e.target.value;
+                        setDayForm((prev) => {
+                          const currentHours = Number(prev.working_hours) || 9;
+                          let nextHours = currentHours;
+                          if (nextType === "Half" && prev.working_type !== "Half") {
+                            nextHours = Math.round((currentHours / 2) * 100) / 100;
+                          } else if (nextType === "Full" && prev.working_type === "Half") {
+                            nextHours = Math.round(currentHours * 2 * 100) / 100;
+                          }
+                          return { ...prev, working_type: nextType, working_hours: nextHours };
+                        });
+                      }}
                       className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
                     >
                       <option value="Full">Full Day</option>
