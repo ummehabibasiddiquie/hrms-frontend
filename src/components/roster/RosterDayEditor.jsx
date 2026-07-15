@@ -45,8 +45,13 @@ const RosterDayEditor = ({
 
   useEffect(() => {
     if (!isOpen || !day) return;
+    // Leave days aren't in the Day Type dropdown — default to Working so user can restore
+    const proposedType =
+      day.day_type === "Leave" || day.day_type === "Holiday"
+        ? "Working"
+        : day.day_type || "Working";
     setDayForm({
-      day_type: day.day_type || "Working",
+      day_type: proposedType,
       shift: day.shift || "DAY",
       working_type: day.working_type || "Full",
       working_hours: day.working_hours ?? 9,
@@ -167,6 +172,15 @@ const RosterDayEditor = ({
       toast.error("End date cannot be before start date");
       return;
     }
+    // Same dates already on roster → update (so Affect Target can be corrected)
+    const matchingLeave =
+      editingLeaveId
+        ? leaves.find((l) => Number(l.leave_id) === Number(editingLeaveId))
+        : leaves.find(
+            (l) =>
+              toDateOnlyString(l.start_date) === leaveForm.start_date &&
+              toDateOnlyString(l.end_date) === leaveForm.end_date
+          );
     const payload = {
       leave_type: leaveForm.leave_type,
       start_date: leaveForm.start_date,
@@ -176,8 +190,8 @@ const RosterDayEditor = ({
       is_half_day: leaveForm.is_half_day ? 1 : 0,
       is_rostered: leaveForm.is_rostered ? 1 : 0,
     };
-    if (editingLeaveId) {
-      submitChange("LEAVE_UPDATE", { ...payload, leave_id: editingLeaveId });
+    if (matchingLeave?.leave_id) {
+      submitChange("LEAVE_UPDATE", { ...payload, leave_id: matchingLeave.leave_id });
     } else {
       submitChange("LEAVE_ADD", payload);
     }
@@ -194,9 +208,9 @@ const RosterDayEditor = ({
       start_date: toDateOnlyString(leave.start_date),
       end_date: toDateOnlyString(leave.end_date),
       reason: leave.reason || "",
-      affect_target: Boolean(leave.affect_target),
-      is_half_day: Boolean(leave.is_half_day),
-      is_rostered: leave.is_rostered !== 0,
+      affect_target: Number(leave.affect_target) === 1 || leave.affect_target === true,
+      is_half_day: Number(leave.is_half_day) === 1 || leave.is_half_day === true,
+      is_rostered: leave.is_rostered === undefined || Number(leave.is_rostered) !== 0,
     });
     setTab("leave");
   };
@@ -252,8 +266,13 @@ const RosterDayEditor = ({
               {tab === "day" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <p className="sm:col-span-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                    Daily full-day hours are set from User Monthly Tracker (monthly target ÷ working days) when the roster is generated. Monthly extra assigned hours are edited on the summary card, not per day.
+                    Daily full-day hours are set from tenure when the roster is generated. Monthly extra assigned hours are edited on the summary card, not per day.
                   </p>
+                  {day?.day_type === "Leave" && (
+                    <p className="sm:col-span-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      This day is on leave. Set Day Type to Working and submit for approval to restore it, or use the Leave tab to edit Affect Target / remove the leave.
+                    </p>
+                  )}
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Day Type</span>
                     <select
@@ -433,7 +452,14 @@ const RosterDayEditor = ({
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg"
                   >
                     <Save className="w-4 h-4" />
-                    {editingLeaveId ? "Update Leave Request" : "Add Leave Request"}
+                    {editingLeaveId ||
+                    leaves.some(
+                      (l) =>
+                        toDateOnlyString(l.start_date) === leaveForm.start_date &&
+                        toDateOnlyString(l.end_date) === leaveForm.end_date
+                    )
+                      ? "Update Leave Request"
+                      : "Add Leave Request"}
                   </button>
 
                   <div className="border-t border-slate-200 pt-4">
@@ -453,6 +479,10 @@ const RosterDayEditor = ({
                               <span className="font-medium">{leave.leave_type}</span>
                               <span className="text-slate-500 ml-2">
                                 {leave.start_date?.slice(0, 10)} → {leave.end_date?.slice(0, 10)}
+                              </span>
+                              <span className="text-slate-400 ml-2 text-xs">
+                                {Number(leave.affect_target) === 1 ? "Affects target" : "Does not affect target"}
+                                {Number(leave.is_half_day) === 1 ? " · Half day" : ""}
                               </span>
                             </div>
                             <div className="flex gap-1">
