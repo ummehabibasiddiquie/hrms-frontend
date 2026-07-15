@@ -48,6 +48,10 @@ export async function resetRegenerateRoster(payload) {
   return rosterPost("/roster/reset_regenerate", payload, ROSTER_HEAVY_TIMEOUT_MS);
 }
 
+export async function resetRegenerateEmployeeRoster(payload) {
+  return rosterPost("/roster/reset_regenerate_employee", payload, ROSTER_HEAVY_TIMEOUT_MS);
+}
+
 export async function listRosters(payload) {
   return rosterPost("/roster/list", payload);
 }
@@ -70,6 +74,10 @@ export async function submitRosterBatch(payload) {
 
 export async function withdrawRosterSubmission(payload) {
   return rosterPost("/roster/withdraw", payload);
+}
+
+export async function withdrawDraftChangeRequest(payload) {
+  return rosterPost("/roster/change_request/withdraw_draft", payload);
 }
 
 export async function approveChangeRequest(payload) {

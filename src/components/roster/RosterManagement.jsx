@@ -23,6 +23,7 @@ import {
   listRosters,
   lockRosterMonth,
   resetRegenerateRoster,
+  resetRegenerateEmployeeRoster,
   submitRosterBatch,
   unlockRosterMonth,
   withdrawRosterSubmission,
@@ -499,8 +500,8 @@ const RosterManagement = () => {
 
   const handleResetRegenerate = () => {
     setConfirmAction({
-      title: "Reset & Regenerate",
-      message: `This will deactivate all rosters for ${formatMonthYearLabel(monthYear)} and regenerate. Pending requests will be cancelled. Continue?`,
+      title: "Reset & Regenerate (All)",
+      message: `This will deactivate all rosters for ${formatMonthYearLabel(monthYear)}, clear Pending/Approved/Rejected request history for the month, and regenerate. Continue?`,
       destructive: true,
       onConfirm: () =>
         runAction("reset", async () => {
@@ -511,6 +512,30 @@ const RosterManagement = () => {
           toast.success(
             `${res.message || "Reset complete"} (${res.data?.month_year || monthYear})`
           );
+        }),
+    });
+  };
+
+  const handleResetEmployee = () => {
+    if (!selectedUserId) {
+      toast.error("Select an employee first");
+      return;
+    }
+    const empName =
+      employees.find((e) => String(e.user_id) === String(selectedUserId))?.user_name ||
+      "selected employee";
+    setConfirmAction({
+      title: "Reset & Regenerate (Employee)",
+      message: `Reset roster for ${empName} for ${formatMonthYearLabel(monthYear)}? Their Pending/Approved/Rejected requests for this month will be cleared, then the roster will be regenerated.`,
+      destructive: true,
+      onConfirm: () =>
+        runAction("reset-emp", async () => {
+          const res = await resetRegenerateEmployeeRoster({
+            user_id: Number(selectedUserId),
+            month_year: monthYear,
+            confirm_reset: true,
+          });
+          toast.success(res.message || "Employee roster reset complete");
         }),
     });
   };
@@ -833,15 +858,28 @@ const RosterManagement = () => {
                       History
                     </ActionBtn>
                     {canResetRegenerate && (
-                      <ActionBtn
-                        variant="danger"
-                        icon={RotateCcw}
-                        loading={actionLoading === "reset"}
-                        disabled={isBusy}
-                        onClick={handleResetRegenerate}
-                      >
-                        Reset ({monthYear})
-                      </ActionBtn>
+                      <>
+                        <ActionBtn
+                          variant="danger"
+                          icon={RotateCcw}
+                          loading={actionLoading === "reset-emp"}
+                          disabled={!selectedUserId || isBusy}
+                          onClick={handleResetEmployee}
+                          title="Reset & regenerate roster for the selected employee only"
+                        >
+                          Reset Employee
+                        </ActionBtn>
+                        <ActionBtn
+                          variant="danger"
+                          icon={RotateCcw}
+                          loading={actionLoading === "reset"}
+                          disabled={isBusy}
+                          onClick={handleResetRegenerate}
+                          title={`Reset & regenerate all rosters for ${monthYear}`}
+                        >
+                          Reset All ({monthYear})
+                        </ActionBtn>
+                      </>
                     )}
                   </ActionGroup>
                   )}
