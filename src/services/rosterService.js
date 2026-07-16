@@ -104,14 +104,6 @@ export async function unlockRosterMonth(payload) {
   return rosterPost("/roster/unlock", payload);
 }
 
-export async function listRosterVersions(payload) {
-  return rosterPost("/roster/versions/list", payload);
-}
-
-export async function getRosterVersionDetail(payload) {
-  return rosterPost("/roster/versions/detail", payload);
-}
-
 export async function listRosterAudit(payload = {}) {
   return rosterPost("/roster/audit/list", payload);
 }

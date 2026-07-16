@@ -10,10 +10,13 @@ dayjs.extend(customParseFormat);
 import { fetchDailyBillableReport, fetchMonthlyBillableReport } from "../../services/billableReportService";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
-import { Download, Calendar as CalendarIcon, FileSpreadsheet, X, RotateCcw, ChevronDown, FileText, BarChart3, Award } from "lucide-react";
-import { DateRangePicker } from '../common/CustomCalendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { Download, RotateCcw, FileText, BarChart3, Award, FileSpreadsheet } from "lucide-react";
+import {
+  DateRangePicker,
+  MonthYearPicker,
+  yyyyMmToMonthYear,
+  monthYearToYyyyMm,
+} from '../common/CustomCalendar';
 import AgentQCReportPage from '../../pages/AgentQCReportPage';
 
 
@@ -40,94 +43,6 @@ const BillableReport = () => {
     return 'text-red-700 bg-red-200 font-bold';
   };
   
-  // Simple MonthPicker component for selecting month/year in YYYY-MM format
-  const MonthPicker = ({ value, onChange }) => {
-    const [showPicker, setShowPicker] = useState(false);
-    const [viewYear, setViewYear] = useState(() => {
-      if (value) {
-        const [year] = value.split('-');
-        return parseInt(year);
-      }
-      return new Date().getFullYear();
-    });
-
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    const handleMonthSelect = (monthIndex) => {
-      const monthStr = String(monthIndex + 1).padStart(2, '0');
-      const dateStr = `${viewYear}-${monthStr}`;
-      onChange(dateStr);
-      setShowPicker(false);
-    };
-
-    const selectedMonth = value ? parseInt(value.split('-')[1]) - 1 : -1;
-    const selectedYear = value ? parseInt(value.split('-')[0]) : -1;
-
-    const displayValue = value ? (() => {
-      const [year, month] = value.split('-');
-      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      return `${monthNames[parseInt(month) - 1]} ${year}`;
-    })() : 'Select Month';
-
-    return (
-      <div>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
-          <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />
-          Month
-        </label>
-        <Popover open={showPicker} onOpenChange={setShowPicker}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-left flex items-center justify-between"
-            >
-              <span>{displayValue}</span>
-              <ChevronDown className="w-4 h-4 text-blue-600" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[280px] border-2 border-blue-200 bg-white p-4" align="start">
-            <div className="flex items-center justify-between mb-4">
-              <button
-                type="button"
-                onClick={() => setViewYear(y => y - 1)}
-                className="p-1.5 hover:bg-slate-100 rounded transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              </button>
-              <span className="font-bold text-sm text-slate-800">{viewYear}</span>
-              <button
-                type="button"
-                onClick={() => setViewYear(y => y + 1)}
-                className="p-1.5 hover:bg-slate-100 rounded transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {monthNames.map((month, index) => {
-                const isSelected = selectedYear === viewYear && selectedMonth === index;
-                return (
-                  <button
-                    key={month}
-                    type="button"
-                    onClick={() => handleMonthSelect(index)}
-                    className={cn(
-                      "text-sm p-2.5 rounded-lg transition-colors font-medium",
-                      isSelected
-                        ? "bg-blue-600 text-white font-bold"
-                        : "text-slate-700 hover:bg-blue-100"
-                    )}
-                  >
-                    {month}
-                  </button>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>
-    );
-  };
   // Export the visible monthly report table (with filters applied)
   const handleExportMonthlyTable = () => {
       try {
@@ -544,12 +459,16 @@ const BillableReport = () => {
                 </div>
                 
                 {/* Month Filter */}
-                <div className="flex-1 lg:flex-none lg:w-48">
-                  <MonthPicker
-                    value={monthFilter}
-                    onChange={setMonthFilter}
-                  />
-                </div>
+                <MonthYearPicker
+                  compact
+                  label="Month"
+                  selectedMonthYear={yyyyMmToMonthYear(monthFilter)}
+                  onMonthYearChange={(my) => {
+                    const yyyyMm = monthYearToYyyyMm(my);
+                    if (yyyyMm) setMonthFilter(yyyyMm);
+                  }}
+                  showAllOption={false}
+                />
                 
                 {/* Action Buttons */}
                 <div className="flex items-end gap-3">
@@ -724,12 +643,16 @@ const BillableReport = () => {
           <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
             <div className="flex flex-col sm:flex-row sm:items-end gap-4">
               {/* Month Filter */}
-              <div className="flex-1 sm:flex-none sm:w-64">
-                <MonthPicker
-                  value={monthlyMonth}
-                  onChange={setMonthlyMonth}
-                />
-              </div>
+              <MonthYearPicker
+                compact
+                label="Month"
+                selectedMonthYear={yyyyMmToMonthYear(monthlyMonth)}
+                onMonthYearChange={(my) => {
+                  const yyyyMm = monthYearToYyyyMm(my);
+                  if (yyyyMm) setMonthlyMonth(yyyyMm);
+                }}
+                showAllOption={false}
+              />
               
               {/* Action Buttons */}
               <div className="flex items-end gap-3">

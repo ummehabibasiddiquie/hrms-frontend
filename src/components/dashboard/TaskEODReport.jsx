@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calendar, Download, FileText, Loader2, X } from 'lucide-react';
+import { Download, FileText, Loader2, X } from 'lucide-react';
 import { fetchEODReportList, fetchEODReportTrackers, generateEODReport } from '../../services/projectService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { useClientPagination } from '../../hooks/useClientPagination';
 import TablePaginationBar from '../common/TablePaginationBar';
+import { DateRangePicker } from '../common/CustomCalendar';
 
 const REASON_LABELS = {
   inactive: 'Inactive',
@@ -143,18 +144,14 @@ const TaskEODReport = () => {
     fetchReportList();
   }, [fetchReportList]);
 
-  const handleFromDateChange = (event) => {
-    const nextFromDate = event.target.value;
-
+  const handleFromDateChange = (nextFromDate) => {
     setFromDate(nextFromDate);
     if (toDate && nextFromDate && nextFromDate > toDate) {
       setToDate(nextFromDate);
     }
   };
 
-  const handleToDateChange = (event) => {
-    const nextToDate = event.target.value;
-
+  const handleToDateChange = (nextToDate) => {
     setToDate(nextToDate);
     if (fromDate && nextToDate && nextToDate < fromDate) {
       setFromDate(nextToDate);
@@ -322,40 +319,17 @@ const TaskEODReport = () => {
             </div>
           </div>
           <div className="flex flex-col gap-3 xl:items-end">
-            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center gap-2 pr-1">
-                <Calendar className="w-4 h-4 text-blue-600" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Date Filter</span>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">From</label>
-                <input
-                  type="date"
-                  value={fromDate}
-                  max={toDate || undefined}
-                  onChange={handleFromDateChange}
-                  className="px-3 py-2 border border-slate-300 rounded-md bg-white text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 transition-all text-slate-700"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">To</label>
-                <input
-                  type="date"
-                  value={toDate}
-                  min={fromDate || undefined}
-                  onChange={handleToDateChange}
-                  className="px-3 py-2 border border-slate-300 rounded-md bg-white text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 transition-all text-slate-700"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                disabled={loading}
-                className="px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-100 transition-all shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Reset
-              </button>
-            </div>
+            <DateRangePicker
+              startDate={fromDate}
+              endDate={toDate}
+              onStartDateChange={handleFromDateChange}
+              onEndDateChange={handleToDateChange}
+              onClear={handleResetFilters}
+              label="Date Range Filter"
+              description=""
+              showClearButton={true}
+              noWrapper={false}
+            />
             {reportData && (
               <span className="text-sm text-slate-600">
                 {reportData.total_tasks} task{reportData.total_tasks !== 1 ? 's' : ''} found

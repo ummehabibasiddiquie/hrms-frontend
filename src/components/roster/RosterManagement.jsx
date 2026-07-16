@@ -6,7 +6,6 @@ import {
   Undo2,
   Lock,
   Unlock,
-  History,
   UserPlus,
   RotateCcw,
   Search,
@@ -52,7 +51,6 @@ import { MonthYearPicker } from "../common/CustomCalendar";
 import RosterCalendar from "./RosterCalendar";
 import RosterDayEditor from "./RosterDayEditor";
 import RosterSummaryCards from "./RosterSummaryCards";
-import RosterVersionHistory from "./RosterVersionHistory";
 import RosterApprovalQueue from "./RosterApprovalQueue";
 import RosterSubmissionTracker from "./RosterSubmissionTracker";
 import HolidayMaster from "./HolidayMaster";
@@ -123,7 +121,6 @@ const RosterManagement = () => {
   const [monthPendingAll, setMonthPendingAll] = useState([]);
   const [canWithdrawOwnSubmission, setCanWithdrawOwnSubmission] = useState(false);
   const [editorDay, setEditorDay] = useState(null);
-  const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [showActions, setShowActions] = useState(true);
@@ -844,13 +841,6 @@ const RosterManagement = () => {
                     >
                       Unlock
                     </ActionBtn>
-                    <ActionBtn
-                      icon={History}
-                      disabled={!selectedRoster}
-                      onClick={() => setShowVersionHistory(true)}
-                    >
-                      History
-                    </ActionBtn>
                     {canResetRegenerate && (
                       <>
                         <ActionBtn
@@ -875,17 +865,6 @@ const RosterManagement = () => {
                         </ActionBtn>
                       </>
                     )}
-                  </ActionGroup>
-                  )}
-                  {!canLockUnlock && (
-                  <ActionGroup title="History">
-                    <ActionBtn
-                      icon={History}
-                      disabled={!selectedRoster}
-                      onClick={() => setShowVersionHistory(true)}
-                    >
-                      Version History
-                    </ActionBtn>
                   </ActionGroup>
                   )}
                 </div>
@@ -936,12 +915,6 @@ const RosterManagement = () => {
         onSaved={() => {
           refreshRosterViews({ silent: true });
         }}
-      />
-
-      <RosterVersionHistory
-        rosterMonthId={selectedRoster?.roster_month_id}
-        isOpen={showVersionHistory}
-        onClose={() => setShowVersionHistory(false)}
       />
 
       {confirmAction && (

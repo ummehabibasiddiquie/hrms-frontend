@@ -24,7 +24,6 @@ function inferDailyHoursFromRoster(roster) {
 const RosterSummaryCards = ({
   roster,
   pendingCount = 0,
-  version = null,
   monthCalendarLocked = false,
   monthLockInfo = null,
   monthYear = "",
@@ -71,11 +70,6 @@ const RosterSummaryCards = ({
           <span className={`text-xs font-semibold px-2.5 py-1 rounded-md ${statusBadgeClass(roster.status)}`}>
             {roster.status}
           </span>
-          {version != null && (
-            <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-slate-100 text-slate-600">
-              v{version}
-            </span>
-          )}
           {pendingCount > 0 && (
             <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
               {pendingCount} pending

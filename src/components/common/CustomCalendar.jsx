@@ -14,6 +14,33 @@ import { cn } from '@/lib/utils';
  * Theme: Blue and White
  */
 
+const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+/** Convert YYYY-MM → JAN2026 (MonthYearPicker value). */
+export function yyyyMmToMonthYear(yyyyMm) {
+  if (!yyyyMm || yyyyMm === 'all') return yyyyMm || 'all';
+  const [year, month] = String(yyyyMm).split('-');
+  const idx = Number(month) - 1;
+  if (!year || Number.isNaN(idx) || idx < 0 || idx > 11) return 'all';
+  return `${MONTH_ABBR[idx]}${year}`;
+}
+
+/** Convert JAN2026 → YYYY-MM. */
+export function monthYearToYyyyMm(monthYear) {
+  if (!monthYear || monthYear === 'all') return '';
+  const match = String(monthYear).trim().match(/^([A-Za-z]{3})(\d{4})$/);
+  if (!match) return '';
+  const idx = MONTH_ABBR.indexOf(match[1].toUpperCase());
+  if (idx < 0) return '';
+  return `${match[2]}-${String(idx + 1).padStart(2, '0')}`;
+}
+
+/** Current month as YYYY-MM. */
+export function getCurrentYyyyMm() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 // Date Range Picker Component with shadcn Calendar
 export const DateRangePicker = ({ 
   startDate, 
@@ -479,5 +506,8 @@ export const MonthYearPicker = ({
 // Export both components as default for convenience
 export default {
   DateRangePicker,
-  MonthYearPicker
+  MonthYearPicker,
+  yyyyMmToMonthYear,
+  monthYearToYyyyMm,
+  getCurrentYyyyMm,
 };

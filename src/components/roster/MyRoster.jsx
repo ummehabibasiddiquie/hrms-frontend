@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { listChangeRequests, listRosters, listRosterVersions } from "../../services/rosterService";
+import { listChangeRequests, listRosters } from "../../services/rosterService";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
 import {
   formatMonthYearLabel,
@@ -12,7 +12,6 @@ import LoadingSpinner from "../common/LoadingSpinner";
 import RosterCalendar from "./RosterCalendar";
 import RosterSummaryCards from "./RosterSummaryCards";
 import RosterSubmissionTracker from "./RosterSubmissionTracker";
-import RosterVersionHistory from "./RosterVersionHistory";
 import { MonthYearPicker } from "../common/CustomCalendar";
 
 const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -28,8 +27,6 @@ const MyRoster = () => {
   const [monthYear, setMonthYear] = useState(getCurrentMonthYear());
   const [roster, setRoster] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [version, setVersion] = useState(null);
-  const [showHistory, setShowHistory] = useState(false);
   const [pendingRequests, setPendingRequests] = useState([]);
 
   const loadPendingOverlay = useCallback(async () => {
@@ -60,16 +57,7 @@ const MyRoster = () => {
         include_days: true,
       });
       const rosters = res.data?.rosters || [];
-      const mine = rosters[0] || null;
-      setRoster(mine);
-
-      if (mine?.roster_month_id) {
-        const vRes = await listRosterVersions({ roster_month_id: mine.roster_month_id });
-        const versions = vRes.data || [];
-        setVersion(versions.length ? versions[versions.length - 1].roster_version : null);
-      } else {
-        setVersion(null);
-      }
+      setRoster(rosters[0] || null);
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
       setRoster(null);
@@ -157,7 +145,7 @@ const MyRoster = () => {
         </div>
       ) : (
         <>
-          <RosterSummaryCards roster={roster} version={version} />
+          <RosterSummaryCards roster={roster} />
           {hasPendingOverlay && (
             <div className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-4 py-2">
               Blue dashed days show changes your manager submitted that are still awaiting admin approval.
@@ -171,29 +159,12 @@ const MyRoster = () => {
             pendingRequests={pendingRequests}
             readOnly
           />
-          {roster.roster_month_id && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowHistory(true)}
-                className="text-sm text-blue-700 font-semibold hover:underline"
-              >
-                View Version History
-              </button>
-            </div>
-          )}
         </>
       )}
 
       <RosterSubmissionTracker
         variant="employee"
         defaultMonthYear={monthYear}
-      />
-
-      <RosterVersionHistory
-        rosterMonthId={roster?.roster_month_id}
-        isOpen={showHistory}
-        onClose={() => setShowHistory(false)}
       />
     </div>
   );
