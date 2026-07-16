@@ -29,6 +29,9 @@ import {
 } from 'lucide-react';
 import { getFriendlyErrorMessage } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
+import { useRoutedSubTab } from '../../hooks/useRoutedDashboardTab';
+import PaginatedSlice from '../common/PaginatedSlice';
+import SubTabsBar from '../common/SubTabsBar';
 import { DateRangePicker } from '../common/CustomCalendar';
 
 const QAAgentAudit = () => {
@@ -130,8 +133,10 @@ const QAAgentAudit = () => {
     return now.toISOString().split('T')[0];
   };
 
-  // State management
-  const [activeTab, setActiveTab] = useState('audit_form'); // 'audit_form' or 'audit_report'
+  // State management — synced to ?subtab=
+  const [activeTab, setActiveTab] = useRoutedSubTab('audit_form', {
+    parentTab: 'qa_agent_audit',
+  });
   
   // Separate state for form filters
   const [formDateRange, setFormDateRange] = useState({ start: '', end: '' });
@@ -781,42 +786,16 @@ const QAAgentAudit = () => {
         </div>
 
         {/* Tabs Navigation */}
-        <div className="bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden">
-          <div className="flex border-b border-slate-200">
-            <button
-              onClick={() => setActiveTab('audit_form')}
-              className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
-                activeTab === 'audit_form'
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <FileText className="w-4 h-4" />
-                <span>QA Agent Audit Form</span>
-              </div>
-              {activeTab === 'audit_form' && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('audit_report')}
-              className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
-                activeTab === 'audit_report'
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <FileCheck className="w-4 h-4" />
-                <span>QA Agent Audit Report</span>
-              </div>
-              {activeTab === 'audit_report' && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              )}
-            </button>
-          </div>
-        </div>
+        <SubTabsBar
+          bordered
+          equalWidth
+          activeTab={activeTab}
+          onChange={setActiveTab}
+          tabs={[
+            { id: 'audit_form', label: 'QA Agent Audit Form', icon: FileText },
+            { id: 'audit_report', label: 'QA Agent Audit Report', icon: FileCheck },
+          ]}
+        />
 
         {/* Tab Content */}
         {activeTab === 'audit_form' && (
@@ -886,7 +865,8 @@ const QAAgentAudit = () => {
             </p>
           </div>
         ) : (
-          filteredQAAgents.map(({ qaAgentName, records }) => {
+          <PaginatedSlice items={filteredQAAgents} itemLabel="QA agents">
+            {(pagedAgents) => pagedAgents.map(({ qaAgentName, records }) => {
             const isExpanded = expandedAgents[qaAgentName];
             const filteredRecords = records;
             
@@ -980,6 +960,8 @@ const QAAgentAudit = () => {
 
                 {/* Collapsible Audit Records Table */}
                 {isExpanded && (
+                  <PaginatedSlice items={filteredRecords} itemLabel="audit records">
+                    {(pagedItems) => (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-blue-100">
                       <thead className="bg-blue-50">
@@ -996,7 +978,7 @@ const QAAgentAudit = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-blue-50">
-                        {filteredRecords.length === 0 ? (
+                        {pagedItems.length === 0 ? (
                           <tr>
                             <td colSpan="9" className="px-6 py-12 text-center">
                               <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -1008,7 +990,7 @@ const QAAgentAudit = () => {
                             </td>
                           </tr>
                         ) : (
-                          filteredRecords.map((row, idx) => (
+                          pagedItems.map((row, idx) => (
                           <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
                             <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
                               <div className="flex flex-col">
@@ -1087,10 +1069,13 @@ const QAAgentAudit = () => {
                       </tbody>
                     </table>
                   </div>
+                    )}
+                  </PaginatedSlice>
                 )}
               </div>
             );
-          })
+          })}
+          </PaginatedSlice>
         )}
       </div>
           </>
@@ -1165,7 +1150,8 @@ const QAAgentAudit = () => {
             </p>
           </div>
         ) : (
-          filteredReportAgents.map(({ qaAgentName, records }) => {
+          <PaginatedSlice items={filteredReportAgents} itemLabel="QA agents">
+            {(pagedAgents) => pagedAgents.map(({ qaAgentName, records }) => {
             const isExpanded = expandedAgents[qaAgentName];
             const filteredRecords = records;
             
@@ -1260,6 +1246,8 @@ const QAAgentAudit = () => {
 
                 {/* Collapsible Audit Records Table */}
                 {isExpanded && (
+                  <PaginatedSlice items={filteredRecords} itemLabel="audit records">
+                    {(pagedItems) => (
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-blue-100">
                       <thead className="bg-blue-50">
@@ -1275,7 +1263,7 @@ const QAAgentAudit = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-blue-50">
-                        {filteredRecords.length === 0 ? (
+                        {pagedItems.length === 0 ? (
                           <tr>
                             <td colSpan="8" className="px-6 py-12 text-center">
                               <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -1287,7 +1275,7 @@ const QAAgentAudit = () => {
                             </td>
                           </tr>
                         ) : (
-                          filteredRecords.map((row, idx) => (
+                          pagedItems.map((row, idx) => (
                           <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
                             <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
                               <div className="flex flex-col">
@@ -1331,10 +1319,13 @@ const QAAgentAudit = () => {
                       </tbody>
                     </table>
                   </div>
+                    )}
+                  </PaginatedSlice>
                 )}
               </div>
             );
-          })
+          })}
+          </PaginatedSlice>
         )}
       </div>
           </>

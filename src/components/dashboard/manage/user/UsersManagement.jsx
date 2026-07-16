@@ -16,6 +16,8 @@ import ErrorMessage from "../../../common/ErrorMessage";
 import SearchableSelect from "../../../common/SearchableSelect";
 import config from "../../../../config/environment";
 import { log, logError } from "../../../../config/environment";
+import { useClientPagination } from "../../../../hooks/useClientPagination";
+import TablePaginationBar from "../../../common/TablePaginationBar";
 
 const apiBaseURL = config.apiBaseUrl;
 
@@ -193,6 +195,10 @@ const UsersManagement = ({
                return matchesName && matchesEmail && matchesManager && matchesRole;
           });
      }, [users, filterUser]);
+
+     const userPagination = useClientPagination(filteredUsers, {
+          resetKeys: [filterUser.name, filterUser.email, filterUser.reportingManager, filterUser.role],
+     });
 
      const clearFieldError = (field) => {
           setFormErrors((prev) => {
@@ -747,12 +753,13 @@ const UsersManagement = ({
                ) : (
                     <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
                          <UsersTable
-                              users={filteredUsers}
+                              users={userPagination.pagedItems}
                               handleDeleteUser={handleDeleteUser}
                               openEditUserModal={handleOpenEditUserModal}
                               handleToggleStatus={handleToggleStatus}
                               readOnly={readOnly}
                          />
+                         <TablePaginationBar {...userPagination} itemLabel="users" />
                     </div>
                )}
 

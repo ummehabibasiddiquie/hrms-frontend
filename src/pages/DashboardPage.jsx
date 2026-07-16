@@ -2,12 +2,11 @@
 // import BillableReport from '../components/AgentDashboard/BillableReport';
 import Tracker from '../components/AgentDashboard/Tracker';
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Settings, Lock, File, CalendarDays } from 'lucide-react';
 import { MONTHLY_GOAL, SHIFT_START_HOUR, SHIFT_HOURS_COUNT } from '../utils/constants';
 import { isWithinRange, getComparisonRange } from '../utils/dateHelpers';
 import FilterBar from '../components/dashboard/FilterBar';
-import TabsNavigation from '../components/dashboard/TabsNavigation';
 import OverviewTab from '../components/dashboard/overview/OverviewTab';
 import QATrackerReport from '../components/dashboard/QATrackerReport';
 import QAAgentList from '../components/dashboard/QAAgentList';
@@ -36,6 +35,9 @@ import ErrorMessage from '../components/common/ErrorMessage';
 import AgentTabsNavigation from '../components/AgentDashboard/AgentTabsNavigation';
 import RosterManagement from '../components/roster/RosterManagement';
 import MyRoster from '../components/roster/MyRoster';
+import QATabsNavigation from '../components/QAAgentDashboard/QATabsNavigation';
+import SubTabsBar from '../components/common/SubTabsBar';
+import { dashboardTabUrl, isAnalyticsTab } from '../routes/paths';
 
 // Import db if needed for admin operations
 import db from '../utils/db';
@@ -57,7 +59,8 @@ const DashboardPage = ({
   } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
   const { dropdowns, loadDropdowns } = useUserDropdowns();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const viewParam = searchParams.get('view');
   const [selectedAgent, setSelectedAgent] = useState(null);
   const emptyDate = '';
@@ -92,33 +95,24 @@ const DashboardPage = ({
   const isAssistantManager = roleId === 4 || String(designation).toLowerCase() === 'assistant manager' || String(role).toLowerCase().includes('assistant');
   const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
   const canViewTrackerReport = isQA || isAssistantManager || isProjectManager;
-  const [activeTab, setActiveTab] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('tab') || 'overview';
-  });
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
   const [adminRequests, setAdminRequests] = useState([]);
   const [managedUsers, setManagedUsers] = useState([]);
   const [loadingManagedUsers, setLoadingManagedUsers] = useState(false);
   const [managedProjects, setManagedProjects] = useState([]);
   const [loadingManagedProjects, setLoadingManagedProjects] = useState(false);
-  const [adminActiveTab, setAdminActiveTab] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('adminTab') || 'users';
-  });
+  const [adminActiveTab, setAdminActiveTab] = useState(() => searchParams.get('adminTab') || 'users');
   const [error, setError] = useState(null);
   const canAccessRoster = isSuperAdmin || isAdmin || isProjectManager || isAssistantManager;
   const canAccessManage = canManageUsers || canManageProjects || isSuperAdmin || canAccessRoster;
   const canViewIncentivesTab = isAdmin || userRole === 'FINANCE_HR' || userRole === 'PROJECT_MANAGER' || isSuperAdmin;
   const canViewAdherence = isAdmin || userRole === 'PROJECT_MANAGER' || isQA || isSuperAdmin;
 
-  // Keep activeTab in sync with ?tab= param
+  // Keep tabs in sync with ?tab= / ?adminTab= query params
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tabParam = params.get('tab');
+    const tabParam = searchParams.get('tab');
     if (tabParam === 'roster_management') {
-      params.set('tab', 'manage');
-      params.set('adminTab', 'roster');
-      window.history.replaceState({}, '', `/dashboard?${params.toString()}`);
+      setSearchParams({ tab: 'manage', adminTab: 'roster' }, { replace: true });
       setActiveTab('manage');
       setAdminActiveTab('roster');
       return;
@@ -126,19 +120,16 @@ const DashboardPage = ({
     if (tabParam && tabParam !== activeTab) {
       setActiveTab(tabParam);
     }
-    const adminTabParam = params.get('adminTab');
+    const adminTabParam = searchParams.get('adminTab');
     if (adminTabParam && adminTabParam !== adminActiveTab) {
       setAdminActiveTab(adminTabParam);
     }
-  }, [window.location.search]);
+  }, [searchParams, activeTab, adminActiveTab, setSearchParams]);
 
   const setManageSubTab = useCallback((subTab) => {
     setAdminActiveTab(subTab);
-    const params = new URLSearchParams(window.location.search);
-    params.set('tab', 'manage');
-    params.set('adminTab', subTab);
-    window.history.pushState({}, '', `/dashboard?${params.toString()}`);
-  }, []);
+    navigate(dashboardTabUrl('manage', { adminTab: subTab }));
+  }, [navigate]);
 
   useEffect(() => {
     if (activeTab !== 'manage') return;
@@ -153,12 +144,16 @@ const DashboardPage = ({
     }
   }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, canManageProjects, canAccessRoster, setManageSubTab]);
 
+  const setDashboardTab = useCallback((tab) => {
+    setActiveTab(tab);
+    navigate(dashboardTabUrl(tab));
+  }, [navigate]);
+
   useEffect(() => {
     if (activeTab === 'task_eod_report') {
-      setActiveTab('overview');
+      setDashboardTab('overview');
     }
-  }, [activeTab]);
-
+  }, [activeTab, setDashboardTab]);
 
   // Initialize admin data when Manage tab is active
   useEffect(() => {
@@ -347,7 +342,7 @@ const DashboardPage = ({
       {/* Debug: Show current active tab */}
       {console.log('[DashboardPage Render] activeTab:', activeTab)}
 
-      {activeTab === 'overview' && (() => {
+      {isAnalyticsTab(activeTab) && (() => {
         const isDefault = !dateRange.start && !dateRange.end;
         let rangeToSend = dateRange;
         if (isDefault && isAgent) {
@@ -382,8 +377,22 @@ const DashboardPage = ({
         } else if (isAssistantManager) {
           return <AssistantManagerDashboard />;
         } else if (isQA) {
+          // my_roster has a dedicated block below with MyRoster
+          if (activeTab === 'my_roster') return null;
           return <QAAgentDashboard embedded={true} />;
         } else if (isAgent) {
+          if (activeTab === 'billable_report') {
+            return (
+              <div className="max-w-7xl mx-auto mt-2">
+                <AgentTabsNavigation activeTab={activeTab} setActiveTab={setDashboardTab} />
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-4">
+                  <AgentBillableReport hideTabBar />
+                </div>
+              </div>
+            );
+          }
+          // my_roster has a dedicated block below; other agent analytics tabs use OverviewTab
+          if (activeTab === 'my_roster') return null;
           return (
             <OverviewTab
               analytics={emptyAnalytics}
@@ -409,34 +418,9 @@ const DashboardPage = ({
 
 
 
-      {/* Agent Billable Report tab and view */}
-      {activeTab === 'billable_report' && isAgent && (
-        <div className="max-w-7xl mx-auto mt-2">
-          {/* Navigation Tab Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-2 mb-2">
-            {/* Tab navigation bar component or markup here */}
-            {/* If AgentBillableReport renders the tab bar, you may need to move it out and render here instead */}
-          </div>
-          {/* Filter and Table Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <AgentBillableReport hideTabBar />
-          </div>
-        </div>
-      )}
+      {/* Agent Billable Report — handled above via analytics tabs */}
 
-      {/* User Monthly Report tab and view for Assistant Manager */}
-      {activeTab === 'user_monthly_report' && isAssistantManager && (
-        <div className="max-w-7xl mx-auto mt-2">
-          {/* Navigation Tab Card */}
-          <AssistantManagerTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
-          {/* Gap between cards */}
-          <div className="h-4" />
-          {/* Filter and Table Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <UserMonthlyReport />
-          </div>
-        </div>
-      )}
+      {/* User Monthly Report — handled by role dashboards via ?tab=user_monthly_report */}
 
       {/* Agent's Files & QC Report tab for Assistant Manager and QA */}
       {activeTab === 'agent_file_report' && (isAssistantManager || isQA) && (
@@ -468,86 +452,46 @@ const DashboardPage = ({
               </div>
             </div>
               
-            {/* Admin Tabs Navigation - Show tabs but they'll display permission messages if no access */}
-            <div className="flex overflow-x-auto border-b border-slate-200 mb-6 scrollbar-hide">
-              {(canManageUsers || isSuperAdmin || isAdmin) && (
-              <button 
-                onClick={() => setManageSubTab('users')}
-                className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
-                  adminActiveTab === 'users' 
-                    ? 'border-blue-600 text-blue-700' 
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                User Management
-              </button>
-              )}
-              {/* Show Projects & Targets tab for Assistant Manager */}
-              {(isAssistantManager || canManageProjects) && (
-                <button 
-                  onClick={() => setManageSubTab('projects')}
-                  className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
-                    adminActiveTab === 'projects' 
-                      ? 'border-blue-600 text-blue-700' 
-                      : 'border-transparent text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Projects & Targets
-                </button>
-              )}
-              {/* AFD Management tab */}
-              {(isAssistantManager || canManageProjects) && (
-                <button 
-                  onClick={() => setManageSubTab('afd')}
-                  className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
-                    adminActiveTab === 'afd' 
-                      ? 'border-blue-600 text-blue-700' 
-                      : 'border-transparent text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  AFD Management
-                </button>
-              )}
-              {/* Project Category tab */}
-              {(isSuperAdmin || isAdmin) && (
-              <button 
-                onClick={() => setManageSubTab('category')}
-                className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
-                  adminActiveTab === 'category' 
-                    ? 'border-blue-600 text-blue-700' 
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Project Category
-              </button>
-              )}
-              {/* User Permission tab */}
-              {(isSuperAdmin || isAdmin) && (
-              <button 
-                onClick={() => setManageSubTab('permissions')}
-                className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${
-                  adminActiveTab === 'permissions' 
-                    ? 'border-blue-600 text-blue-700' 
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                User Permission
-              </button>
-              )}
-              {canAccessRoster && (
-                <button
-                  onClick={() => setManageSubTab('roster')}
-                  className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap flex items-center gap-2 ${
-                    adminActiveTab === 'roster'
-                      ? 'border-blue-600 text-blue-700'
-                      : 'border-transparent text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  <CalendarDays className="w-4 h-4" />
-                  Roster Management
-                </button>
-              )}
-            </div>
+            {/* Admin Tabs Navigation */}
+            <SubTabsBar
+              className="mb-6"
+              bordered
+              activeTab={adminActiveTab}
+              onChange={setManageSubTab}
+              tabs={[
+                {
+                  id: 'users',
+                  label: 'User Management',
+                  hidden: !(canManageUsers || isSuperAdmin || isAdmin),
+                },
+                {
+                  id: 'projects',
+                  label: 'Projects & Targets',
+                  hidden: !(isAssistantManager || canManageProjects),
+                },
+                {
+                  id: 'afd',
+                  label: 'AFD Management',
+                  hidden: !(isAssistantManager || canManageProjects),
+                },
+                {
+                  id: 'category',
+                  label: 'Project Category',
+                  hidden: !(isSuperAdmin || isAdmin),
+                },
+                {
+                  id: 'permissions',
+                  label: 'User Permission',
+                  hidden: !(isSuperAdmin || isAdmin),
+                },
+                {
+                  id: 'roster',
+                  label: 'Roster Management',
+                  icon: CalendarDays,
+                  hidden: !canAccessRoster,
+                },
+              ]}
+            />
 
             {/* Admin Tab Content */}
             {adminActiveTab === 'users' && (
@@ -649,15 +593,16 @@ const DashboardPage = ({
           {isAgent && (
             <AgentTabsNavigation
               activeTab={activeTab}
-              setActiveTab={(tab) => {
-                const params = new URLSearchParams(window.location.search);
-                params.set('tab', tab);
-                window.history.pushState({}, '', `/dashboard?${params.toString()}`);
-                setActiveTab(tab);
-              }}
+              setActiveTab={setDashboardTab}
             />
           )}
-          <div className={isAgent ? 'mt-4' : ''}>
+          {isQA && (
+            <QATabsNavigation
+              activeTab={activeTab}
+              setActiveTab={setDashboardTab}
+            />
+          )}
+          <div className="mt-4">
             <MyRoster />
           </div>
         </div>

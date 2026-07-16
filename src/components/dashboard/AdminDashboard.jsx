@@ -13,6 +13,7 @@ import QATrackerReport from './QATrackerReport';
 import QAAgentList from './QAAgentList';
 import QAAgentAudit from './QAAgentAudit';
 import { DateRangePicker } from '../common/CustomCalendar';
+import { useRoutedDashboardTab } from '../../hooks/useRoutedDashboardTab';
 
 const AdminDashboard = () => {
   // StatCard component for dashboard stats
@@ -61,8 +62,8 @@ const AdminDashboard = () => {
     </div>
   );
 
-  // Tab state for navigation
-  const [activeTab, setActiveTab] = useState('overview');
+  // Tab state synced to ?tab= (same pattern as Manage → adminTab)
+  const [activeTab, setActiveTab] = useRoutedDashboardTab('overview');
   const { user } = useAuth();
   // Project/task name mapping state
   const [projectNameMap, setProjectNameMap] = useState({});

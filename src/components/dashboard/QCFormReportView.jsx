@@ -11,6 +11,8 @@ import { useAuth } from "../../context/AuthContext";
 import { getQCRecordsList } from "../../services/qcService";
 import { exportToCSV } from '../../utils/csvExport';
 import { toast } from 'react-hot-toast';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import TablePaginationBar from '../common/TablePaginationBar';
 
 const QCFormReportView = () => {
   const { user } = useAuth();
@@ -87,6 +89,10 @@ const QCFormReportView = () => {
 
     return filtered;
   }, [qcReports, searchQuery, statusFilter, startDate, endDate]);
+
+  const reportsPagination = useClientPagination(filteredReports, {
+    resetKeys: [searchQuery, statusFilter, startDate, endDate],
+  });
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -494,7 +500,7 @@ const QCFormReportView = () => {
                   </td>
                 </tr>
               ) : (
-                filteredReports.map((report, index) => {
+                reportsPagination.pagedItems.map((report, index) => {
                   const evalDateTime = report.created_at ? formatDateTime(report.created_at) : { date: "N/A", time: "N/A" };
                   const workDate = report.date_of_file_submission ? formatDate(report.date_of_file_submission) : "N/A";
                   
@@ -658,6 +664,7 @@ const QCFormReportView = () => {
             </tbody>
           </table>
         </div>
+        <TablePaginationBar {...reportsPagination} itemLabel="reports" />
       </div>
 
       {/* Stats Cards */}

@@ -8,6 +8,7 @@ import ErrorMessage from '../common/ErrorMessage';
 import * as XLSX from 'xlsx';
 import { MonthYearPicker } from '../common/CustomCalendar';
 import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
+import PaginatedSlice from '../common/PaginatedSlice';
 import { exportToCSV } from '../../utils/csvExport';
 
 const ProjectMonthlyReport = () => {
@@ -577,6 +578,12 @@ const ProjectMonthlyReport = () => {
                     </div>
 
                     {/* Table */}
+                    <PaginatedSlice
+                      items={filteredMonthData}
+                      resetKeys={[searchTerm, monthYear]}
+                      itemLabel="projects"
+                    >
+                      {(pagedItems) => (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200 border-collapse">
                         <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
@@ -599,7 +606,7 @@ const ProjectMonthlyReport = () => {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
-                          {filteredMonthData.map((record) => (
+                          {pagedItems.map((record) => (
                   <tr key={`${record.project_id}-${monthYear}`} className="transition-all duration-200">
                     {record.isNew && addingProjectId === record.project_id && addingMonthYear === monthYear ? (
                       // Add Mode - for new records
@@ -801,6 +808,8 @@ const ProjectMonthlyReport = () => {
               </tbody>
             </table>
                     </div>
+                      )}
+                    </PaginatedSlice>
                   </div>
                 )}
               </div>

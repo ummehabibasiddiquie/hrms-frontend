@@ -24,6 +24,8 @@ import {
 import { getFriendlyErrorMessage } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
 import { DateRangePicker } from '../common/CustomCalendar';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import TablePaginationBar from '../common/TablePaginationBar';
 
 const AgentQCReport = () => {
   const { user } = useAuth();
@@ -213,6 +215,10 @@ const AgentQCReport = () => {
       return recordDate >= start && recordDate <= end;
     });
   }, [allQcData, startDate, endDate]);
+
+  const qcPagination = useClientPagination(qcData, {
+    resetKeys: [startDate, endDate],
+  });
 
   // Fetch QC report data
   useEffect(() => {
@@ -411,7 +417,7 @@ const AgentQCReport = () => {
               </thead>
               <tbody className="bg-white divide-y divide-blue-50">
                 {qcData.length > 0 ? (
-                  qcData.map((row, idx) => {
+                  qcPagination.pagedItems.map((row, idx) => {
                     const dateTime = formatDateTime(row.evaluation_datetime);
                     const errorCount = Array.isArray(row.error_list) ? row.error_list.length : 
                                        (typeof row.error_list === 'string' && row.error_list !== '-' ? 
@@ -517,6 +523,7 @@ const AgentQCReport = () => {
                 )}
               </tbody>
             </table>
+            <TablePaginationBar {...qcPagination} itemLabel="QC records" />
           </div>
         )}
       </div>

@@ -9,6 +9,7 @@ import { exportToCSV } from '../../utils/csvExport';
 import { MonthYearPicker } from '../common/CustomCalendar';
 import SearchableSelect from '../common/SearchableSelect';
 import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
+import PaginatedSlice from '../common/PaginatedSlice';
 
 // Helper to get current month in format JAN2026
 const getCurrentMonthYear = () => {
@@ -796,6 +797,12 @@ const UserMonthlyReport = () => {
                     </div>
 
                     {/* Table */}
+                    <PaginatedSlice
+                      items={filteredMonthData}
+                      resetKeys={[searchTerm, selectedTeam, monthYear]}
+                      itemLabel="users"
+                    >
+                      {(pagedItems) => (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200 border-collapse">
                         <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
@@ -813,7 +820,7 @@ const UserMonthlyReport = () => {
                         <tbody className="bg-white divide-y divide-slate-100">
                           {filteredMonthData.length > 0 ? (
                             <>
-                            {filteredMonthData.map((record) => {
+                            {pagedItems.map((record) => {
                               // Check if this record is being edited
                               const isEditing = editingId === record.id;
                               const hasData = record.id && record.submitted;
@@ -986,6 +993,8 @@ const UserMonthlyReport = () => {
                         </tbody>
                       </table>
                     </div>
+                      )}
+                    </PaginatedSlice>
                   </div>
                 )}
               </div>

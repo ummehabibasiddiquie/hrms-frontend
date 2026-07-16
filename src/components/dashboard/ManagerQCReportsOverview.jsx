@@ -2,8 +2,10 @@
  * File: ManagerQCReportsOverview.jsx
  * Description: Manager/Admin comprehensive view of all QC activities and reports
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import TablePaginationBar from '../common/TablePaginationBar';
 import {
   FileCheck,
   CheckCircle2,
@@ -63,6 +65,10 @@ const ManagerQCReportsOverview = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  const qcPagination = useClientPagination(filteredRecords, {
+    resetKeys: [searchTerm, startDate, endDate],
+  });
 
 
   // Fetch QC history data
@@ -706,7 +712,7 @@ const ManagerQCReportsOverview = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredRecords.map((record, index) => (
+                  qcPagination.pagedItems.map((record, index) => (
                     <React.Fragment key={record.id || index}>
                     <tr className="hover:bg-slate-50 transition-colors">
                       {/* Evaluation Date - created_at */}
@@ -1002,6 +1008,7 @@ const ManagerQCReportsOverview = () => {
               </tbody>
             </table>
           </div>
+          <TablePaginationBar {...qcPagination} itemLabel="QC records" />
         </div>
       </div>
 

@@ -3,6 +3,8 @@
  * Description: QA Agent's view of all QC forms they've submitted with complete history
  */
 import React, { useState, useEffect } from 'react';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import TablePaginationBar from '../common/TablePaginationBar';
 import { toast } from 'react-hot-toast';
 import {
   FileCheck,
@@ -120,6 +122,10 @@ const QAAgentQCFormReport = () => {
 
     setFilteredRecords(filtered);
   }, [searchTerm, statusFilter, dateRange, qcRecords]);
+
+  const recordsPagination = useClientPagination(filteredRecords, {
+    resetKeys: [searchTerm, statusFilter, dateRange.start, dateRange.end],
+  });
 
   const getStatusBadge = (status) => {
     if (status === 'regular' || status === 'completed') {
@@ -611,7 +617,7 @@ const QAAgentQCFormReport = () => {
                   </td>
                 </tr>
               ) : (
-                filteredRecords.map((record) => {
+                recordsPagination.pagedItems.map((record) => {
                   const isExpanded = expandedRow === record.id;
                   const historyItems = buildHistoryItems(record);
 
@@ -773,6 +779,7 @@ const QAAgentQCFormReport = () => {
             </tbody>
           </table>
         </div>
+        <TablePaginationBar {...recordsPagination} itemLabel="QC records" />
       </div>
 
       {/* Error Modal */}

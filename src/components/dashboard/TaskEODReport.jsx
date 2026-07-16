@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, Download, FileText, Loader2, X } from 'lucide-react';
 import { fetchEODReportList, fetchEODReportTrackers, generateEODReport } from '../../services/projectService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import TablePaginationBar from '../common/TablePaginationBar';
 
 const REASON_LABELS = {
   inactive: 'Inactive',
@@ -91,6 +93,10 @@ const TaskEODReport = () => {
   const [toDate, setToDate] = useState(defaultRange.toDate);
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const tasks = reportData?.tasks ?? [];
+  const taskPagination = useClientPagination(tasks, {
+    resetKeys: [reportData?.from_date, reportData?.to_date],
+  });
   const [generating, setGenerating] = useState(null);
   const [trackerModal, setTrackerModal] = useState({
     open: false,
@@ -388,7 +394,7 @@ const TaskEODReport = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {reportData.tasks.map((task, index) => (
+                {taskPagination.pagedItems.map((task, index) => (
                   <tr key={`${task.task_id}-${task.project_id}-${index}`} className={`${getDayColorClass(formatDisplayDateWithDay(task.date)) ? 'bg-orange-50 border-l-4 border-l-orange-800' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
                     <td className="py-4 px-4 text-slate-800 font-semibold whitespace-pre-line">
                       <div className={getDayColorClass(formatDisplayDateWithDay(task.date))}>{formatDisplayDateWithDay(task.date)}</div>
@@ -432,6 +438,7 @@ const TaskEODReport = () => {
                 ))}
               </tbody>
             </table>
+            <TablePaginationBar {...taskPagination} itemLabel="tasks" />
           </div>
         )}
       </div>

@@ -24,6 +24,8 @@ import {
   PaginationPrevious,
 } from "../ui/pagination";
 import TaskEODReport from "./TaskEODReport";
+import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
+import SubTabsBar from "../common/SubTabsBar";
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -38,8 +40,10 @@ const QATrackerReport = () => {
   const { user } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
   
-  // Sub-tab state
-  const [activeSubTab, setActiveSubTab] = useState('tracker_report');
+  // Sub-tab state synced to ?subtab= (e.g. /dashboard?tab=tracker_report&subtab=task_eod_report)
+  const [activeSubTab, setActiveSubTab] = useRoutedSubTab('tracker_report', {
+    parentTab: 'tracker_report',
+  });
   
   // Check if user is QA agent (QA agents should not see edit/delete actions)
   const roleId = user?.role_id;
@@ -91,7 +95,7 @@ const QATrackerReport = () => {
     if (activeSubTab === 'task_eod_report' && !canAccessTaskEODReport) {
       setActiveSubTab('tracker_report');
     }
-  }, [activeSubTab, canAccessTaskEODReport]);
+  }, [activeSubTab, canAccessTaskEODReport, setActiveSubTab]);
   
   // Edit modal dropdown states
   const [showEditProjectDropdown, setShowEditProjectDropdown] = useState(false);
@@ -1427,44 +1431,21 @@ const QATrackerReport = () => {
         </div>
 
         {/* Sub-tab Navigation */}
-        <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
-          <div className="flex overflow-x-auto border-b border-slate-200 scrollbar-hide">
-            <button
-              onClick={() => setActiveSubTab('tracker_report')}
-              className={`flex-1 min-w-fit px-6 py-4 text-sm font-bold transition-all relative whitespace-nowrap ${
-                activeSubTab === 'tracker_report'
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <UsersIcon className="w-4 h-4" />
-                <span>Tracker Entries</span>
-              </div>
-              {activeSubTab === 'tracker_report' && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              )}
-            </button>
-            {canAccessTaskEODReport && (
-              <button
-                onClick={() => setActiveSubTab('task_eod_report')}
-                className={`flex-1 min-w-fit px-6 py-4 text-sm font-bold transition-all relative whitespace-nowrap ${
-                  activeSubTab === 'task_eod_report'
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  <span>Task EOD Report</span>
-                </div>
-                {activeSubTab === 'task_eod_report' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-                )}
-              </button>
-            )}
-          </div>
-        </div>
+        <SubTabsBar
+          bordered
+          equalWidth
+          activeTab={activeSubTab}
+          onChange={setActiveSubTab}
+          tabs={[
+            { id: 'tracker_report', label: 'Tracker Entries', icon: UsersIcon },
+            {
+              id: 'task_eod_report',
+              label: 'Task EOD Report',
+              icon: FileText,
+              hidden: !canAccessTaskEODReport,
+            },
+          ]}
+        />
 
         {/* Sub-tab Content */}
         {activeSubTab === 'task_eod_report' && canAccessTaskEODReport ? (

@@ -29,7 +29,9 @@ import {
   withdrawRosterSubmission,
 } from "../../services/rosterService";
 import { useRosterRoles } from "../../hooks/useRosterRoles";
+import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import SubTabsBar from "../common/SubTabsBar";
 import {
   filterEmployeesByTeam,
   formatMonthYearLabel,
@@ -103,7 +105,9 @@ const RosterManagement = () => {
     canModifyHolidayMaster,
   } = useRosterRoles();
 
-  const [view, setView] = useState("calendar");
+  const [view, setView] = useRoutedSubTab("calendar", {
+    parentTab: "manage",
+  });
   const [monthYear, setMonthYear] = useState(getCurrentMonthYear());
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedTeam, setSelectedTeam] = useState("all");
@@ -637,22 +641,12 @@ const RosterManagement = () => {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="flex overflow-x-auto border-b border-slate-100">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setView(tab.id)}
-              className={`px-5 py-3 text-sm font-semibold whitespace-nowrap transition-colors ${
-                view === tab.id
-                  ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
-                  : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SubTabsBar
+          activeTab={view}
+          onChange={setView}
+          tabs={tabs}
+          bordered={false}
+        />
 
         {view === "submissions" && (
           <div className="p-4">

@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { fetchDropdown } from "../../services/dropdownService";
 import { useAuth } from "../../context/AuthContext";
 import MonthCard from "./MonthCard";
@@ -10,15 +10,18 @@ import SearchableSelect from "./SearchableSelect";
 import { fetchMonthlyBillableReport } from "../../services/billableReportService";
 import api from "../../services/api";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
-import { Users, Calendar, Download, RotateCcw } from "lucide-react";
+import { Users, Calendar, Download, RotateCcw, FileText } from "lucide-react";
 import { Calendar as CalendarComponent } from "../ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { format } from "date-fns";
+import { useClientPagination } from "../../hooks/useClientPagination";
+import TablePaginationBar from "./TablePaginationBar";
+import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
+import SubTabsBar from "./SubTabsBar";
 
 const BillableReport = ({ userId }) => {
   // Device info (declare once at top)
   const { device_id, device_type } = useDeviceInfo();
-
   // Helper to format date/time for display and export
   // Always return raw backend string for date/time
   function formatDateTime(dateInput) {
@@ -222,20 +225,10 @@ const BillableReport = ({ userId }) => {
   };
 
 
-  // State for tab toggle (must be first hook)
-  const [activeToggle, setActiveToggle] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('billable_active_tab') || 'daily';
-    }
-    return 'daily';
+  // Daily / Monthly toggle — synced to ?subtab=
+  const [activeToggle, setActiveToggle] = useRoutedSubTab('daily', {
+    parentTab: 'billable_report',
   });
-
-  // Persist tab selection to sessionStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('billable_active_tab', activeToggle);
-    }
-  }, [activeToggle]);
   // (Date range filter removed)
   // Helper function to get current month in YYYY-MM format
   const getCurrentMonth = () => {
@@ -438,6 +431,35 @@ const BillableReport = ({ userId }) => {
 
   // No longer need to filter dailyData by month, as API returns filtered data
   const filteredDailyData = dailyData;
+
+  const dailyGroupedEntries = useMemo(() => {
+    if (!Object.keys(userInfoMap).length) return [];
+
+    const groupedData = {};
+    filteredDailyData.forEach((row) => {
+      const key = row.user_id || "unknown";
+      if (!groupedData[key]) {
+        groupedData[key] = { user: row, rows: [] };
+      }
+      groupedData[key].rows.push(row);
+    });
+
+    Object.keys(userInfoMap).forEach((userId) => {
+      if (!groupedData[userId]) {
+        groupedData[userId] = { user: userInfoMap[userId], rows: [] };
+      }
+    });
+
+    return Object.entries(groupedData).filter(([, { user }]) => {
+      if (!searchQuery) return true;
+      const userName = (user.user_name || "").toLowerCase();
+      return userName.includes(searchQuery.toLowerCase());
+    });
+  }, [filteredDailyData, userInfoMap, searchQuery]);
+
+  const dailyUserPagination = useClientPagination(dailyGroupedEntries, {
+    resetKeys: [searchQuery, selectedTeam, dailyMonth],
+  });
 
   // Export all daily data for a given user and month (from monthly report)
 
@@ -670,22 +692,16 @@ const BillableReport = ({ userId }) => {
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-md border-2 border-blue-100 p-6">
-          <div className="flex items-center gap-2">
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 border-2 ${activeToggle === 'daily' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md border-blue-700' : 'text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-400'}`}
-              onClick={() => setActiveToggle('daily')}
-            >
-              Daily Report
-            </button>
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 border-2 ${activeToggle === 'monthly' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md border-blue-700' : 'text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-400'}`}
-              onClick={() => setActiveToggle('monthly')}
-            >
-              Monthly Report
-            </button>
-          </div>
-        </div>
+        <SubTabsBar
+          bordered
+          equalWidth
+          activeTab={activeToggle}
+          onChange={setActiveToggle}
+          tabs={[
+            { id: 'daily', label: 'Daily Report', icon: Calendar },
+            { id: 'monthly', label: 'Monthly Report', icon: FileText },
+          ]}
+        />
       {/* Daily Report view (user cards, QA agent side only) */}
       {activeToggle === 'daily' && (
         <div className="w-full max-w-7xl mx-auto mt-4">
@@ -823,39 +839,9 @@ const BillableReport = ({ userId }) => {
               <div className="py-8 text-center text-blue-700 font-semibold">Loading daily report...</div>
             ) : errorDaily ? (
               <div className="py-8 text-center text-red-600 font-semibold">{errorDaily}</div>
-            ) : Object.keys(userInfoMap).length > 0 ? (
-              // Show cards for all users that have ever appeared
-              (() => {
-                // First, group current data by user_id
-                const groupedData = {};
-                
-                filteredDailyData.forEach(row => {
-                  const key = row.user_id || 'unknown';
-                  if (!groupedData[key]) {
-                    groupedData[key] = { user: row, rows: [] };
-                  }
-                  groupedData[key].rows.push(row);
-                });
-
-                // Then, ensure ALL stored users have an entry (even if no data for current date range)
-                Object.keys(userInfoMap).forEach(userId => {
-                  const userInfo = userInfoMap[userId];
-                  
-                  if (!groupedData[userId]) {
-                    // User has no data for current date range, but keep card visible
-                    groupedData[userId] = { user: userInfo, rows: [] };
-                  }
-                });
-
-                // Apply client-side search filter by agent name
-                const filteredGroupedData = Object.entries(groupedData).filter(([userId, { user }]) => {
-                  if (!searchQuery) return true; // No search query, show all
-                  const userName = (user.user_name || '').toLowerCase();
-                  const query = searchQuery.toLowerCase();
-                  return userName.includes(query);
-                });
-
-                return filteredGroupedData.map(([userId, { user, rows }]) => (
+            ) : dailyGroupedEntries.length > 0 ? (
+              <>
+                {dailyUserPagination.pagedItems.map(([userId, { user, rows }]) => (
                 <UserCard
                   key={userId}
                   user={user}
@@ -911,7 +897,6 @@ const BillableReport = ({ userId }) => {
                         tenure_target: r.daily_required_hours, // Alternative field name
                       };
                     });
-                    console.log('Mapped data for UserCard:', mappedData);
                     return mappedData;
                   })()}
                   expanded={expandedCards[userId] === true}
@@ -923,8 +908,9 @@ const BillableReport = ({ userId }) => {
                   onRefresh={handleRefreshData}
                   showOnlySelectedMonth={true}
                 />
-                ));
-              })()
+                ))}
+                <TablePaginationBar {...dailyUserPagination} itemLabel="agents" />
+              </>
             ) : (
               <div className="py-8 text-center text-gray-400">No data available</div>
             )}

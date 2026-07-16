@@ -23,6 +23,7 @@ import QAFilterBar from "./QAFilterBar";
 import QAIndividualAuditReport from "./QAIndividualAuditReport";
 import QAAgentQCFormReport from "../dashboard/QAAgentQCFormReport";
 import QAAgentReworkCorrectionReview from "../dashboard/QAAgentReworkCorrectionReview";
+import { useRoutedDashboardTab } from "../../hooks/useRoutedDashboardTab";
 
 const QAAgentDashboard = ({ embedded = false }) => {
   // StatCard component for dashboard stats
@@ -90,7 +91,7 @@ const QAAgentDashboard = ({ embedded = false }) => {
   });
   const [pendingFiles, setPendingFiles] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useRoutedDashboardTab('overview');
   // Set default date range to today's date
   const todayStr = new Date().toISOString().slice(0, 10);
   const [dateRange, setDateRange] = useState({
