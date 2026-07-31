@@ -588,10 +588,14 @@ const RosterManagement = () => {
   };
 
   const handleUnlock = () => {
-    if (!selectedRoster) return;
-    runAction("unlock", async () => {
-      const res = await unlockRosterMonth({ roster_month_id: selectedRoster.roster_month_id });
-      toast.success(res.message || "Roster unlocked");
+    setConfirmAction({
+      title: "Unlock Calendar",
+      message: `Unlock all locked agent calendars for ${formatMonthYearLabel(monthYear)}? Editing will be allowed again.`,
+      onConfirm: () =>
+        runAction("unlock", async () => {
+          const res = await unlockRosterMonth({ month_year: monthYear });
+          toast.success(res.message || "Calendar unlocked");
+        }),
     });
   };
 
@@ -846,11 +850,15 @@ const RosterManagement = () => {
                     <ActionBtn
                       icon={Unlock}
                       loading={actionLoading === "unlock"}
-                      disabled={!selectedRoster || isBusy || status !== "Locked"}
+                      disabled={isBusy || !monthCalendarLocked}
                       onClick={handleUnlock}
-                      title={status === "Locked" ? "Unlock back to Draft or Approved" : "Roster is not locked"}
+                      title={
+                        monthCalendarLocked
+                          ? `Unlock all locked calendars for ${monthYear}`
+                          : "No locked rosters for this month"
+                      }
                     >
-                      Unlock
+                      Unlock ({monthYear})
                     </ActionBtn>
                     {canResetRegenerate && (
                       <>
