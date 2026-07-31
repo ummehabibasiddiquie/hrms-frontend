@@ -34,6 +34,7 @@ import ErrorMessage from '../components/common/ErrorMessage';
 import MultiSelectWithCheckbox from '../components/common/MultiSelectWithCheckbox';
 import SearchableSelect from '../components/common/SearchableSelect';
 import QCConfirmationModal from '../components/common/QCConfirmationModal';
+import { formatISTDateTime, getISTParts } from "../utils/dateTimeIST";
 import {
   Pagination,
   PaginationContent,
@@ -556,56 +557,18 @@ const QCFormPage = () => {
       const dateSource = possibleDates.find(date => date && date.trim() !== '');
 
       if (dateSource) {
-        let cleanDate = dateSource.trim();
-
-        // Handle formats like "Wed, 05 Mar 2026 14:30:23 GMT"
-        if (cleanDate.includes(',')) {
-          const parts = cleanDate.split(',')[1].trim(); // Get "05 Mar 2026 14:30:23 GMT"
-          const dateParts = parts.split(' '); // ["05", "Mar", "2026", "14:30:23", "GMT"]
-
-          if (dateParts.length >= 3) {
-            const day = dateParts[0];
-            const month = dateParts[1];
-            const year = dateParts[2];
-            const time = dateParts[3] || '00:00:00';
-
-            // Convert month name to number
-            const monthMap = {
-              'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
-              'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
-              'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-            };
-
-            const monthNum = monthMap[month] || '01';
-            formattedDate = `${year}-${monthNum}-${day.padStart(2, '0')} ${time}`;
-          }
-        }
-        // Handle ISO format "2026-03-05T14:30:23Z" or "2026-03-05T14:30:23.000Z"
-        else if (cleanDate.includes('T')) {
-          const [datePart, timePart] = cleanDate.split('T');
-          const time = timePart ? timePart.replace('Z', '').split('.')[0] : '00:00:00';
-          formattedDate = `${datePart} ${time}`;
-        }
-        // Handle format "2026-03-05 14:30:23"
-        else if (cleanDate.includes(' ')) {
-          formattedDate = cleanDate;
-        }
-        // Handle format "2026-03-05" (date only, append default time)
-        else if (cleanDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          formattedDate = `${cleanDate} 00:00:00`;
+        const parts = getISTParts(dateSource);
+        if (parts) {
+          const pad = (n) => String(n).padStart(2, '0');
+          formattedDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)} ${pad(parts.hours)}:${pad(parts.minutes)}:${pad(parts.seconds)}`;
         }
       }
 
-      // If still no valid date, use today's date and time
+      // If still no valid date, use today's date and time in IST
       if (!formattedDate || formattedDate === '') {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        const hours = String(today.getHours()).padStart(2, '0');
-        const minutes = String(today.getMinutes()).padStart(2, '0');
-        const seconds = String(today.getSeconds()).padStart(2, '0');
-        formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        const parts = getISTParts(new Date());
+        const pad = (n) => String(n).padStart(2, '0');
+        formattedDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)} ${pad(parts.hours)}:${pad(parts.minutes)}:${pad(parts.seconds)}`;
       }
 
       console.log('[QCFormPage] Date extraction:', {
@@ -812,26 +775,25 @@ const QCFormPage = () => {
       const trackerDateTime = trackerData?.date_time || trackerData?.date_of_file_submission || trackerData?.tracker_date;
       let timestamp;
       if (trackerDateTime) {
-        const date = new Date(trackerDateTime);
-        // Format to 12-hour format with AM/PM using UTC to avoid timezone conversion
-        const hours = date.getUTCHours();
-        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        const hours12 = hours % 12 || 12;
-        const year = date.getUTCFullYear();
-        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(date.getUTCDate()).padStart(2, '0');
-        timestamp = `${year}-${month}-${day}-${hours12}-${minutes}-${ampm}`;
+        const parts = getISTParts(trackerDateTime);
+        if (parts) {
+          const ampm = parts.hours >= 12 ? 'PM' : 'AM';
+          const hours12 = parts.hours % 12 || 12;
+          const month = String(parts.month).padStart(2, '0');
+          const day = String(parts.day).padStart(2, '0');
+          const minutes = String(parts.minutes).padStart(2, '0');
+          timestamp = `${parts.year}-${month}-${day}-${hours12}-${minutes}-${ampm}`;
+        } else {
+          timestamp = String(trackerDateTime);
+        }
       } else {
-        const date = new Date();
-        const hours = date.getUTCHours();
-        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        const hours12 = hours % 12 || 12;
-        const year = date.getUTCFullYear();
-        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(date.getUTCDate()).padStart(2, '0');
-        timestamp = `${year}-${month}-${day}-${hours12}-${minutes}-${ampm}`;
+        const parts = getISTParts(new Date());
+        const ampm = parts.hours >= 12 ? 'PM' : 'AM';
+        const hours12 = parts.hours % 12 || 12;
+        const month = String(parts.month).padStart(2, '0');
+        const day = String(parts.day).padStart(2, '0');
+        const minutes = String(parts.minutes).padStart(2, '0');
+        timestamp = `${parts.year}-${month}-${day}-${hours12}-${minutes}-${ampm}`;
       }
       
       const fileName = `${userName}_${taskName}_${timestamp}_${samplingPercentage}_percent_sample.xlsx`;
@@ -994,29 +956,15 @@ const QCFormPage = () => {
               <p className="text-sm text-slate-600 font-medium">Submission Date & Time</p>
               <p className="text-lg font-bold text-slate-800">
                 {trackerData.date_of_file_submission
-                  ? new Date(trackerData.date_of_file_submission).toLocaleString('en-GB', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true
-                    })
+                  ? formatISTDateTime(trackerData.date_of_file_submission, 'N/A')
                   : trackerData.updated_at
-                  ? new Date(trackerData.updated_at).toLocaleString('en-GB', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true
-                    })
-                  : trackerData.date_time 
-                  ? trackerData.date_time.replace(/:\d{2}\s*GMT.*$/, '').trim()
-                  : trackerData.tracker_date 
-                  ? trackerData.tracker_date.replace(/:\d{2}\s*GMT.*$/, '').trim()
-                  : trackerData.created_at 
-                  ? trackerData.created_at.replace(/:\d{2}\s*GMT.*$/, '').trim()
+                  ? formatISTDateTime(trackerData.updated_at, 'N/A')
+                  : trackerData.date_time
+                  ? formatISTDateTime(trackerData.date_time, 'N/A')
+                  : trackerData.tracker_date
+                  ? formatISTDateTime(trackerData.tracker_date, 'N/A')
+                  : trackerData.created_at
+                  ? formatISTDateTime(trackerData.created_at, 'N/A')
                   : 'N/A'}
               </p>
             </div>

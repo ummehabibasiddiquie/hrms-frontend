@@ -18,6 +18,7 @@ import config from "../../../../config/environment";
 import { log, logError } from "../../../../config/environment";
 import { useClientPagination } from "../../../../hooks/useClientPagination";
 import TablePaginationBar from "../../../common/TablePaginationBar";
+import { formatISTDateTime } from "../../../../utils/dateTimeIST";
 
 const apiBaseURL = config.apiBaseUrl;
 
@@ -625,7 +626,7 @@ const UsersManagement = ({
                                                   {req.email}
                                              </span>
                                              <span className="text-slate-400 ml-2 block sm:inline text-xs">
-                                                  {new Date(req.timestamp).toLocaleString()}
+                                                  {formatISTDateTime(req.timestamp)}
                                              </span>
                                         </div>
                                         <button

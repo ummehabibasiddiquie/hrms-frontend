@@ -18,6 +18,8 @@ import {
   monthYearToYyyyMm,
 } from '../common/CustomCalendar';
 import AgentQCReportPage from '../../pages/AgentQCReportPage';
+import { formatISTDateTimeExport, formatISTDateDash, formatISTDateUpper } from "../../utils/dateTimeIST";
+
 
 
 
@@ -151,9 +153,7 @@ const BillableReport = () => {
       const exportData = trackers.map(row => {
         let formattedDateTime = '';
         if (row.date_time) {
-          const d = new Date(row.date_time);
-          const pad = (n) => n.toString().padStart(2, '0');
-          formattedDateTime = `${pad(d.getUTCDate())}-${pad(d.getUTCMonth() + 1)}-${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+          formattedDateTime = formatISTDateTimeExport(row.date_time);
         }
         return {
           'Date-Time': formattedDateTime,
@@ -350,11 +350,7 @@ const BillableReport = () => {
         // Only show date part from work_date
         let formattedDate = '-';
         if (row.work_date) {
-          const d = new Date(row.work_date);
-          if (!isNaN(d)) {
-            const pad = n => String(n).padStart(2, '0');
-            formattedDate = `${pad(d.getUTCDate())}-${pad(d.getUTCMonth() + 1)}-${d.getUTCFullYear()}`;
-          }
+          formattedDate = formatISTDateDash(row.work_date);
         }
         return {
           'Date': formattedDate,
@@ -572,19 +568,7 @@ const BillableReport = () => {
                           <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
                             {/* Show only date part from work_date */}
                             <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">{
-                              (() => {
-                                if (row.work_date) {
-                                  const d = new Date(row.work_date);
-                                  if (!isNaN(d)) {
-                                    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-                                    const day = d.getUTCDate();
-                                    const month = monthNames[d.getUTCMonth()];
-                                    const year = d.getUTCFullYear();
-                                    return `${day}/${month}/${year}`;
-                                  }
-                                }
-                                return '-';
-                              })()
+                              formatISTDateUpper(row.work_date)
                             }</td>
                             <td className="px-6 py-4 text-center">
                               <span className={`px-2 py-1 rounded-lg inline-block ${getRosterStatusClass(getRosterStatus(row))}`}>

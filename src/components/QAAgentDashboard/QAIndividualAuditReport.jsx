@@ -19,6 +19,8 @@ import api from '../../services/api';
 import { getFriendlyErrorMessage } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
 import { DateRangePicker } from '../common/CustomCalendar';
+import { formatISTDateTimeParts, todayISTISO } from "../../utils/dateTimeIST";
+
 
 const QAIndividualAuditReport = () => {
   const { user } = useAuth();
@@ -42,58 +44,14 @@ const QAIndividualAuditReport = () => {
     return 'bg-slate-100 text-slate-700';
   };
 
-  // Helper function to format date and time
+  // Helper function to format date and time (IST)
   const formatDateTime = (dateTimeString) => {
     if (!dateTimeString || dateTimeString === '-') return { date: '-', time: '-' };
-    
-    try {
-      let date;
-      
-      // Check if it's MySQL datetime format (YYYY-MM-DD HH:MM:SS) or GMT format
-      if (dateTimeString.includes('T') || dateTimeString.includes('GMT')) {
-        // GMT format like "Tue, 07 Apr 2026 11:30:30 GMT"
-        date = new Date(dateTimeString);
-        // Use UTC methods for GMT format
-        var day = date.getUTCDate();
-        var month = date.getUTCMonth();
-        var year = date.getUTCFullYear();
-        var hours = date.getUTCHours();
-        var minutes = date.getUTCMinutes();
-      } else {
-        // MySQL datetime format like "2026-04-07 12:17:14"
-        date = new Date(dateTimeString);
-        // Use local methods for MySQL format (assuming it's already in correct timezone)
-        var day = date.getDate();
-        var month = date.getMonth();
-        var year = date.getFullYear();
-        var hours = date.getHours();
-        var minutes = date.getMinutes();
-      }
-      
-      // Format date as "7/Apr/2026"
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const formattedDate = `${day}/${monthNames[month]}/${year}`;
-      
-      // Format time as "11:30 AM"
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      const displayHours = hours % 12 || 12;
-      const formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-      
-      return { date: formattedDate, time: formattedTime };
-    } catch (e) {
-      console.error('[QAIndividualAuditReport] Error formatting date:', e);
-      return { date: dateTimeString, time: '' };
-    }
+    return formatISTDateTimeParts(dateTimeString);
   };
 
-  // Helper function to get today's date in YYYY-MM-DD format
-  const getTodayDate = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+  // Helper function to get today's date in YYYY-MM-DD format (IST)
+  const getTodayDate = () => todayISTISO() || "";
 
   // State management
   const [auditData, setAuditData] = useState([]);

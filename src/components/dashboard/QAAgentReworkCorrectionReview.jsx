@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useClientPagination } from '../../hooks/useClientPagination';
 import TablePaginationBar from '../common/TablePaginationBar';
+import { formatISTDateMedium } from '../../utils/dateTimeIST';
 
 // Dummy data
 const dummyPendingReviews = [
@@ -258,8 +259,7 @@ const QAAgentReworkCorrectionReview = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '—';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    return formatISTDateMedium(dateString);
   };
 
   const openErrorModal = (errors, title) => {

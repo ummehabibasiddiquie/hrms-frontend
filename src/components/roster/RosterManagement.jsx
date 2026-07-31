@@ -687,6 +687,7 @@ const RosterManagement = () => {
                 }}
                 label="Month"
                 showAllOption={false}
+                allowFutureMonths
               />
 
               {showTeamFilter && (

@@ -1,3 +1,5 @@
+import { formatISTDateTimeLong } from "./dateTimeIST";
+
 const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 export function getCurrentMonthYear() {
@@ -285,21 +287,18 @@ export function formatRosterMonthLastDate(monthYear) {
 
 export function formatLockedDate(value) {
   if (!value) return "";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // Prefer pre-formatted IST wall-clock from API
+  if (typeof value === "string" && !/^\d{4}-\d{2}-\d{2}/.test(value.trim())) {
+    return value;
+  }
+  return formatISTDateTimeLong(value, String(value));
 }
 
 export function getRosterLockMessage(roster) {
   if (!isRosterLocked(roster)) return null;
   const locker = roster.locked_by_name || "Super Admin / Admin";
-  const when = formatLockedDate(roster.locked_date);
+  const when =
+    roster.locked_date_display || formatLockedDate(roster.locked_date);
   return when
     ? `This roster is locked by ${locker} on ${when}. No changes or new requests can be made until it is unlocked.`
     : `This roster is locked by ${locker}. No changes or new requests can be made until it is unlocked.`;
@@ -307,7 +306,8 @@ export function getRosterLockMessage(roster) {
 
 export function getMonthCalendarLockMessage(monthYear, lockInfo) {
   const locker = lockInfo?.locked_by_name || "Super Admin / Admin";
-  const when = formatLockedDate(lockInfo?.locked_date);
+  const when =
+    lockInfo?.locked_date_display || formatLockedDate(lockInfo?.locked_date);
   return when
     ? `The ${monthYear} calendar has been locked by ${locker} on ${when}. No changes can be made until it is unlocked.`
     : `The ${monthYear} calendar has been locked by ${locker}. No changes can be made until it is unlocked.`;

@@ -26,6 +26,8 @@ import {
 import TaskEODReport from "./TaskEODReport";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
 import SubTabsBar from "../common/SubTabsBar";
+import { formatISTDateTimeParts, getISTParts } from "../../utils/dateTimeIST";
+
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -456,31 +458,8 @@ const QATrackerReport = () => {
     return tasksList.filter(task => String(task.project_id) === String(selectedProject));
   }, [tasksList, selectedProject]);
 
-  // Format date and time to display format
-  const formatDateTime = (dateTimeStr) => {
-    if (!dateTimeStr) return { date: '-', time: '-' };
-    
-    try {
-      const dt = new Date(dateTimeStr);
-      if (isNaN(dt.getTime())) return { date: '-', time: '-' };
-      
-      const day = dt.getUTCDate();
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const month = monthNames[dt.getUTCMonth()];
-      const year = dt.getUTCFullYear();
-      const date = `${day}/${month}/${year}`;
-      
-      let hours = dt.getUTCHours();
-      const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12 || 12;
-      const time = `${hours}:${minutes} ${ampm}`;
-      
-      return { date, time };
-    } catch {
-      return { date: '-', time: '-' };
-    }
-  };
+  // Format date and time in IST (Asia/Kolkata)
+  const formatDateTime = (dateTimeStr) => formatISTDateTimeParts(dateTimeStr);
 
   // Format number to 2 decimal places
   const formatDecimal = (value) => {
@@ -952,14 +931,11 @@ const QATrackerReport = () => {
       let formattedDateTime = '';
       if (tracker.date_time) {
         try {
-          const dateObj = new Date(tracker.date_time);
-          const year = dateObj.getUTCFullYear();
-          const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-          const day = String(dateObj.getUTCDate()).padStart(2, '0');
-          const hours = String(dateObj.getUTCHours()).padStart(2, '0');
-          const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
-          formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-          log('[QATrackerReport] Formatted date_time (UTC):', formattedDateTime, 'from:', tracker.date_time);
+          const parts = getISTParts(tracker.date_time);
+          if (parts) {
+            formattedDateTime = `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}T${String(parts.hours).padStart(2, '0')}:${String(parts.minutes).padStart(2, '0')}`;
+          }
+          log('[QATrackerReport] Formatted date_time (IST):', formattedDateTime, 'from:', tracker.date_time);
         } catch (err) {
           logError('[QATrackerReport] Error formatting date_time:', err);
         }

@@ -22,6 +22,8 @@ import { useClientPagination } from "../../hooks/useClientPagination";
 import TablePaginationBar from "../common/TablePaginationBar";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
 import SubTabsBar from "../common/SubTabsBar";
+import { formatISTDateTimeLong, formatISTDateTimeParts } from "../../utils/dateTimeIST";
+
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -37,26 +39,7 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
 
   const formatDateTime = (dateString) => {
     if (!dateString) return '—';
-    // Parse the date string format: "Fri, 03 Apr 2026 11:10:33 GMT"
-    // Extract date and time directly without timezone conversion
-    const match = dateString.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
-    if (match) {
-      const [, day, month, year, hours, minutes] = match;
-      const hour = parseInt(hours, 10);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const hour12 = hour % 12 || 12;
-      return `${parseInt(day, 10).toString().padStart(2, '0')} ${month} ${year}, ${hour12.toString().padStart(2, '0')}:${minutes} ${ampm.toLowerCase()}`;
-    }
-    // Fallback for unexpected format - use UTC to avoid timezone conversion
-    const date = new Date(dateString);
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-    const year = date.getUTCFullYear();
-    const hours = date.getUTCHours();
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'pm' : 'am';
-    const hour12 = hours % 12 || 12;
-    return `${day} ${month} ${year}, ${hour12.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    return formatISTDateTimeLong(dateString, dateString);
   };
 
   const getScoreClass = (score) => {
@@ -1270,32 +1253,7 @@ const QAAgentList = () => {
                                 {trackerPagination.pagedItems.map((tracker, index) => {
                                   const formatDateTime = (dateTimeStr) => {
                                     if (!dateTimeStr) return { date: '—', time: '' };
-                                    // Parse the date string format: "Fri, 03 Apr 2026 11:10:33 GMT"
-                                    // Extract date and time directly without timezone conversion
-                                    const match = dateTimeStr.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
-                                    if (match) {
-                                      const [, day, month, year, hours, minutes] = match;
-                                      const hour = parseInt(hours, 10);
-                                      const ampm = hour >= 12 ? 'PM' : 'AM';
-                                      const hour12 = hour % 12 || 12;
-                                      return {
-                                        date: `${parseInt(day, 10)}/${month}/${year}`,
-                                        time: `${hour12.toString().padStart(2, '0')}:${minutes} ${ampm}`
-                                      };
-                                    }
-                                    // Fallback for unexpected format
-                                    const dateObj = new Date(dateTimeStr);
-                                    const day = dateObj.getUTCDate();
-                                    const month = dateObj.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-                                    const year = dateObj.getUTCFullYear();
-                                    const hours = dateObj.getUTCHours();
-                                    const minutes = dateObj.getUTCMinutes().toString().padStart(2, '0');
-                                    const ampm = hours >= 12 ? 'PM' : 'AM';
-                                    const hour12 = hours % 12 || 12;
-                                    return {
-                                      date: `${day}/${month}/${year}`,
-                                      time: `${hour12.toString().padStart(2, '0')}:${minutes} ${ampm}`
-                                    };
+                                    return formatISTDateTimeParts(dateTimeStr);
                                   };
 
                                   const dateTime = formatDateTime(tracker.date_time || tracker.tracker_datetime);

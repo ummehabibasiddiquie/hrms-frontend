@@ -12,6 +12,7 @@ import {
   X,
   AlertTriangle
 } from 'lucide-react';
+import { formatISTDateMedium } from '../../utils/dateTimeIST';
 
 const QCHistoryTimeline = ({ qcRecord, correctionHistory = [], reworkHistory = [], showLateSubmission = false }) => {
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
@@ -70,8 +71,7 @@ const QCHistoryTimeline = ({ qcRecord, correctionHistory = [], reworkHistory = [
 
   const formatDate = (dateString) => {
     if (!dateString) return '—';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    return formatISTDateMedium(dateString);
   };
 
   const getStatusBadge = (status, score) => {

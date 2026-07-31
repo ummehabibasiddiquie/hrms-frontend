@@ -30,6 +30,7 @@ import {
 } from "../../utils/rosterUtils";
 import LoadingSpinner from "../common/LoadingSpinner";
 import { MonthYearPicker } from "../common/CustomCalendar";
+import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
 
 const PAGE_SIZE = 8;
 
@@ -62,15 +63,7 @@ function getInitials(name) {
 
 function formatSubmittedDate(value) {
   if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatISTDateTimeLong(value, value);
 }
 
 const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
@@ -299,6 +292,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
             onMonthYearChange={setMonthYear}
             label="Month"
             showAllOption={false}
+            allowFutureMonths
           />
           <div className="flex-1 min-w-[200px]">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1">

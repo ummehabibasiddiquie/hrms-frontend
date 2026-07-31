@@ -28,6 +28,8 @@ import { DateRangePicker } from '../common/CustomCalendar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { exportToCSV } from '../../utils/csvExport';
+import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
+
 
 const QAAgentQCFormReport = () => {
   const { user } = useAuth();
@@ -181,26 +183,7 @@ const QAAgentQCFormReport = () => {
 
   const formatDateTime = (dateString) => {
     if (!dateString) return '—';
-    // Parse the date string format: "Fri, 03 Apr 2026 11:10:33 GMT"
-    // Extract date and time directly without timezone conversion
-    const match = dateString.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
-    if (match) {
-      const [, day, month, year, hours, minutes] = match;
-      const hour = parseInt(hours, 10);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const hour12 = hour % 12 || 12;
-      return `${parseInt(day, 10).toString().padStart(2, '0')} ${month} ${year}, ${hour12.toString().padStart(2, '0')}:${minutes} ${ampm.toLowerCase()}`;
-    }
-    // Fallback for unexpected format - use UTC to avoid timezone conversion
-    const date = new Date(dateString);
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-    const year = date.getUTCFullYear();
-    const hours = date.getUTCHours();
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'pm' : 'am';
-    const hour12 = hours % 12 || 12;
-    return `${day} ${month} ${year}, ${hour12.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    return formatISTDateTimeLong(dateString, dateString);
   };
 
   const getScoreClass = (score) => {

@@ -79,11 +79,6 @@ const MyRoster = () => {
   }, [loadPendingOverlay, roster?.roster_month_id]);
 
   const isCurrentMonth = monthYear === getCurrentMonthYear();
-  const parsed = parseMonthYear(monthYear);
-  const isFuture =
-    parsed &&
-    new Date(parsed.year, parsed.month, 1) > new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-
   const hasPendingOverlay = pendingRequests.length > 0;
 
   return (
@@ -110,6 +105,7 @@ const MyRoster = () => {
             onMonthYearChange={setMonthYear}
             label="Select Month"
             showAllOption={false}
+            allowFutureMonths
           />
           <div className="flex items-center gap-2">
             <button
@@ -128,8 +124,7 @@ const MyRoster = () => {
             <button
               type="button"
               onClick={() => setMonthYear((m) => shiftMonthYear(m, 1))}
-              disabled={isFuture}
-              className="p-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+              className="p-2 border border-slate-300 rounded-lg hover:bg-slate-50"
             >
               <ChevronRight className="w-5 h-5" />
             </button>

@@ -315,9 +315,14 @@ export const MonthYearPicker = ({
   showAllOption = true,
   disabled = false,
   compact = false,
+  /** When true, months/years after the current calendar month can be selected (needed for roster planning). */
+  allowFutureMonths = false,
 }) => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const maxYear = allowFutureMonths ? currentYear + 2 : currentYear;
 
   // Handle month selection
   const handleMonthSelect = (month, year) => {
@@ -393,9 +398,8 @@ export const MonthYearPicker = ({
                   onChange={(e) => setCalendarYear(parseInt(e.target.value))}
                   className="flex-1 px-3 py-1.5 text-base font-bold text-slate-800 bg-slate-50 border-2 border-blue-200 rounded-lg hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer text-center"
                 >
-                  {Array.from({ length: 21 }, (_, i) => new Date().getFullYear() - 10 + i).map((y) => {
-                    const currentYear = new Date().getFullYear();
-                    const isYearDisabled = y > currentYear;
+                  {Array.from({ length: maxYear - (currentYear - 10) + 1 }, (_, i) => currentYear - 10 + i).map((y) => {
+                    const isYearDisabled = !allowFutureMonths && y > currentYear;
                     return (
                       <option key={y} value={y} disabled={isYearDisabled}>
                         {y}
@@ -407,14 +411,14 @@ export const MonthYearPicker = ({
                 <button
                   type="button"
                   onClick={() => setCalendarYear(calendarYear + 1)}
-                  disabled={calendarYear >= new Date().getFullYear()}
+                  disabled={calendarYear >= maxYear}
                   className={cn(
                     "p-2 rounded-lg transition-colors flex-shrink-0",
-                    calendarYear >= new Date().getFullYear()
+                    calendarYear >= maxYear
                       ? "opacity-50 cursor-not-allowed bg-slate-100"
                       : "hover:bg-blue-50"
                   )}
-                  title={calendarYear >= new Date().getFullYear() ? "Cannot select future dates" : "Next Year"}
+                  title={calendarYear >= maxYear ? "Cannot select further years" : "Next Year"}
                 >
                   <ChevronRight className="w-5 h-5 text-blue-600" />
                 </button>
@@ -427,21 +431,21 @@ export const MonthYearPicker = ({
                   const isSelected = selectedMonthYear === monthYear;
                   const isAvailable = availableMonthYears.length === 0 || availableMonthYears.includes(monthYear);
                   
-                  // Check if it's current month
-                  const now = new Date();
                   const currentMonthYear = `${['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][now.getMonth()]}${now.getFullYear()}`;
                   const isCurrentMonth = monthYear === currentMonthYear;
                   
-                  // Check if it's a future month
-                  const isFutureMonth = calendarYear > now.getFullYear() || 
-                    (calendarYear === now.getFullYear() && index > now.getMonth());
+                  const isFutureMonth = !allowFutureMonths && (
+                    calendarYear > now.getFullYear() ||
+                    (calendarYear === now.getFullYear() && index > now.getMonth())
+                  );
+                  const canSelect = isAvailable && !isFutureMonth;
                   
                   return (
                     <button
                       key={month}
                       type="button"
-                      onClick={() => !isFutureMonth && isAvailable && handleMonthSelect(index, calendarYear)}
-                      disabled={!isAvailable || isFutureMonth}
+                      onClick={() => canSelect && handleMonthSelect(index, calendarYear)}
+                      disabled={!canSelect}
                       className={cn(
                         "px-3 py-2 rounded-lg text-sm font-medium transition-all",
                         isFutureMonth

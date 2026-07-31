@@ -7,20 +7,10 @@ import { toast } from "react-hot-toast";
 import { User, Download, ChevronUp, Calendar, X, RotateCcw, Edit } from "lucide-react";
 import DailyEntryFormModal from "./DailyEntryFormModal";
 import { DateRangePicker } from "./CustomCalendar";
+import { formatISTDateTime } from "../../utils/dateTimeIST";
 
 function formatDateTime(dt) {
-  if (!dt) return '-';
-  const dateObj = new Date(dt);
-  if (isNaN(dateObj)) return dt;
-  const day = String(dateObj.getUTCDate()).padStart(2, '0');
-  const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-  const year = dateObj.getUTCFullYear();
-  let hours = dateObj.getUTCHours();
-  const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12;
-  hours = hours ? hours : 12;
-  return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+  return formatISTDateTime(dt, dt || "-");
 }
 export default function UserCard({ 
   user, 

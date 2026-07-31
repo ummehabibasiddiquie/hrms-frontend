@@ -14,6 +14,7 @@ import QAAgentList from './QAAgentList';
 import QAAgentAudit from './QAAgentAudit';
 import { DateRangePicker } from '../common/CustomCalendar';
 import { useRoutedDashboardTab } from '../../hooks/useRoutedDashboardTab';
+import { formatISTDateTimeParts } from '../../utils/dateTimeIST';
 
 const AdminDashboard = () => {
   // StatCard component for dashboard stats
@@ -326,19 +327,11 @@ const AdminDashboard = () => {
                             </p>
                             <div className="text-sm font-bold text-slate-800">
                               {file.date_time ? (() => {
-                                const date = new Date(file.date_time);
-                                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                const day = date.getUTCDate();
-                                const month = monthNames[date.getUTCMonth()];
-                                const year = date.getUTCFullYear();
-                                let hours = date.getUTCHours();
-                                const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                const ampm = hours >= 12 ? 'PM' : 'AM';
-                                hours = hours % 12 || 12;
+                                const { date, time } = formatISTDateTimeParts(file.date_time);
                                 return (
                                   <>
-                                    <div>{day}/{month}/{year}</div>
-                                    <div className="text-xs text-slate-600">{hours}:{minutes} {ampm}</div>
+                                    <div>{date}</div>
+                                    <div className="text-xs text-slate-600">{time}</div>
                                   </>
                                 );
                               })() : "-"}

@@ -24,6 +24,8 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import nodeApi from '../services/nodeApi';
 import { DateRangePicker } from '../components/common/CustomCalendar';
+import { formatISTDateTimeParts } from "../utils/dateTimeIST";
+
 
 const AgentQCReportPage = () => {
   const { user } = useAuth();
@@ -68,39 +70,13 @@ const AgentQCReportPage = () => {
   }, [user?.user_id]);
 
   const formatDate = (dateString) => {
-    if (!dateString) return '—';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (!dateString) return { date: 'N/A', time: '' };
+    return formatISTDateTimeParts(dateString);
   };
 
   const formatDateTime = (dateString) => {
     if (!dateString) return { date: '—', time: '' };
-    // Parse the date string format: "Fri, 03 Apr 2026 15:26:48 GMT"
-    // Extract date and time directly without timezone conversion
-    const match = dateString.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
-    if (match) {
-      const [, day, month, year, hours, minutes] = match;
-      const hour = parseInt(hours, 10);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const hour12 = hour % 12 || 12;
-      return {
-        date: `${parseInt(day, 10)}/${month}/${year}`,
-        time: `${hour12}:${minutes} ${ampm}`
-      };
-    }
-    // Fallback for unexpected format - use UTC to avoid timezone conversion
-    const date = new Date(dateString);
-    const day = date.getUTCDate();
-    const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-    const year = date.getUTCFullYear();
-    const hours = date.getUTCHours();
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const hour12 = hours % 12 || 12;
-    return {
-      date: `${day}/${month}/${year}`,
-      time: `${hour12}:${minutes} ${ampm}`
-    };
+    return formatISTDateTimeParts(dateString);
   };
 
   const parseErrors = (errors) => {

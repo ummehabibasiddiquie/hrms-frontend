@@ -24,6 +24,8 @@ import QAIndividualAuditReport from "./QAIndividualAuditReport";
 import QAAgentQCFormReport from "../dashboard/QAAgentQCFormReport";
 import QAAgentReworkCorrectionReview from "../dashboard/QAAgentReworkCorrectionReview";
 import { useRoutedDashboardTab } from "../../hooks/useRoutedDashboardTab";
+import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
+
 
 const QAAgentDashboard = ({ embedded = false }) => {
   // StatCard component for dashboard stats
@@ -108,43 +110,8 @@ const QAAgentDashboard = ({ embedded = false }) => {
     return BACKEND_BASE_URL + filePath;
   };
 
-  // Format date/time to display format: 3/Feb/2026 and 1:05 PM (UTC)
-  const formatDateTime = (dateTimeStr) => {
-    if (!dateTimeStr) return { date: '-', time: '-' };
-    
-    try {
-      // Parse the date string - handle various formats
-      let dateObj = new Date(dateTimeStr);
-      
-      // If invalid date, try to extract date portion
-      if (isNaN(dateObj.getTime())) {
-        const dateMatch = dateTimeStr.match(/(\d{4})-(\d{2})-(\d{2})/);
-        if (dateMatch) {
-          dateObj = new Date(dateMatch[0]);
-        } else {
-          return { date: dateTimeStr, time: '' };
-        }
-      }
-      
-      // Format in UTC timezone
-      const day = dateObj.getUTCDate();
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const month = monthNames[dateObj.getUTCMonth()];
-      const year = dateObj.getUTCFullYear();
-      const date = `${day}/${month}/${year}`;
-      
-      let hours = dateObj.getUTCHours();
-      const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12 || 12;
-      const time = `${hours}:${minutes} ${ampm}`;
-      
-      return { date, time };
-    } catch (error) {
-      console.error('[QAAgentDashboard] Error formatting date:', dateTimeStr, error);
-      return { date: dateTimeStr, time: '' };
-    }
-  };
+  // Format date/time in IST (Asia/Kolkata)
+  const formatDateTime = (dateTimeStr) => formatISTDateTimeParts(dateTimeStr);
 
   // Fetch dashboard data on mount
   // Call dashboard/filter on any filter change (add date/task/project if needed)
