@@ -111,3 +111,55 @@ export async function listRosterAudit(payload = {}) {
 export async function recalculateRosterPreview(payload) {
   return rosterPost("/roster/recalculate", payload);
 }
+
+export async function listRosterExcelWeeks(payload) {
+  return rosterPost("/roster/excel/weeks", payload);
+}
+
+export async function downloadRosterExcelTemplate(payload = {}) {
+  try {
+    const res = await api.post("/roster/excel/template", withUser(payload), {
+      responseType: "blob",
+      timeout: ROSTER_TIMEOUT_MS,
+    });
+    const contentType = res.headers?.["content-type"] || "";
+    if (contentType.includes("application/json")) {
+      const text = await res.data.text();
+      const body = JSON.parse(text);
+      const err = new Error(body.message || "Template download failed");
+      err.response = { data: body };
+      throw err;
+    }
+    return res.data;
+  } catch (err) {
+    const blob = err?.response?.data;
+    if (blob instanceof Blob) {
+      try {
+        const body = JSON.parse(await blob.text());
+        const parsed = new Error(body.message || "Template download failed");
+        parsed.response = { data: body };
+        throw parsed;
+      } catch (inner) {
+        if (inner?.response) throw inner;
+      }
+    }
+    throw err;
+  }
+}
+
+export async function previewRosterExcel(file, payload = {}) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("logged_in_user_id", getLoggedInUserId());
+  if (payload.team_id != null && payload.team_id !== "" && payload.team_id !== "all") {
+    formData.append("team_id", String(payload.team_id));
+  }
+  const res = await api.post("/roster/excel/preview", formData, {
+    timeout: ROSTER_HEAVY_TIMEOUT_MS,
+  });
+  return unwrap(res);
+}
+
+export async function applyRosterExcelChanges(payload) {
+  return rosterPost("/roster/excel/apply", payload, ROSTER_HEAVY_TIMEOUT_MS);
+}

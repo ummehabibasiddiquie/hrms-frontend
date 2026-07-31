@@ -54,6 +54,7 @@ import RosterSummaryCards from "./RosterSummaryCards";
 import RosterApprovalQueue from "./RosterApprovalQueue";
 import RosterSubmissionTracker from "./RosterSubmissionTracker";
 import HolidayMaster from "./HolidayMaster";
+import RosterExcelUpload from "./RosterExcelUpload";
 
 const ActionBtn = ({
   children,
@@ -775,6 +776,12 @@ const RosterManagement = () => {
                   </ActionGroup>
 
                   <ActionGroup title="Workflow">
+                    <RosterExcelUpload
+                      monthYear={monthYear}
+                      teamId={selectedTeam}
+                      disabled={isBusy || calendarFrozen}
+                      onApplied={() => refreshRosterViews({ silent: true })}
+                    />
                     <ActionBtn
                       icon={Send}
                       loading={actionLoading === "submit"}
