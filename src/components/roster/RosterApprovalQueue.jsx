@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  CheckCheck,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import {
@@ -156,30 +155,17 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pendingOnPage = paged.filter((r) => (r.status || "") === "Pending" && r.batch_id);
   const selectedCount = selectedIds.size;
   const allPendingSelected =
     pendingFiltered.length > 0 && pendingFiltered.every((r) => selectedIds.has(r.request_id));
-  const pagePendingSelected =
-    pendingOnPage.length > 0 && pendingOnPage.every((r) => selectedIds.has(r.request_id));
+  const somePendingSelected =
+    pendingFiltered.some((r) => selectedIds.has(r.request_id)) && !allPendingSelected;
 
   const toggleSelect = (requestId) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(requestId)) next.delete(requestId);
       else next.add(requestId);
-      return next;
-    });
-  };
-
-  const toggleSelectPage = () => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (pagePendingSelected) {
-        pendingOnPage.forEach((r) => next.delete(r.request_id));
-      } else {
-        pendingOnPage.forEach((r) => next.add(r.request_id));
-      }
       return next;
     });
   };
@@ -225,20 +211,12 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
           });
           toast.success("Request rejected");
         }
-      } else if (type === "approve_selected" || type === "approve_all") {
+      } else if (type === "approve_selected") {
         setBulkLoading(true);
-        const payload =
-          type === "approve_all"
-            ? {
-                approve_all: true,
-                month_year: monthYear,
-                ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
-              }
-            : {
-                request_ids: Array.from(selectedIds),
-                ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
-              };
-        const res = await approveChangeRequestsBulk(payload);
+        const res = await approveChangeRequestsBulk({
+          request_ids: Array.from(selectedIds),
+          ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
+        });
         const approved = res.data?.approved ?? 0;
         const failed = res.data?.failed || [];
         if (failed.length) {
@@ -292,9 +270,8 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
     if (!modal) return "";
     if (modal.type === "approve") return "Approve Request";
     if (modal.type === "reject") return "Reject Request";
-    if (modal.type === "approve_selected") return `Approve Selected (${selectedCount})`;
-    if (modal.type === "approve_all") return `Approve All Pending (${counts.pending})`;
-    if (modal.type === "reject_selected") return `Reject Selected (${selectedCount})`;
+    if (modal.type === "approve_selected") return `Approve (${selectedCount})`;
+    if (modal.type === "reject_selected") return `Reject (${selectedCount})`;
     return "Confirm";
   })();
 
@@ -355,38 +332,32 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
         </div>
       </div>
 
-      {showBulkBar && counts.pending > 0 && (
+      {showBulkBar && pendingFiltered.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-            <label className="inline-flex items-center gap-1.5 font-semibold cursor-pointer">
-              <input
-                type="checkbox"
-                checked={allPendingSelected}
-                onChange={toggleSelectAllPending}
-                className="rounded border-slate-300"
-              />
-              Select all pending ({pendingFiltered.length})
-            </label>
-            {selectedCount > 0 && <span className="text-slate-400">{selectedCount} selected</span>}
-          </div>
+          <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allPendingSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = somePendingSelected;
+              }}
+              onChange={toggleSelectAllPending}
+              className="rounded border-slate-300"
+            />
+            Select all ({pendingFiltered.length})
+            {selectedCount > 0 && !allPendingSelected && (
+              <span className="font-normal text-slate-400">· {selectedCount} selected</span>
+            )}
+          </label>
           <div className="flex flex-wrap gap-1.5 sm:ml-auto">
             <button
               type="button"
               disabled={busy || selectedCount === 0}
               onClick={() => openBulkModal("approve_selected")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-40"
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              Approve selected{selectedCount ? ` (${selectedCount})` : ""}
-            </button>
-            <button
-              type="button"
-              disabled={busy || counts.pending === 0}
-              onClick={() => openBulkModal("approve_all")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-transparent bg-green-600 text-white hover:bg-green-700 disabled:opacity-40"
-            >
-              <CheckCheck className="w-3.5 h-3.5" />
-              Approve all ({counts.pending})
+              Approve{selectedCount ? ` (${selectedCount})` : ""}
             </button>
             <button
               type="button"
@@ -395,7 +366,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-40"
             >
               <XCircle className="w-3.5 h-3.5" />
-              Reject selected{selectedCount ? ` (${selectedCount})` : ""}
+              Reject{selectedCount ? ` (${selectedCount})` : ""}
             </button>
           </div>
         </div>
@@ -411,18 +382,6 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
         </div>
       ) : (
         <div className="space-y-3">
-          {pendingOnPage.length > 0 && (
-            <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 px-1 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={pagePendingSelected}
-                onChange={toggleSelectPage}
-                className="rounded border-slate-300"
-              />
-              Select page ({pendingOnPage.length})
-            </label>
-          )}
-
           {paged.map((req) => {
             const summary = formatChangeRequestSummary(req.change_type, req.change_payload);
             const typeStyle =
@@ -657,11 +616,6 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
               {modal.request && (
                 <p className="text-xs text-slate-500 mt-1">
                   {modal.request.user_name} · {getChangeTypeLabel(modal.request.change_type)}
-                </p>
-              )}
-              {modal.type === "approve_all" && (
-                <p className="text-xs text-slate-500 mt-1">
-                  This will approve every pending submitted request for {formatMonthYearLabel(monthYear)}.
                 </p>
               )}
               {modal.type === "approve_selected" && (
