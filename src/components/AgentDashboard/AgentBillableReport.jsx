@@ -34,6 +34,20 @@ const BillableReport = () => {
     return 'text-red-700 bg-red-200 font-bold';
   };
 
+  const getRosterStatus = (row) => row?.roster_status || row?.day_status || '—';
+
+  const getRosterStatusClass = (status) => {
+    const s = String(status || '').toLowerCase();
+    if (s.includes('week off')) return 'text-slate-700 bg-slate-100 font-semibold';
+    if (s.includes('holiday')) return 'text-purple-800 bg-purple-100 font-semibold';
+    if (s.includes('half day leave')) return 'text-amber-800 bg-amber-100 font-semibold';
+    if (s.includes('leave')) return 'text-orange-800 bg-orange-100 font-semibold';
+    if (s.includes('half day')) return 'text-amber-800 bg-amber-50 font-semibold';
+    if (s.includes('pre join')) return 'text-slate-600 bg-slate-50 font-semibold';
+    if (s.includes('working')) return 'text-green-800 bg-green-50 font-semibold';
+    return 'text-slate-600 bg-slate-50';
+  };
+
   // Helper function to get tracker count color classes
   const getTrackerCountColorClass = (count) => {
     if (count === null || count === undefined || count === '-' || isNaN(Number(count))) return 'text-slate-700';
@@ -344,6 +358,7 @@ const BillableReport = () => {
         }
         return {
           'Date': formattedDate,
+          'Day Status': row.roster_status || row.day_status || '—',
           'Assign Hours': row.assigned_hours != null ? Number(row.assigned_hours).toFixed(2) : '-',
           'Worked Hours': row.total_billable_hours_day != null ? Number(row.total_billable_hours_day).toFixed(2) : '-',
           'QC Score': row.qc_score != null ? `${Number(row.qc_score).toFixed(2)}%` : '-',
@@ -366,6 +381,7 @@ const BillableReport = () => {
       // Add totals row
       exportData.push({
         'Date': 'TOTAL',
+        'Day Status': '',
         'Assign Hours': totalAssigned.toFixed(2),
         'Worked Hours': totalWorked.toFixed(2),
         'QC Score': avgQC,
@@ -541,6 +557,7 @@ const BillableReport = () => {
                   <thead className="bg-gradient-to-r from-blue-50 to-blue-100">
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Day Status</th>
                       <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Assign Hours</th>
                       <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Worked Hours</th>
                       <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">QC Score</th>
@@ -569,6 +586,11 @@ const BillableReport = () => {
                                 return '-';
                               })()
                             }</td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`px-2 py-1 rounded-lg inline-block ${getRosterStatusClass(getRosterStatus(row))}`}>
+                                {getRosterStatus(row)}
+                              </span>
+                            </td>
                             <td className="px-6 py-4 text-center text-gray-900 font-medium">{
                               row.assigned_hours != null
                                 ? Number(row.assigned_hours).toFixed(2)
@@ -599,6 +621,7 @@ const BillableReport = () => {
                         {/* Totals Row */}
                         <tr className="bg-gradient-to-r from-blue-100 to-blue-200 border-t-2 border-blue-300">
                           <td className="px-6 py-4 text-gray-900 font-bold whitespace-nowrap">TOTAL</td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-bold">—</td>
                           <td className="px-6 py-4 text-center text-gray-900 font-bold">
                             {filteredDailyData.reduce((sum, row) => sum + (Number(row.assigned_hours) || 0), 0).toFixed(2)}
                           </td>

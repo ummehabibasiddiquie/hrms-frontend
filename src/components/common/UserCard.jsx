@@ -77,6 +77,20 @@ export default function UserCard({
     return 'text-red-700 bg-red-200 font-bold';
   };
 
+  const getRosterStatus = (row) => row?.roster_status || row?.day_status || '—';
+
+  const getRosterStatusClass = (status) => {
+    const s = String(status || '').toLowerCase();
+    if (s.includes('week off')) return 'text-slate-700 bg-slate-100 font-semibold';
+    if (s.includes('holiday')) return 'text-purple-800 bg-purple-100 font-semibold';
+    if (s.includes('half day leave')) return 'text-amber-800 bg-amber-100 font-semibold';
+    if (s.includes('leave')) return 'text-orange-800 bg-orange-100 font-semibold';
+    if (s.includes('half day')) return 'text-amber-800 bg-amber-50 font-semibold';
+    if (s.includes('pre join')) return 'text-slate-600 bg-slate-50 font-semibold';
+    if (s.includes('working')) return 'text-green-800 bg-green-50 font-semibold';
+    return 'text-slate-600 bg-slate-50';
+  };
+
   // Helper function to get tracker count color classes
   const getTrackerCountColorClass = (count) => {
     if (count === null || count === undefined || count === '-' || isNaN(Number(count))) return 'text-slate-700';
@@ -221,6 +235,7 @@ export default function UserCard({
           <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
             <tr>
               <th className="px-6 py-4 text-left font-semibold">Date-Time</th>
+              <th className="px-6 py-4 text-center font-semibold">Day Status</th>
               <th className="px-6 py-4 text-center font-semibold">Assign Hours</th>
               <th className="px-6 py-4 text-center font-semibold">Worked Hours</th>
               <th className="px-6 py-4 text-center font-semibold">QC Score</th>
@@ -236,6 +251,11 @@ export default function UserCard({
               <tr key={row.date_time || row.date || idx} className={`${getDayColorClass(row.day) ? 'bg-blue-50' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
                 <td className="px-6 py-4 font-medium whitespace-pre-line">
                   {row.date_time || row.date || row.work_date || '-'}
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <span className={`px-2 py-1 rounded-lg inline-block ${getRosterStatusClass(getRosterStatus(row))}`}>
+                    {getRosterStatus(row)}
+                  </span>
                 </td>
                 <td className="px-6 py-4 text-center text-slate-700 font-semibold">{row.assigned_hours !== null && row.assigned_hours !== undefined ? Number(row.assigned_hours).toFixed(2) : '-'}</td>
                 <td className="px-6 py-4 text-center text-slate-700 font-semibold">{row.billable_hours || row.total_billable_hours_day ? Number(row.billable_hours || row.total_billable_hours_day).toFixed(2) : '-'}</td>
@@ -269,6 +289,7 @@ export default function UserCard({
             {filteredRows.length > 0 && (
               <tr className="bg-gradient-to-r from-blue-100 to-blue-200 border-t-2 border-blue-300">
                 <td className="px-6 py-4 text-gray-900 font-bold whitespace-nowrap">TOTAL</td>
+                <td className="px-6 py-4 text-center text-gray-900 font-bold">—</td>
                 <td className="px-6 py-4 text-center text-gray-900 font-bold">
                   {filteredRows.reduce((sum, row) => sum + (Number(row.assigned_hours) || 0), 0).toFixed(2)}
                 </td>
@@ -399,6 +420,7 @@ export default function UserCard({
                       // Use filteredRows (already filtered by date range)
                       let exportData = filteredRows.map(row => ({
                         'Date': formatDateTime(row.date_time ?? row.date),
+                        'Day Status': getRosterStatus(row),
                         'Assign Hours': formatNumber(row.assigned_hours ?? row.assign_hours ?? row.assignHours),
                         'Worked Hours': formatNumber(row.billable_hours ?? row.workedHours ?? row.worked_hours),
                         'QC Score': row.qc_score != null || row.qcScore != null ? `${formatNumber(row.qc_score ?? row.qcScore)}%` : '-',
@@ -419,6 +441,7 @@ export default function UserCard({
                         
                         exportData.push({
                           'Date': 'TOTAL',
+                          'Day Status': '',
                           'Assign Hours': totalAssigned.toFixed(2),
                           'Worked Hours': totalWorked.toFixed(2),
                           'QC Score': avgQC,
@@ -482,6 +505,7 @@ export default function UserCard({
               <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
                 <tr>
                   <th className="px-6 py-4 text-left font-semibold">Date-Time</th>
+                  <th className="px-6 py-4 text-center font-semibold">Day Status</th>
                   <th className="px-6 py-4 text-center font-semibold">Assign Hours</th>
                   <th className="px-6 py-4 text-center font-semibold">Worked Hours</th>
                   <th className="px-6 py-4 text-center font-semibold">QC Score</th>
@@ -498,6 +522,11 @@ export default function UserCard({
                     {filteredRows.map((row, idx) => (
                     <tr key={row.date_time || row.date || idx} className={` ${getDayColorClass(row.day) ? 'bg-orange-50 border-l-4 border-l-orange-800' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
                         <td className={`px-6 py-4 font-medium whitespace-pre-line ${getDayColorClass(row.day)}`}>{row.date_time || row.date || '-'}</td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-2 py-1 rounded-lg inline-block ${getRosterStatusClass(getRosterStatus(row))}`}>
+                            {getRosterStatus(row)}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 text-center text-slate-700">
                           {row.assign_hours === '-' || row.assignHours === '-' ? '-' : (row.assign_hours !== undefined && row.assign_hours !== null && !isNaN(Number(row.assign_hours)) ? Number(row.assign_hours).toFixed(2) : (row.assignHours ?? row.assigned_hour ?? "-"))}
                         </td>
@@ -535,6 +564,7 @@ export default function UserCard({
                     {/* Totals Row */}
                     <tr className="bg-gradient-to-r from-blue-100 to-blue-200 border-t-2 border-blue-300">
                       <td className="px-6 py-4 text-gray-900 font-bold whitespace-nowrap">TOTAL</td>
+                      <td className="px-6 py-4 text-center text-gray-900 font-bold">—</td>
                       <td className="px-6 py-4 text-center text-gray-900 font-bold">
                         {filteredRows.reduce((sum, row) => {
                           const val = row.assign_hours ?? row.assignHours ?? row.assigned_hour ?? 0;
@@ -572,7 +602,7 @@ export default function UserCard({
                   </>
                 ) : (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
                       <div className="flex flex-col items-center gap-3">
                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
                           <Calendar className="w-8 h-8 text-slate-400" />

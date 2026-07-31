@@ -133,10 +133,13 @@ const RosterExcelUpload = ({
       if (s?.errors) {
         toast.error(`${s.errors} error(s) found — fix before applying`);
       } else if (s?.changes === 0) {
-        toast.success("No changes detected vs current roster");
+        toast.success(
+          `No roster changes to apply (${s?.skipped || 0} row(s) skipped / unchanged)`
+        );
       } else {
         const sheets = s?.sheets ? ` across ${s.sheets} sheet(s)` : "";
-        toast.success(`${s?.changes || 0} change(s) ready to apply${sheets}`);
+        const skippedNote = s?.skipped ? ` · ${s.skipped} skipped` : "";
+        toast.success(`${s?.changes || 0} change(s) ready to apply${sheets}${skippedNote}`);
       }
     } catch (err) {
       setPreview(null);

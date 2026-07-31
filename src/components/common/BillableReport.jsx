@@ -105,6 +105,7 @@ const BillableReport = ({ userId }) => {
         };
         
         rowData['Date'] = dateDisplay;
+        rowData['Day Status'] = row.roster_status || row.day_status || '—';
         rowData['Assign Hours'] = formatNumber(row.assigned_hours);
         rowData['Worked Hours'] = formatNumber(row.total_billable_hours_day);
         rowData['QC Score'] = row.qc_score != null ? `${formatNumber(row.qc_score)}%` : '-';
@@ -131,6 +132,7 @@ const BillableReport = ({ userId }) => {
         };
         
         totalRow['Date'] = '';
+        totalRow['Day Status'] = '';
         totalRow['Assign Hours'] = totalAssigned.toFixed(2);
         totalRow['Worked Hours'] = totalWorked.toFixed(2);
         totalRow['QC Score'] = avgQC;
@@ -488,6 +490,7 @@ const BillableReport = ({ userId }) => {
         
         return {
           'Date-Time': row.date_time ?? row.date ?? '-',
+          'Day Status': row.roster_status || row.day_status || '—',
           'Assigned Hour': formatNum(row.assigned_hours ?? row.assign_hours),
           'Worked Hours': formatNum(row.total_billable_hours_day ?? row.billable_hours),
           'QC Score': row.qc_score != null && row.qc_score !== '' ? `${formatNum(row.qc_score)}%` : '-',
@@ -510,6 +513,7 @@ const BillableReport = ({ userId }) => {
         
         exportData.push({
           'Date-Time': 'TOTAL',
+          'Day Status': '',
           'Assigned Hour': totalAssigned.toFixed(2),
           'Worked Hours': totalWorked.toFixed(2),
           'QC Score': avgQC,
@@ -702,6 +706,8 @@ const BillableReport = ({ userId }) => {
                         date_time: date, // Also set date_time for compatibility
                         work_date: r.work_date, // Keep original work_date for filtering
                         day: r.day, // Pass day field for color styling
+                        roster_status: r.roster_status || '—',
+                        day_type: r.day_type,
                         assigned_hours, // Use actual value from API
                         assign_hours: assigned_hours, // Alternative field name
                         assignHours: assigned_hours, // Alternative field name

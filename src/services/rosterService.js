@@ -84,6 +84,10 @@ export async function approveChangeRequest(payload) {
   return rosterPost("/roster/requests/approve", payload);
 }
 
+export async function approveChangeRequestsBulk(payload) {
+  return rosterPost("/roster/requests/approve_bulk", payload, ROSTER_HEAVY_TIMEOUT_MS);
+}
+
 export async function rejectChangeRequest(payload) {
   return rosterPost("/roster/requests/reject", payload);
 }

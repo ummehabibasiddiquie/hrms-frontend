@@ -11,10 +11,12 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  CheckCheck,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import {
   approveChangeRequest,
+  approveChangeRequestsBulk,
   listChangeRequests,
   rejectChangeRequest,
 } from "../../services/rosterService";
@@ -80,9 +82,11 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [actionId, setActionId] = useState(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
   const [comment, setComment] = useState("");
   const [modal, setModal] = useState(null);
   const [detailRequest, setDetailRequest] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
 
   const loadRequests = useCallback(async () => {
     try {
@@ -92,6 +96,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
       });
       setRequests(Array.isArray(res.data) ? res.data : []);
       setPage(1);
+      setSelectedIds(new Set());
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
       setRequests([]);
@@ -106,6 +111,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
 
   useEffect(() => {
     setPage(1);
+    setSelectedIds(new Set());
   }, [statusFilter, search]);
 
   const counts = useMemo(() => {
@@ -143,44 +149,135 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
     });
   }, [statusFiltered, search]);
 
+  const pendingFiltered = useMemo(
+    () => filtered.filter((r) => (r.status || "") === "Pending" && r.batch_id),
+    [filtered]
+  );
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pendingOnPage = paged.filter((r) => (r.status || "") === "Pending" && r.batch_id);
+  const selectedCount = selectedIds.size;
+  const allPendingSelected =
+    pendingFiltered.length > 0 && pendingFiltered.every((r) => selectedIds.has(r.request_id));
+  const pagePendingSelected =
+    pendingOnPage.length > 0 && pendingOnPage.every((r) => selectedIds.has(r.request_id));
+
+  const toggleSelect = (requestId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(requestId)) next.delete(requestId);
+      else next.add(requestId);
+      return next;
+    });
+  };
+
+  const toggleSelectPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (pagePendingSelected) {
+        pendingOnPage.forEach((r) => next.delete(r.request_id));
+      } else {
+        pendingOnPage.forEach((r) => next.add(r.request_id));
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllPending = () => {
+    if (allPendingSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(pendingFiltered.map((r) => r.request_id)));
+  };
 
   const openAction = (type, request) => {
     setModal({ type, request });
     setComment("");
   };
 
+  const openBulkModal = (type) => {
+    setModal({ type, request: null });
+    setComment("");
+  };
+
   const handleAction = async () => {
     const { type, request } = modal;
-    if (type === "reject" && !comment.trim()) {
+    if ((type === "reject" || type === "reject_selected") && !comment.trim()) {
       toast.error("Rejection comment is required");
       return;
     }
+
     try {
-      setActionId(request.request_id);
-      if (type === "approve") {
-        await approveChangeRequest({
-          request_id: request.request_id,
-          ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
-        });
-        toast.success("Request approved");
-      } else {
-        await rejectChangeRequest({
-          request_id: request.request_id,
-          reviewer_comment: comment.trim(),
-        });
-        toast.success("Request rejected");
+      if (type === "approve" || type === "reject") {
+        setActionId(request.request_id);
+        if (type === "approve") {
+          await approveChangeRequest({
+            request_id: request.request_id,
+            ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
+          });
+          toast.success("Request approved");
+        } else {
+          await rejectChangeRequest({
+            request_id: request.request_id,
+            reviewer_comment: comment.trim(),
+          });
+          toast.success("Request rejected");
+        }
+      } else if (type === "approve_selected" || type === "approve_all") {
+        setBulkLoading(true);
+        const payload =
+          type === "approve_all"
+            ? {
+                approve_all: true,
+                month_year: monthYear,
+                ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
+              }
+            : {
+                request_ids: Array.from(selectedIds),
+                ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
+              };
+        const res = await approveChangeRequestsBulk(payload);
+        const approved = res.data?.approved ?? 0;
+        const failed = res.data?.failed || [];
+        if (failed.length) {
+          toast.error(`Approved ${approved}; ${failed.length} failed`);
+        } else {
+          toast.success(res.message || `Approved ${approved} request(s)`);
+        }
+        setSelectedIds(new Set());
+      } else if (type === "reject_selected") {
+        setBulkLoading(true);
+        const ids = Array.from(selectedIds);
+        let ok = 0;
+        let fail = 0;
+        for (const id of ids) {
+          try {
+            await rejectChangeRequest({
+              request_id: id,
+              reviewer_comment: comment.trim(),
+            });
+            ok += 1;
+          } catch {
+            fail += 1;
+          }
+        }
+        if (fail) toast.error(`Rejected ${ok}; ${fail} failed`);
+        else toast.success(`Rejected ${ok} request(s)`);
+        setSelectedIds(new Set());
       }
+
       setModal(null);
       setDetailRequest(null);
       setComment("");
-      loadRequests();
+      await loadRequests();
       onActionComplete?.();
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
     } finally {
       setActionId(null);
+      setBulkLoading(false);
     }
   };
 
@@ -188,9 +285,21 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
     ? getChangeRequestDetailLines(detailRequest.change_type, detailRequest.change_payload)
     : [];
 
+  const showBulkBar = statusFilter === "Pending" || statusFilter === "";
+  const busy = !!actionId || bulkLoading;
+
+  const modalTitle = (() => {
+    if (!modal) return "";
+    if (modal.type === "approve") return "Approve Request";
+    if (modal.type === "reject") return "Reject Request";
+    if (modal.type === "approve_selected") return `Approve Selected (${selectedCount})`;
+    if (modal.type === "approve_all") return `Approve All Pending (${counts.pending})`;
+    if (modal.type === "reject_selected") return `Reject Selected (${selectedCount})`;
+    return "Confirm";
+  })();
+
   return (
     <div className="space-y-4">
-      {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
           { label: "Total", value: counts.total, className: "bg-slate-50 text-slate-700 border-slate-100" },
@@ -198,17 +307,13 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
           { label: "Approved", value: counts.approved, className: "bg-green-50 text-green-700 border-green-100" },
           { label: "Rejected", value: counts.rejected, className: "bg-red-50 text-red-700 border-red-100" },
         ].map((stat) => (
-          <div
-            key={stat.label}
-            className={`rounded-lg border px-3 py-2.5 ${stat.className}`}
-          >
+          <div key={stat.label} className={`rounded-lg border px-3 py-2.5 ${stat.className}`}>
             <p className="text-[10px] font-semibold uppercase tracking-wide opacity-80">{stat.label}</p>
             <p className="text-xl font-bold tabular-nums mt-0.5">{stat.value}</p>
           </div>
         ))}
       </div>
 
-      {/* Filters */}
       <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-end gap-3">
           <MonthYearPicker
@@ -229,9 +334,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
               className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
           </div>
-          <p className="text-xs text-slate-400 lg:pb-2 shrink-0">
-            {formatMonthYearLabel(monthYear)}
-          </p>
+          <p className="text-xs text-slate-400 lg:pb-2 shrink-0">{formatMonthYearLabel(monthYear)}</p>
         </div>
 
         <div className="flex flex-wrap gap-1.5">
@@ -252,7 +355,52 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
         </div>
       </div>
 
-      {/* List */}
+      {showBulkBar && counts.pending > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <label className="inline-flex items-center gap-1.5 font-semibold cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allPendingSelected}
+                onChange={toggleSelectAllPending}
+                className="rounded border-slate-300"
+              />
+              Select all pending ({pendingFiltered.length})
+            </label>
+            {selectedCount > 0 && <span className="text-slate-400">{selectedCount} selected</span>}
+          </div>
+          <div className="flex flex-wrap gap-1.5 sm:ml-auto">
+            <button
+              type="button"
+              disabled={busy || selectedCount === 0}
+              onClick={() => openBulkModal("approve_selected")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-40"
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+              Approve selected{selectedCount ? ` (${selectedCount})` : ""}
+            </button>
+            <button
+              type="button"
+              disabled={busy || counts.pending === 0}
+              onClick={() => openBulkModal("approve_all")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-transparent bg-green-600 text-white hover:bg-green-700 disabled:opacity-40"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              Approve all ({counts.pending})
+            </button>
+            <button
+              type="button"
+              disabled={busy || selectedCount === 0}
+              onClick={() => openBulkModal("reject_selected")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-40"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              Reject selected{selectedCount ? ` (${selectedCount})` : ""}
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <LoadingSpinner />
       ) : paged.length === 0 ? (
@@ -263,19 +411,47 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
         </div>
       ) : (
         <div className="space-y-3">
+          {pendingOnPage.length > 0 && (
+            <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 px-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={pagePendingSelected}
+                onChange={toggleSelectPage}
+                className="rounded border-slate-300"
+              />
+              Select page ({pendingOnPage.length})
+            </label>
+          )}
+
           {paged.map((req) => {
             const summary = formatChangeRequestSummary(req.change_type, req.change_payload);
-            const typeStyle = CHANGE_TYPE_STYLES[req.change_type] || "bg-slate-50 text-slate-700 border-slate-100";
-            const isPending = req.status === "Pending";
+            const typeStyle =
+              CHANGE_TYPE_STYLES[req.change_type] || "bg-slate-50 text-slate-700 border-slate-100";
+            const isPending = req.status === "Pending" && !!req.batch_id;
+            const isSelected = selectedIds.has(req.request_id);
 
             return (
               <article
                 key={req.request_id}
-                className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hover:border-slate-300 transition-colors"
+                className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-colors ${
+                  isSelected
+                    ? "border-blue-300 ring-1 ring-blue-100"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}
               >
                 <div className="p-4 flex flex-col lg:flex-row lg:items-start gap-4">
-                  {/* Left: employee + type */}
                   <div className="flex gap-3 min-w-0 flex-1">
+                    {isPending ? (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(req.request_id)}
+                        className="mt-3 rounded border-slate-300 shrink-0"
+                        title="Select for bulk action"
+                      />
+                    ) : (
+                      <div className="w-4 shrink-0" />
+                    )}
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold shrink-0">
                       {getInitials(req.user_name)}
                     </div>
@@ -285,7 +461,9 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${typeStyle}`}>
                           {getChangeTypeLabel(req.change_type)}
                         </span>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${statusBadgeClass(req.status)}`}>
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${statusBadgeClass(req.status)}`}
+                        >
                           {req.status}
                         </span>
                       </div>
@@ -313,7 +491,6 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
                     </div>
                   </div>
 
-                  {/* Right: actions */}
                   <div className="flex items-center gap-2 shrink-0 lg:pt-1">
                     <button
                       type="button"
@@ -327,7 +504,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
                       <>
                         <button
                           type="button"
-                          disabled={actionId === req.request_id}
+                          disabled={busy}
                           onClick={() => openAction("approve", req)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50"
                         >
@@ -336,7 +513,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
                         </button>
                         <button
                           type="button"
-                          disabled={actionId === req.request_id}
+                          disabled={busy}
                           onClick={() => openAction("reject", req)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
                         >
@@ -363,7 +540,8 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
                 Previous
               </button>
               <span className="text-xs text-slate-500">
-                Page {page} of {totalPages} · {filtered.length} request{filtered.length !== 1 ? "s" : ""}
+                Page {page} of {totalPages} · {filtered.length} request
+                {filtered.length !== 1 ? "s" : ""}
               </span>
               <button
                 type="button"
@@ -379,7 +557,6 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
         </div>
       )}
 
-      {/* Detail modal */}
       {detailRequest && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
@@ -437,7 +614,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
               </div>
             </div>
 
-            {detailRequest.status === "Pending" && (
+            {detailRequest.status === "Pending" && detailRequest.batch_id && (
               <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-2 bg-white">
                 <button
                   type="button"
@@ -472,56 +649,73 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
         </div>
       )}
 
-      {/* Approve / Reject modal */}
       {modal && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className={`px-5 py-4 border-b ${modal.type === "approve" ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100"}`}>
-              <h3 className="text-base font-bold text-slate-900">
-                {modal.type === "approve" ? "Approve Request" : "Reject Request"}
-              </h3>
-              <p className="text-sm text-slate-600 mt-1">
-                {modal.request.user_name} · {getChangeTypeLabel(modal.request.change_type)}
-              </p>
-            </div>
-            <div className="p-5">
-              <p className="text-sm text-slate-600 bg-slate-50 rounded-lg border border-slate-100 px-3 py-2 mb-4">
-                {formatChangeRequestSummary(modal.request.change_type, modal.request.change_payload)}
-              </p>
-              {modal.type === "approve" ? (
-                <p className="text-sm text-slate-500">Confirm approval of this change request?</p>
-              ) : (
-                <label className="block">
-                  <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                    Rejection reason *
-                  </span>
-                  <textarea
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    rows={3}
-                    className="mt-1.5 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200"
-                    placeholder="Explain why this request is being rejected..."
-                  />
-                </label>
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900">{modalTitle}</h3>
+              {modal.request && (
+                <p className="text-xs text-slate-500 mt-1">
+                  {modal.request.user_name} · {getChangeTypeLabel(modal.request.change_type)}
+                </p>
               )}
+              {modal.type === "approve_all" && (
+                <p className="text-xs text-slate-500 mt-1">
+                  This will approve every pending submitted request for {formatMonthYearLabel(monthYear)}.
+                </p>
+              )}
+              {modal.type === "approve_selected" && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Approve {selectedCount} selected pending request(s).
+                </p>
+              )}
+              {modal.type === "reject_selected" && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Reject {selectedCount} selected pending request(s). A comment is required.
+                </p>
+              )}
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  Reviewer comment
+                  {(modal.type === "reject" || modal.type === "reject_selected") && (
+                    <span className="text-red-500"> *</span>
+                  )}
+                </span>
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  rows={3}
+                  placeholder={
+                    modal.type === "reject" || modal.type === "reject_selected"
+                      ? "Reason for rejection..."
+                      : "Optional note..."
+                  }
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                />
+              </label>
             </div>
             <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-2">
               <button
                 type="button"
+                disabled={busy}
                 onClick={() => setModal(null)}
-                className="px-4 py-2 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-50"
+                className="px-4 py-2 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                disabled={busy}
                 onClick={handleAction}
-                disabled={!!actionId}
-                className={`px-4 py-2 text-xs font-semibold text-white rounded-lg disabled:opacity-50 ${
-                  modal.type === "approve" ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"
+                className={`px-4 py-2 text-xs font-semibold rounded-lg text-white disabled:opacity-40 ${
+                  modal.type === "reject" || modal.type === "reject_selected"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-green-600 hover:bg-green-700"
                 }`}
               >
-                Confirm {modal.type === "approve" ? "Approval" : "Rejection"}
+                {busy ? "Working..." : "Confirm"}
               </button>
             </div>
           </div>
