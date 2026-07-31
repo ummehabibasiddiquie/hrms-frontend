@@ -160,6 +160,7 @@ export async function previewRosterExcel(file, payload = {}) {
   }
   const res = await api.post("/roster/excel/preview", formData, {
     timeout: ROSTER_HEAVY_TIMEOUT_MS,
+    signal: payload.signal,
   });
   return unwrap(res);
 }

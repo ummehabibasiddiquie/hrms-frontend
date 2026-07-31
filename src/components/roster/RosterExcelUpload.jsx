@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, Upload, X, FileSpreadsheet, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "react-hot-toast";
 import {
@@ -37,11 +37,29 @@ const RosterExcelUpload = ({
   const [applying, setApplying] = useState(false);
   const [preview, setPreview] = useState(null);
   const [selectedFileName, setSelectedFileName] = useState("");
+  const previewAbortRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const selectedWeek = useMemo(
     () => weeks.find((w) => Number(w.week_number) === Number(weekNumber)) || null,
     [weeks, weekNumber]
   );
+
+  const abortPreview = useCallback(() => {
+    if (previewAbortRef.current) {
+      previewAbortRef.current.abort();
+      previewAbortRef.current = null;
+    }
+    setPreviewing(false);
+  }, []);
+
+  const closeModal = useCallback(() => {
+    abortPreview();
+    setApplying(false);
+    setOpen(false);
+    setPreview(null);
+    setSelectedFileName("");
+  }, [abortPreview]);
 
   const loadWeeks = useCallback(async () => {
     if (!monthYear) return;
@@ -52,7 +70,6 @@ const RosterExcelUpload = ({
       setWeeks(list);
       setWeekNumber((prev) => {
         if (prev && list.some((w) => Number(w.week_number) === Number(prev))) return prev;
-        // Prefer current calendar week if it falls in this month
         const today = new Date();
         const todayIso = today.toISOString().slice(0, 10);
         const current = list.find(
@@ -73,8 +90,17 @@ const RosterExcelUpload = ({
       loadWeeks();
       setPreview(null);
       setSelectedFileName("");
+      abortPreview();
     }
-  }, [open, loadWeeks]);
+  }, [open, loadWeeks, abortPreview]);
+
+  useEffect(() => {
+    return () => {
+      if (previewAbortRef.current) {
+        previewAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   const summary = preview?.summary;
   const hasBlockingErrors = (preview?.errors?.length || 0) > 0;
@@ -124,10 +150,20 @@ const RosterExcelUpload = ({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+
+    abortPreview();
+    const controller = new AbortController();
+    previewAbortRef.current = controller;
+
     try {
       setPreviewing(true);
       setSelectedFileName(file.name);
-      const res = await previewRosterExcel(file, { team_id: teamId });
+      setPreview(null);
+      const res = await previewRosterExcel(file, {
+        team_id: teamId,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       setPreview(res.data || null);
       const s = res.data?.summary;
       if (s?.errors) {
@@ -142,15 +178,21 @@ const RosterExcelUpload = ({
         toast.success(`${s?.changes || 0} change(s) ready to apply${sheets}${skippedNote}`);
       }
     } catch (err) {
+      if (controller.signal.aborted || err?.code === "ERR_CANCELED" || err?.name === "CanceledError") {
+        return;
+      }
       setPreview(null);
       toast.error(getFriendlyErrorMessage(err));
     } finally {
+      if (previewAbortRef.current === controller) {
+        previewAbortRef.current = null;
+      }
       setPreviewing(false);
     }
   };
 
   const handleApply = async () => {
-    if (!canApply || applying) return;
+    if (!canApply || applying || previewing) return;
     try {
       setApplying(true);
       const res = await applyRosterExcelChanges({
@@ -166,8 +208,7 @@ const RosterExcelUpload = ({
           `Created ${created} pending request(s)${updated ? `, updated ${updated}` : ""}. Submit for approval when ready.`
         );
       }
-      setOpen(false);
-      setPreview(null);
+      closeModal();
       onApplied?.();
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
@@ -192,7 +233,7 @@ const RosterExcelUpload = ({
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
               <div>
@@ -204,8 +245,9 @@ const RosterExcelUpload = ({
               </div>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={closeModal}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                title="Close"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -228,7 +270,8 @@ const RosterExcelUpload = ({
                           key={w.week_start}
                           type="button"
                           onClick={() => setWeekNumber(w.week_number)}
-                          className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors text-left min-w-[7.5rem] ${
+                          disabled={previewing || applying}
+                          className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors text-left min-w-[7.5rem] disabled:opacity-50 ${
                             active
                               ? "bg-blue-600 text-white border-blue-600 shadow-sm"
                               : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50"
@@ -249,7 +292,7 @@ const RosterExcelUpload = ({
                   <button
                     type="button"
                     onClick={handleDownloadWeek}
-                    disabled={!weekNumber || !!downloading}
+                    disabled={!weekNumber || !!downloading || previewing || applying}
                     className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
                   >
                     {downloading === "week" ? (
@@ -262,7 +305,7 @@ const RosterExcelUpload = ({
                   <button
                     type="button"
                     onClick={handleDownloadAllWeeks}
-                    disabled={!weeks.length || !!downloading}
+                    disabled={!weeks.length || !!downloading || previewing || applying}
                     className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40"
                   >
                     {downloading === "all" ? (
@@ -281,22 +324,44 @@ const RosterExcelUpload = ({
 
               <section className="rounded-xl border border-slate-200 p-4 space-y-3">
                 <h3 className="text-sm font-semibold text-slate-800">2. Upload filled file</h3>
-                <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl px-4 py-6 cursor-pointer hover:border-blue-300 hover:bg-blue-50/40 transition-colors">
-                  <Upload className="w-6 h-6 text-slate-400" />
-                  <span className="text-sm font-medium text-slate-700">
-                    {previewing ? "Reading Excel…" : "Choose Excel file (.xlsx)"}
-                  </span>
-                  {selectedFileName && (
-                    <span className="text-xs text-slate-500">{selectedFileName}</span>
-                  )}
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="hidden"
-                    disabled={previewing || applying}
-                    onChange={handleFile}
-                  />
-                </label>
+                {previewing ? (
+                  <div className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-blue-300 bg-blue-50/50 rounded-xl px-4 py-6">
+                    <LoadingSpinner size="sm" />
+                    <span className="text-sm font-medium text-slate-700">Reading Excel…</span>
+                    {selectedFileName && (
+                      <span className="text-xs text-slate-500">{selectedFileName}</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        abortPreview();
+                        setSelectedFileName("");
+                        toast("Upload cancelled — you can choose another file");
+                      }}
+                      className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50"
+                    >
+                      Cancel reading
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl px-4 py-6 cursor-pointer hover:border-blue-300 hover:bg-blue-50/40 transition-colors">
+                    <Upload className="w-6 h-6 text-slate-400" />
+                    <span className="text-sm font-medium text-slate-700">
+                      Choose Excel file (.xlsx)
+                    </span>
+                    {selectedFileName && (
+                      <span className="text-xs text-slate-500">{selectedFileName}</span>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      disabled={applying}
+                      onChange={handleFile}
+                    />
+                  </label>
+                )}
               </section>
 
               {preview && (
@@ -373,14 +438,14 @@ const RosterExcelUpload = ({
             <div className="px-5 py-4 border-t border-slate-100 flex flex-wrap justify-end gap-2 bg-white">
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={closeModal}
                 className="px-4 py-2 rounded-lg text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={!canApply || applying}
+                disabled={!canApply || applying || previewing}
                 onClick={handleApply}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40"
               >

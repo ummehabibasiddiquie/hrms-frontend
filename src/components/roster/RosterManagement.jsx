@@ -430,23 +430,26 @@ const RosterManagement = () => {
   const hasSubmitPending = monthSubmitPendingCount > 0;
 
   const runAction = async (key, fn) => {
+    // Close confirm dialog immediately so it doesn't stick during long API/refresh work
+    setConfirmAction(null);
     try {
       setActionLoading(key);
       await fn();
-      try {
-        await refreshRosterViews({ silent: true });
-        const gen = await canGenerateRoster({});
-        setCanGenerate(Boolean(gen.data?.can_generate));
-      } catch {
-        toast.error(
-          `Action completed, but refresh timed out. Reload the page if data looks stale.`
-        );
-      }
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
-    } finally {
       setActionLoading("");
-      setConfirmAction(null);
+      return;
+    }
+    // Drop the blocking overlay as soon as the API finishes; refresh in the background
+    setActionLoading("");
+    try {
+      await refreshRosterViews({ silent: true });
+      const gen = await canGenerateRoster({});
+      setCanGenerate(Boolean(gen.data?.can_generate));
+    } catch {
+      toast.error(
+        `Action completed, but refresh timed out. Reload the page if data looks stale.`
+      );
     }
   };
 
@@ -933,19 +936,37 @@ const RosterManagement = () => {
               <button
                 type="button"
                 onClick={() => setConfirmAction(null)}
-                className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
+                disabled={isBusy}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmAction.onConfirm}
-                className={`px-4 py-2 text-white rounded-lg text-sm font-semibold ${
+                disabled={isBusy}
+                className={`px-4 py-2 text-white rounded-lg text-sm font-semibold disabled:opacity-50 ${
                   confirmAction.destructive ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
                 }`}
               >
                 Confirm
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isBusy && (
+        <div className="fixed inset-0 bg-slate-900/40 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl px-6 py-5 flex items-center gap-3 max-w-sm w-full">
+            <div className="h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Working…</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {actionLoading.startsWith("reset")
+                  ? "Reset & regenerate can take a minute for a full month. Please wait."
+                  : "Please wait while this action finishes."}
+              </p>
             </div>
           </div>
         </div>
