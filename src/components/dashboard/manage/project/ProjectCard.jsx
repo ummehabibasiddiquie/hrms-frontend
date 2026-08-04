@@ -6,7 +6,8 @@ import TaskTable from './TaskTable';
 import EditTaskModal from './EditTaskModal';
 import TasksModal from './TasksModal';
 import { useAuth } from '../../../../context/AuthContext';
-import { fetchProjectsList } from '../../../../services/projectService';
+import { fetchProjectsList, updateProject } from '../../../../services/projectService';
+import { getFriendlyErrorMessage } from '../../../../utils/errorMessages';
 
 // If this is a single card, keep as is. If you want to show a list, use below:
 const ProjectCard = ({
@@ -20,6 +21,7 @@ const ProjectCard = ({
   expanded,
   setExpanded,
   fetchList,
+  onStatusChanged,
 }) => {
   const { user } = useAuth();
   const [editTaskModal, setEditTaskModal] = useState({ open: false, task: null });
@@ -27,8 +29,29 @@ const ProjectCard = ({
   const [taskTableRefresh, setTaskTableRefresh] = useState(Date.now());
   const [showFilesDropdown, setShowFilesDropdown] = useState(false);
   const [projectFiles, setProjectFiles] = useState([]);
+  const [togglingStatus, setTogglingStatus] = useState(false);
   const filesDropdownRef = useRef(null);
   const filesButtonRef = useRef(null);
+
+  const isActive = Number(project.is_active ?? 1) === 1;
+
+  const handleToggleStatus = async () => {
+    if (readOnly || togglingStatus) return;
+    const projectId = project.id || project.project_id;
+    const next = isActive ? 0 : 1;
+    try {
+      setTogglingStatus(true);
+      const formData = new FormData();
+      formData.append('is_active', String(next));
+      await updateProject(projectId, formData);
+      toast.success(next === 1 ? 'Project activated' : 'Project deactivated');
+      onStatusChanged?.(projectId, next);
+    } catch (err) {
+      toast.error(getFriendlyErrorMessage(err) || 'Failed to update project status');
+    } finally {
+      setTogglingStatus(false);
+    }
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -58,7 +81,7 @@ const ProjectCard = ({
   const handleFilesDropdownToggle = async () => {
     if (!showFilesDropdown) {
       try {
-        const res = await fetchProjectsList(user?.user_id);
+        const res = await fetchProjectsList(user?.user_id, { includeInactive: true });
         const projects = res.data || [];
         const current = projects.find(p => p.project_id === (project.id || project.project_id));
         if (current && current.project_files && Array.isArray(current.project_files)) {
@@ -134,7 +157,16 @@ const ProjectCard = ({
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5 text-blue-700"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7V6a2 2 0 012-2h14a2 2 0 012 2v1M3 7h18M3 7v11a2 2 0 002 2h14a2 2 0 002-2V7M9 17h6" /></svg>
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="text-lg font-bold text-slate-800 truncate">{project.name}</h1>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg font-bold text-slate-800 truncate">{project.name}</h1>
+                  <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                    isActive
+                      ? 'bg-green-100 text-green-700 border border-green-200'
+                      : 'bg-slate-200 text-slate-600 border border-slate-300'
+                  }`}>
+                    {isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
                 <p className="text-slate-500 text-xs">Project Details & Tasks</p>
               </div>
             </div>
@@ -238,6 +270,30 @@ const ProjectCard = ({
               <Edit className="w-4 h-4" />
               <span className="text-sm font-medium">Edit</span>
             </button>
+
+            {/* Active / Inactive toggle */}
+            {!readOnly && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-sm">
+                <span className="text-xs font-semibold text-slate-600">Status</span>
+                <button
+                  type="button"
+                  onClick={handleToggleStatus}
+                  disabled={togglingStatus}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 shadow-sm disabled:opacity-50 ${
+                    isActive
+                      ? 'bg-green-500 focus:ring-green-500'
+                      : 'bg-gray-300 focus:ring-gray-400'
+                  }`}
+                  title={isActive ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${
+                      isActive ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
 
             {/* Delete Button */}
             <button

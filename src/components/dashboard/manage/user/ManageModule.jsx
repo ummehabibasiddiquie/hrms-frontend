@@ -95,7 +95,7 @@ const ManageModule = ({ activeTab }) => {
           try {
                setLoadingProjects(true);
 
-               const res = await fetchProjectsList(userId);
+               const res = await fetchProjectsList(userId, { includeInactive: true });
 
                if (res.status === 200) {
                     const formattedProjects = (res.data || []).map((p) => {
@@ -120,6 +120,7 @@ const ManageModule = ({ activeTab }) => {
                               project_team_names: ensureArray(p.project_team_names),
                               files: p.files || null,
                               tasks: p.tasks || [],
+                              is_active: p.is_active ?? 1,
                               created_at: p.created_at,
                               updated_at: p.updated_at,
                          };

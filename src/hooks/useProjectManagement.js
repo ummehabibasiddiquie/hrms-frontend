@@ -319,7 +319,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
           try {
                // Fetch the full project details including project_category_name and project_files
                if (userId && project.project_id) {
-                    const response = await fetchProjectsList(userId);
+                    const response = await fetchProjectsList(userId, { includeInactive: true });
                     const fullProject = response.data?.find(p => p.project_id === project.project_id);
                     
                     if (fullProject) {
