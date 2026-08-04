@@ -138,7 +138,7 @@ const DashboardPage = ({
     try {
       setLoadingManagedProjects(true);
       console.log('[AssistantManager] Loading projects...');
-      const res = await fetchProjectsList(currentUser?.user_id);
+      const res = await fetchProjectsList(currentUser?.user_id, { includeInactive: true });
       console.log('[AssistantManager] fetchProjectsList response:', res);
       if (res.status === 200 || res.status === '200') {
         const projectsArray = Array.isArray(res.data) ? res.data : [];
@@ -163,6 +163,7 @@ const DashboardPage = ({
             project_team_names: ensureArray(p.project_team_names),
             files: p.files || null,
             tasks: p.tasks || [],
+            is_active: p.is_active ?? 1,
             created_at: p.created_at,
             updated_at: p.updated_at,
           };
