@@ -33,13 +33,15 @@ export const addTask = async (payload) => {
  * @param {number} userId - Logged in user ID
  * @param {string} deviceId - Device ID
  * @param {string} deviceType - Device type (e.g., LAPTOP)
+ * @param {boolean} includeInactive - When true, management UI can show inactive tasks
  */
-export const fetchProjectTasks = async (projectId, userId, deviceId, deviceType) => {
+export const fetchProjectTasks = async (projectId, userId, deviceId, deviceType, includeInactive = false) => {
   const payload = {};
   // API expects user_id, device_id, and device_type (NOT project_id)
   if (userId) payload.user_id = userId;
   if (deviceId) payload.device_id = deviceId || 'web';
   if (deviceType) payload.device_type = deviceType || 'Laptop';
+  if (includeInactive) payload.include_inactive = 1;
   
   const res = await api.post("/task/list", payload);
   return res.data;
@@ -101,11 +103,14 @@ export const createProject = async (payload) => {
 /**
  * Fetch Projects List API
  * @param {number} logged_in_user_id - The logged-in user's ID for filtering projects
+ * @param {{ includeInactive?: boolean }} options - Management: include inactive projects
  * @returns {Promise} Project list response
  */
-export const fetchProjectsList = async (logged_in_user_id) => {
+export const fetchProjectsList = async (logged_in_user_id, options = {}) => {
   console.log('[projectService] Fetching projects for user:', logged_in_user_id);
-  const res = await api.post("/project/list", { logged_in_user_id });
+  const payload = { logged_in_user_id };
+  if (options.includeInactive) payload.include_inactive = 1;
+  const res = await api.post("/project/list", payload);
   console.log('[projectService] Projects API response:', res);
   console.log('[projectService] Projects data:', res.data);
   return res.data;

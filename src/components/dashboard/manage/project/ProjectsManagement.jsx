@@ -146,7 +146,7 @@ const ProjectsManagement = ({
     console.log('[ProjectsManagement] Opening edit for project:', project);
     
     try {
-      const res = await fetchProjectsList(user?.user_id);
+      const res = await fetchProjectsList(user?.user_id, { includeInactive: true });
       console.log('[ProjectsManagement] Fetched projects list:', res);
       
       if (res && Array.isArray(res.data)) {
@@ -384,6 +384,7 @@ const ProjectsManagement = ({
               openDeleteModal={openDeleteModal}
               expanded={!!expandedCards[proj.id]}
               setExpanded={value => handleExpandCard(proj.id, value)}
+              onStatusChanged={() => loadProjects && loadProjects()}
             />
           ))}
           <TablePaginationBar {...projectPagination} itemLabel="projects" />
