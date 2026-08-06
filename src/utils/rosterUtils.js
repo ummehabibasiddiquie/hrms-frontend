@@ -74,6 +74,62 @@ export function getCalendarDays(monthYear) {
   return days;
 }
 
+/**
+ * Calendar weeks (Mon–Sun) that touch this month — same numbering as Excel Week 1..N.
+ * @returns {{ week_number: number, week_start: string, week_end: string, label: string, short_label: string, dates: { date: Date, dateStr: string, inMonth: boolean }[] }[]}
+ */
+export function getWeeksInMonth(monthYear) {
+  const parsed = parseMonthYear(monthYear);
+  if (!parsed) return [];
+  const { year, month } = parsed;
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+
+  // Monday of the week containing the 1st (JS: Sun=0 … Sat=6)
+  const start = new Date(first);
+  const dow = start.getDay(); // 0 Sun … 6 Sat
+  const toMonday = dow === 0 ? -6 : 1 - dow;
+  start.setDate(start.getDate() + toMonday);
+  start.setHours(0, 0, 0, 0);
+
+  const weeks = [];
+  const cursor = new Date(start);
+  while (cursor <= last) {
+    const dates = [];
+    let touchesMonth = false;
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(cursor);
+      d.setDate(cursor.getDate() + i);
+      const inMonth = d.getMonth() === month && d.getFullYear() === year;
+      if (inMonth) touchesMonth = true;
+      dates.push({
+        date: d,
+        dateStr: formatLocalDateString(d.getFullYear(), d.getMonth(), d.getDate()),
+        inMonth,
+      });
+    }
+    if (touchesMonth) {
+      const n = weeks.length + 1;
+      const rangeStart = dates[0].date;
+      const rangeEnd = dates[6].date;
+      const fmt = (dt) =>
+        dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const fmtY = (dt) =>
+        dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+      weeks.push({
+        week_number: n,
+        week_start: dates[0].dateStr,
+        week_end: dates[6].dateStr,
+        short_label: `Week ${n}`,
+        label: `Week ${n} (${fmt(rangeStart)} – ${fmtY(rangeEnd)})`,
+        dates,
+      });
+    }
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return weeks;
+}
+
 /** Hours shown on calendar; half-day days never display a full-day total. */
 function displayHoursForDay(day, treatAsHalf) {
   if (day?.working_hours == null || day.working_hours === "") return null;

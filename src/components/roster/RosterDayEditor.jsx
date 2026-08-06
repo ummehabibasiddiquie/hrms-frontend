@@ -46,15 +46,30 @@ const RosterDayEditor = ({
   useEffect(() => {
     if (!isOpen || !day) return;
     // Leave days aren't in the Day Type dropdown — default to Working so user can restore
-    const proposedType =
-      day.day_type === "Leave" || day.day_type === "Holiday"
-        ? "Working"
-        : day.day_type || "Working";
+    const isRestoringLeave = day.day_type === "Leave" || day.day_type === "Holiday";
+    const proposedType = isRestoringLeave ? "Working" : day.day_type || "Working";
+    const wasHalf =
+      (day.working_type || "").toLowerCase() === "half" || Number(day.is_half_day) === 1;
+    let workingType = isRestoringLeave ? "Full" : day.working_type || "Full";
+    let workingHours = Number(day.working_hours);
+    if (!Number.isFinite(workingHours) || workingHours <= 0) {
+      workingHours = 9;
+    }
+    // Leave → Working: restore full-day hours for this person (double half-leave hours)
+    if (isRestoringLeave) {
+      workingType = "Full";
+      if (wasHalf) {
+        workingHours = Math.round(workingHours * 2 * 100) / 100;
+      }
+      if (!workingHours || workingHours < 4) {
+        workingHours = 9;
+      }
+    }
     setDayForm({
       day_type: proposedType,
       shift: day.shift || "DAY",
-      working_type: day.working_type || "Full",
-      working_hours: day.working_hours ?? 9,
+      working_type: workingType,
+      working_hours: workingHours,
     });
     setLeaveForm((prev) => {
       const clickedDate = toDateOnlyString(day.roster_date);
