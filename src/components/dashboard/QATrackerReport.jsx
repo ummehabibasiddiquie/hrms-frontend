@@ -24,8 +24,25 @@ const getTodayDate = () => {
 
 // Tasks allowed to enter production above 2x base target
 const UNLIMITED_PRODUCTION_TASK_IDS = new Set(['42', '49']);
-const allowsUnlimitedProduction = (taskId) =>
-  UNLIMITED_PRODUCTION_TASK_IDS.has(String(taskId));
+const allowsUnlimitedProduction = (taskId) => {
+  if (taskId === null || taskId === undefined || taskId === '') return false;
+  return UNLIMITED_PRODUCTION_TASK_IDS.has(String(taskId).trim());
+};
+
+const getProductionLimitError = (productionValue, baseTarget, taskId) => {
+  const production = Number(productionValue);
+  const target = Number(baseTarget);
+  if (productionValue === '' || productionValue === null || productionValue === undefined) {
+    return 'Production is required';
+  }
+  if (isNaN(production) || production <= 0) {
+    return 'Enter valid production';
+  }
+  if (target && production > target * 2 && !allowsUnlimitedProduction(taskId)) {
+    return `Production cannot exceed ${(target * 2).toFixed(2)} (double of base target)`;
+  }
+  return '';
+};
 
 const QATrackerReport = () => {
   const { user } = useAuth();
@@ -581,6 +598,16 @@ const QATrackerReport = () => {
         const calculated = Number(perHourTarget) * Number(userTenure);
         log('[QATrackerReport] Calculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
         setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
+        // Re-validate production against new task (allows 42/49 above double)
+        if (addFormData.production) {
+          const productionError = getProductionLimitError(addFormData.production, calculated.toFixed(2), value);
+          setAddErrors(prev => {
+            const next = { ...prev };
+            if (productionError) next.production = productionError;
+            else delete next.production;
+            return next;
+          });
+        }
       } else {
         log('[QATrackerReport] Could not calculate - task not found');
       }
@@ -623,12 +650,11 @@ const QATrackerReport = () => {
         else delete newErrors.shift_type;
         break;
       case 'production':
-        if (!value) newErrors.production = 'Production is required';
-        else if (isNaN(value) || Number(value) <= 0) newErrors.production = 'Enter valid production';
-        else if (addFormData.base_target && Number(value) > (Number(addFormData.base_target) * 2) && !allowsUnlimitedProduction(addFormData.task_id)) {
-          newErrors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
+        {
+          const productionError = getProductionLimitError(value, addFormData.base_target, addFormData.task_id);
+          if (productionError) newErrors.production = productionError;
+          else delete newErrors.production;
         }
-        else delete newErrors.production;
         break;
       default:
         break;
@@ -684,10 +710,13 @@ const QATrackerReport = () => {
     if (!addFormData.task_id) errors.task_id = 'Task is required';
     if (!addFormData.shift_type) errors.shift_type = 'Shift is required';
     if (!addFormData.production) errors.production = 'Production is required';
-    else if (isNaN(addFormData.production) || Number(addFormData.production) <= 0) {
-      errors.production = 'Enter valid production';
-    } else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && !allowsUnlimitedProduction(addFormData.task_id)) {
-      errors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
+    else {
+      const productionError = getProductionLimitError(
+        addFormData.production,
+        addFormData.base_target,
+        addFormData.task_id
+      );
+      if (productionError) errors.production = productionError;
     }
     
     setAddErrors(errors);
@@ -872,54 +901,60 @@ const QATrackerReport = () => {
 
   // Handle edit form field changes
   const handleEditFieldChange = (field, value) => {
-    setEditFormData(prev => {
-      const updated = { ...prev, [field]: value };
+    const prev = editFormData;
+    const updated = { ...prev, [field]: value };
 
-      if (field === 'project_id') {
-        const project = editProjects.find(p => String(p.project_id) === String(value));
-        log('[QATrackerReport] Project changed:', value, 'Found project:', project);
-        setEditTasks(project?.tasks || []);
-        
-        if (!project?.tasks?.find(t => String(t.task_id) === String(prev.task_id))) {
-          updated.task_id = "";
-          updated.base_target = "";
-        } else {
-          const task = project?.tasks?.find(t => String(t.task_id) === String(prev.task_id));
-          // Use user_tenure from the tracker's API data
-          const userTenure = editingTracker?.user_tenure || editingTracker?.tenure || 1;
-          if (task) {
-            const perHourTarget = task.task_target || task.per_hour_target || task.target || 0;
-            updated.base_target = (Number(perHourTarget) * Number(userTenure)).toFixed(2);
-          }
-        }
-      }
+    if (field === 'project_id') {
+      const project = editProjects.find(p => String(p.project_id) === String(value));
+      log('[QATrackerReport] Project changed:', value, 'Found project:', project);
+      setEditTasks(project?.tasks || []);
 
-      if (field === 'task_id' && value) {
-        const project = editProjects.find(p => String(p.project_id) === String(updated.project_id));
-        const task = project?.tasks?.find(t => String(t.task_id) === String(value));
-        // Use user_tenure from the tracker's API data (from /tracker/view response)
+      if (!project?.tasks?.find(t => String(t.task_id) === String(prev.task_id))) {
+        updated.task_id = "";
+        updated.base_target = "";
+      } else {
+        const task = project?.tasks?.find(t => String(t.task_id) === String(prev.task_id));
         const userTenure = editingTracker?.user_tenure || editingTracker?.tenure || 1;
         if (task) {
           const perHourTarget = task.task_target || task.per_hour_target || task.target || 0;
-          const calculatedTarget = Number(perHourTarget) * Number(userTenure);
-          updated.base_target = calculatedTarget.toFixed(2);
-          log('[QATrackerReport] Base target calculated:', calculatedTarget, 'task_target:', perHourTarget, 'userTenure:', userTenure);
+          updated.base_target = (Number(perHourTarget) * Number(userTenure)).toFixed(2);
         }
       }
+    }
 
-      return updated;
-    });
-    
-    if (field === 'production') {
-      const productionValue = Number(value);
-      const baseTarget = Number(editFormData.base_target);
-      
-      if (isNaN(productionValue)) {
-        setEditProductionError('Please enter a valid number');
-      } else if (productionValue < 0) {
-        setEditProductionError('Production cannot be negative');
-      } else if (baseTarget && productionValue > (baseTarget * 2) && !allowsUnlimitedProduction(editFormData.task_id)) {
-        setEditProductionError(`Production cannot exceed ${(baseTarget * 2).toFixed(2)} (double of base target)`);
+    if (field === 'task_id' && value) {
+      const project = editProjects.find(p => String(p.project_id) === String(updated.project_id));
+      const task = project?.tasks?.find(t => String(t.task_id) === String(value));
+      const userTenure = editingTracker?.user_tenure || editingTracker?.tenure || 1;
+      if (task) {
+        const perHourTarget = task.task_target || task.per_hour_target || task.target || 0;
+        const calculatedTarget = Number(perHourTarget) * Number(userTenure);
+        updated.base_target = calculatedTarget.toFixed(2);
+        log('[QATrackerReport] Base target calculated:', calculatedTarget, 'task_target:', perHourTarget, 'userTenure:', userTenure);
+      }
+    }
+
+    setEditFormData(updated);
+
+    // Re-check production limit using latest task/base (covers edit for tasks 42 & 49)
+    if (field === 'production' || field === 'task_id' || field === 'project_id') {
+      const taskIdForCheck = updated.task_id || editingTracker?.task_id;
+      const productionForCheck = updated.production;
+
+      if (productionForCheck !== '' && productionForCheck !== null && productionForCheck !== undefined) {
+        const productionValue = Number(productionForCheck);
+        if (isNaN(productionValue)) {
+          setEditProductionError('Please enter a valid number');
+        } else if (productionValue < 0) {
+          setEditProductionError('Production cannot be negative');
+        } else {
+          const limitError = getProductionLimitError(
+            productionForCheck,
+            updated.base_target,
+            taskIdForCheck
+          );
+          setEditProductionError(limitError.includes('cannot exceed') ? limitError : '');
+        }
       } else {
         setEditProductionError('');
       }
@@ -975,7 +1010,20 @@ const QATrackerReport = () => {
       return;
     }
 
-    if (editProductionError) {
+    const editTaskId = editFormData.task_id || editingTracker?.task_id;
+    const submitLimitError = getProductionLimitError(
+      editFormData.production,
+      editFormData.base_target,
+      editTaskId
+    );
+    if (submitLimitError && submitLimitError.includes('cannot exceed')) {
+      setEditProductionError(submitLimitError);
+      toast.error(submitLimitError);
+      return;
+    }
+
+    // Ignore stale double-limit errors when task 42/49 is selected
+    if (editProductionError && !(allowsUnlimitedProduction(editTaskId) && String(editProductionError).includes('cannot exceed'))) {
       toast.error(editProductionError);
       return;
     }

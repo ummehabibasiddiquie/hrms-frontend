@@ -521,7 +521,11 @@ const Tracker = ({ embedded = false }) => {
     if (!baseTarget) newErrors.baseTarget = "Base Target is required.";
     if (!productionTarget) newErrors.productionTarget = "Production Target is required.";
     else if (isNaN(Number(productionTarget)) || Number(productionTarget) < 0) newErrors.productionTarget = "Enter a valid number.";
-        if (fileError) newErrors.file = fileError;
+    // Skip double base target validation for task IDs 42 and 49
+    else if (baseTarget && Number(productionTarget) > (Number(baseTarget) * 2) && !['42', '49'].includes(String(selectedTask))) {
+      newErrors.productionTarget = `Production cannot exceed ${(Number(baseTarget) * 2).toFixed(2)} (double of base target).`;
+    }
+    if (fileError) newErrors.file = fileError;
     return newErrors;
   };
 
@@ -534,7 +538,11 @@ const Tracker = ({ embedded = false }) => {
     if (!baseTarget) newErrors.baseTarget = "Base Target is required.";
     if (!productionTarget) newErrors.productionTarget = "Production Target is required.";
     else if (isNaN(Number(productionTarget)) || Number(productionTarget) < 0) newErrors.productionTarget = "Enter a valid number.";
-        if (fileError) newErrors.file = fileError;
+    // Skip double base target validation for task IDs 42 and 49
+    else if (baseTarget && Number(productionTarget) > (Number(baseTarget) * 2) && !['42', '49'].includes(String(selectedTask))) {
+      newErrors.productionTarget = `Production cannot exceed ${(Number(baseTarget) * 2).toFixed(2)} (double of base target).`;
+    }
+    if (fileError) newErrors.file = fileError;
     setErrors(newErrors);
   }, [selectedProject, selectedTask, shiftType, baseTarget, productionTarget, fileError]);
 
