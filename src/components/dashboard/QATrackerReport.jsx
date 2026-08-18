@@ -875,7 +875,7 @@ const QATrackerReport = () => {
       const dateTimeValue = addFormData.tracker_datetime;
       const formattedDateTime = dateTimeValue.replace('T', ' ') + ':00';
       
-      const formData = new FormData();
+      const formData = new FormData();  
       formData.append('user_id', Number(addFormData.agent_id));
       formData.append('date', formattedDateTime);
       formData.append('project_id', Number(addFormData.project_id));
@@ -976,7 +976,7 @@ const QATrackerReport = () => {
         project_id: tracker.project_id || "",
         task_id: tracker.task_id || "",
         shift_type: normalizedShift,
-        production: tracker.production || "",
+        production: tracker.production != null ? String(tracker.production) : "",
         base_target: tracker.tenure_target || tracker.actual_target || "",
         tracker_note: tracker.tracker_note || tracker.notes || "",
         tracker_file: null,
