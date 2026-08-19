@@ -59,7 +59,6 @@ const AddUserFormModal = ({
                     assistantManager: { visible: true, required: true },
                     qualityAnalyst: { visible: true, required: true },
                     tenure: { visible: true, required: true },
-                    joiningDate: { visible: true, required: true },
                };
           }
           
@@ -80,7 +79,6 @@ const AddUserFormModal = ({
                     assistantManager: { visible: true, required: true },
                     qualityAnalyst: { visible: false, required: false },
                     tenure: { visible: false, required: false },
-                    joiningDate: { visible: true, required: true },
                };
           }
           
@@ -721,6 +719,7 @@ const AddUserFormModal = ({
 
 
 
+                              {/* Tenure Field - Only for Agents */}
                               {fieldVisibility.tenure && fieldVisibility.tenure.visible && (
                                    <div className="md:col-span-1">
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -739,27 +738,6 @@ const AddUserFormModal = ({
                                         />
                                         {getErrorMessage("tenure") && (
                                              <p className="mt-1 text-xs text-red-600">{getErrorMessage("tenure")}</p>
-                                        )}
-                                   </div>
-                              )}
-
-                              {fieldVisibility.joiningDate?.visible && (
-                                   <div className="md:col-span-1">
-                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                             Joining Date {fieldVisibility.joiningDate.required && <span className="text-red-600">*</span>}
-                                        </label>
-                                        <input
-                                             type="date"
-                                             className={`block w-full px-3 py-3 text-sm bg-gray-50 border ${hasError("joining_date") ? 'border-red-500' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                                             value={newUser.joining_date || ""}
-                                             onChange={(e) => {
-                                                  setNewUser({ ...newUser, joining_date: e.target.value });
-                                                  clearFieldError?.("joining_date");
-                                             }}
-                                             required={fieldVisibility.joiningDate.required && !isEditMode}
-                                        />
-                                        {getErrorMessage("joining_date") && (
-                                             <p className="mt-1 text-xs text-red-600">{getErrorMessage("joining_date")}</p>
                                         )}
                                    </div>
                               )}

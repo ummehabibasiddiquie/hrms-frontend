@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Plus, Edit2, Trash2, Search, X, Save, CheckCircle2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import api from '../../../../services/api';
 import LoadingSpinner from '../../../common/LoadingSpinner';
-import { useClientPagination } from '../../../../hooks/useClientPagination';
-import TablePaginationBar from '../../../common/TablePaginationBar';
 
 const AFDManagement = () => {
   const [afdRecords, setAfdRecords] = useState([]);
@@ -316,12 +314,9 @@ const AFDManagement = () => {
     }
   };
 
-  const filteredRecords = useMemo(
-    () => afdRecords.filter((rec) => rec.name.toLowerCase().includes(searchTerm.toLowerCase())),
-    [afdRecords, searchTerm]
+  const filteredRecords = afdRecords.filter(rec =>
+    rec.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const afdPagination = useClientPagination(filteredRecords, { resetKeys: [searchTerm] });
 
   if (loading) {
     return <LoadingSpinner />;
@@ -530,7 +525,7 @@ const AFDManagement = () => {
 
       {/* AFD Records List */}
       <div className="space-y-4">
-        {afdPagination.pagedItems.map(record => (
+        {filteredRecords.map(record => (
           <div key={record.id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -615,7 +610,6 @@ const AFDManagement = () => {
             </p>
           </div>
         )}
-        <TablePaginationBar {...afdPagination} itemLabel="AFD records" />
       </div>
 
       {/* Delete Confirmation Modal */}

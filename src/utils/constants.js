@@ -73,7 +73,9 @@ export const SEED_USERS = [
   { id: 'u2', empId: '1193', name: 'Sriman Narayan', username: 'sriman', email: 'sriman@company.com', role: 'ADMIN', designation: 'Ops Manager', reportingManager: 'Ashfaq Shilliwala', password: '123', salary: 0, assignedTasks: [] },
 
   // APMs
+  { id: 'u3', empId: '13', name: 'Mohsin Pathan', username: 'mohsin', email: 'mohsin@company.com', role: 'PROJECT_MANAGER', designation: 'Asst. Project Manager', reportingManager: 'Sriman Narayan', password: '123', salary: 0, assignedTasks: [] },
   { id: 'u4', empId: '1161', name: 'Dharmesh Jotania', username: 'dharmesh', email: 'dharmesh@company.com', role: 'PROJECT_MANAGER', designation: 'Asst. Project Manager', reportingManager: 'Sriman Narayan', password: '123', salary: 0, assignedTasks: [] },
+  { id: 'uNew1', empId: '1195', name: 'Venkateshwaran Iyer', username: 'venkat', email: 'venkat@company.com', role: 'PROJECT_MANAGER', designation: 'Asst. Project Manager', reportingManager: 'Sriman Narayan', password: '123', salary: 0, assignedTasks: [] },
 
   // QA Team
   { id: 'u5', empId: '1153', name: 'Jimil Kinariwala', username: 'jimil', email: 'jimil@company.com', role: 'PROJECT_MANAGER', designation: 'QA', reportingManager: 'Mohsin Pathan', password: '123', salary: 0, assignedTasks: [] },

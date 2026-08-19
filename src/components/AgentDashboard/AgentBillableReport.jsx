@@ -8,7 +8,7 @@ import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 dayjs.extend(customParseFormat);
 import { fetchDailyBillableReport, fetchMonthlyBillableReport } from "../../services/billableReportService";
-import axios from "axios";
+import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { Download, RotateCcw, FileText, BarChart3, Award, FileSpreadsheet } from "lucide-react";
 import {
@@ -131,12 +131,11 @@ const BillableReport = () => {
   // Export daily report for a specific month-year from /tracker/view
   const handleExportMonthDailyExcel = async (monthYear) => {
     try {
-      // Build payload directly and use axios to match the daily report fetch pattern
       const payload = {
         logged_in_user_id: user?.user_id,
         month_year: monthYear
       };
-      const res = await axios.post("/python/tracker/view_daily", payload);
+      const res = await api.post("/tracker/view_daily", payload);
       console.log('Export month daily API response:', res.data);
       
       // Access trackers the same way as daily report fetch
@@ -281,7 +280,7 @@ const BillableReport = () => {
           ...(endDate && { date_to: endDate }),
         };
         // Call the correct API endpoint
-        const res = await axios.post("/python/tracker/view_daily", payload);
+        const res = await api.post("/tracker/view_daily", payload);
         console.log('Daily report API response:', res.data);
         // Fix: Use trackers array from response
         let data = res.data?.data?.trackers;

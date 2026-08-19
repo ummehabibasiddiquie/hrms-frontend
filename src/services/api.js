@@ -1,7 +1,7 @@
 import axios from "axios";
 import config, { log, logError } from "../config/environment";
-import { ROUTES, isLoginPath } from "../routes/paths";
 import { getFriendlyErrorMessage } from "../utils/errorMessages";
+
 const api = axios.create({
   baseURL: config.apiBaseUrl,
   timeout: config.apiTimeout,
@@ -46,14 +46,15 @@ api.interceptors.response.use(
     // Handle 401 unauthorized - token expired or invalid
     // BUT: Don't redirect if we're on the login page or calling the auth endpoint
     const isAuthEndpoint = error.config?.url?.includes('/auth/');
-    const isLoginPage = isLoginPath(window.location.pathname);
+    const isLoginPage = window.location.pathname === '/login' || window.location.pathname === '/';
     
     if (error.response?.status === 401 && !isAuthEndpoint && !isLoginPage) {
       console.log('[API] 401 detected, redirecting to login');
       localStorage.removeItem(config.tokenKey);
       localStorage.removeItem(config.userKey);
       sessionStorage.clear();
-      window.location.href = ROUTES.LOGIN;      return Promise.reject(error);
+      window.location.href = '/login';
+      return Promise.reject(error);
     }
 
     // Handle 403 forbidden - insufficient permissions
@@ -66,9 +67,11 @@ api.interceptors.response.use(
       logError('[API] Server error occurred');
     }
 
-    // Map backend error to friendly message (preserve backend text when available)
-    const backendMessage = error.response?.data?.message;
-    error.friendlyMessage = backendMessage || getFriendlyErrorMessage(error.message);
+    // Map backend error to friendly message
+    let friendlyMessage = getFriendlyErrorMessage(
+      error.response?.data?.code || error.response?.data?.message || error.message
+    );
+    error.friendlyMessage = friendlyMessage;
 
     return Promise.reject(error);
   }

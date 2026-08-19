@@ -44,8 +44,6 @@ function ProjectInstructionPreview({ projectId, loading, error, html, instructio
   return null;
 }
 import React, { useState, useEffect } from "react";
-import { useClientPagination } from "../../hooks/useClientPagination";
-import TablePaginationBar from "../common/TablePaginationBar";
 
 // Helper component to show only the first page of docx HTML, with expand/collapse
 function DocxPreview({ html }) {
@@ -253,8 +251,6 @@ const AgentProjectList = () => {
     });
   }, [projects]);
 
-  const projectPagination = useClientPagination(sortedProjects);
-
   // Filter tasks for today or selected date
   const filterTasksByDate = (tasks, date) =>
     tasks.filter((task) => task.due === date);
@@ -313,7 +309,7 @@ const AgentProjectList = () => {
     <div className="max-w-6xl mx-auto py-10 px-2 sm:px-6">
       <h2 className="text-3xl font-extrabold mb-8 text-blue-800 tracking-tight text-center drop-shadow-sm">Agent Project List</h2>
       <div className="flex flex-col gap-8 items-center">
-        {projectPagination.pagedItems.map((project) => {
+        {sortedProjects.map((project) => {
           const todaysTasks = filterTasksByDate(project.tasks, dateFilter);
           return (
             <div key={project.id} className="bg-white rounded-2xl shadow-xl border border-blue-100 hover:shadow-blue-200 transition-shadow duration-200 w-full" style={{minHeight: '90px', maxWidth: '1000px'}}>
@@ -473,7 +469,6 @@ const AgentProjectList = () => {
             </div>
           );
         })}
-        <TablePaginationBar {...projectPagination} itemLabel="projects" className="w-full max-w-[1000px] rounded-xl border border-blue-100" />
       </div>
     </div>
   );

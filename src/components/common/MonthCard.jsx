@@ -2,8 +2,6 @@ import React, { useState, useMemo } from "react";
 import { Download, ChevronUp, Search, X, Users, RotateCcw } from "lucide-react";
 import { useUser } from "../../context/UserContext";
 import SearchableSelect from "./SearchableSelect";
-import { useClientPagination } from "../../hooks/useClientPagination";
-import TablePaginationBar from "./TablePaginationBar";
 
 export default function MonthCard({ month, users, onExport, onExportMonth, teamOptions = [], hideTeamColumn = false }) {
   const [expanded, setExpanded] = useState(false);
@@ -36,10 +34,6 @@ export default function MonthCard({ month, users, onExport, onExportMonth, teamO
       if (userTeamName !== selectedTeamName) return false;
     }
     return true;
-  });
-
-  const userPagination = useClientPagination(filteredUsers, {
-    resetKeys: [searchQuery, selectedTeam],
   });
 
   // Debug logging
@@ -170,7 +164,6 @@ export default function MonthCard({ month, users, onExport, onExportMonth, teamO
                 No users found matching the selected filters
               </div>
             ) : (
-              <>
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b-2 border-blue-200">
@@ -184,7 +177,7 @@ export default function MonthCard({ month, users, onExport, onExportMonth, teamO
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-blue-100">
-                  {userPagination.pagedItems.map((user, idx) => {
+                  {filteredUsers.map((user, idx) => {
                     const formatNumber = (val) => {
                       if (val === null || val === undefined || val === '') return '-';
                       const num = Number(val);
@@ -261,8 +254,6 @@ export default function MonthCard({ month, users, onExport, onExportMonth, teamO
                   </tr>
                 </tfoot>
               </table>
-              <TablePaginationBar {...userPagination} itemLabel="users" />
-              </>
             )}
           </div>
         </div>

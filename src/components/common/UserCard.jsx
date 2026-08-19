@@ -90,14 +90,15 @@ export default function UserCard({
     return 'text-red-700 bg-red-200 font-bold';
   };
 
-  // Helper function to get day color class (Saturday/Sunday in red)
+  const isWeekendDay = (dayName) => {
+    if (!dayName) return false;
+    const day = String(dayName).toLowerCase();
+    return day === 'saturday' || day === 'sunday';
+  };
+
   const getDayColorClass = (dayName) => {
-  if (!dayName) return '';
-
-  const day = dayName.toLowerCase();
-
-  return day === 'saturday' || day === 'sunday';
-};
+    return isWeekendDay(dayName) ? 'text-red-600 font-bold' : '';
+  };
   
   // Helper function to get month's first and last day
   const getMonthDateRange = (monthStr) => {
@@ -238,8 +239,8 @@ export default function UserCard({
           </thead>
           <tbody className="bg-white">
             {filteredRows.map((row, idx) => (
-              <tr key={row.date_time || row.date || idx} className={`${getDayColorClass(row.day) ? 'bg-blue-50' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
-                <td className="px-6 py-4 font-medium whitespace-pre-line">
+              <tr key={row.date_time || row.date || idx} className={`${isWeekendDay(row.day) ? 'bg-orange-50 border-l-4 border-l-orange-800' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
+                <td className={`px-6 py-4 font-medium whitespace-pre-line ${getDayColorClass(row.day)}`}>
                   {row.date_time || row.date || row.work_date || '-'}
                 </td>
                 <td className="px-6 py-4 text-center">
@@ -510,7 +511,7 @@ export default function UserCard({
                 {filteredRows.length > 0 ? (
                   <>
                     {filteredRows.map((row, idx) => (
-                    <tr key={row.date_time || row.date || idx} className={` ${getDayColorClass(row.day) ? 'bg-orange-50 border-l-4 border-l-orange-800' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
+                    <tr key={row.date_time || row.date || idx} className={`${isWeekendDay(row.day) ? 'bg-orange-50 border-l-4 border-l-orange-800' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
                         <td className={`px-6 py-4 font-medium whitespace-pre-line ${getDayColorClass(row.day)}`}>{row.date_time || row.date || '-'}</td>
                         <td className="px-6 py-4 text-center">
                           <span className={`px-2 py-1 rounded-lg inline-block ${getRosterStatusClass(getRosterStatus(row))}`}>

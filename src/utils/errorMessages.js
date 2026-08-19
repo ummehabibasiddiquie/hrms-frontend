@@ -14,35 +14,21 @@ const errorMap = {
 export function getFriendlyErrorMessage(error) {
   if (!error) return 'An unknown error occurred.';
 
-  // Axios / API error — prefer backend message
-  const backendMessage =
-    error.response?.data?.message ||
-    (typeof error.response?.data === 'string' ? error.response.data : null);
-  if (backendMessage && typeof backendMessage === 'string') {
-    return backendMessage;
+  // If error is a string and matches a key
+  if (typeof error === 'string' && errorMap[error]) {
+    return errorMap[error];
   }
 
-  if (error.friendlyMessage && typeof error.friendlyMessage === 'string') {
-    return error.friendlyMessage;
-  }
-
-  // Plain string (may be a known code or a backend message)
-  if (typeof error === 'string') {
-    if (errorMap[error]) return errorMap[error];
-    if (!error.startsWith('Request failed with status code')) return error;
-  }
-
-  // Error object
+  // If error is an object with code
   if (error.code && errorMap[error.code]) {
     return errorMap[error.code];
   }
 
-  if (error.message) {
-    if (errorMap[error.message]) return errorMap[error.message];
-    if (!error.message.startsWith('Request failed with status code')) {
-      return error.message;
-    }
+  // If error is an object with message
+  if (error.message && errorMap[error.message]) {
+    return errorMap[error.message];
   }
 
+  // Fallback to generic message
   return 'An error occurred. Please try again.';
 }

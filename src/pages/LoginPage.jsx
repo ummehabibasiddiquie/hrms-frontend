@@ -6,7 +6,6 @@ import { loginUser, forgotPassword } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 import { useDeviceInfo } from "../hooks/useDeviceInfo";
 import { log, logError } from "../config/environment";
-import { getHomeRouteForUser } from "../routes/paths";
 
 
 
@@ -68,8 +67,14 @@ const LoginPage = () => {
 
   // Redirect logged-in users away from login page
   React.useEffect(() => {
-    if (user) {
-      navigate(getHomeRouteForUser(user), { replace: true });
+    if (user && window.location.pathname !== "/dashboard" && window.location.pathname !== "/agent") {
+      // Role-based redirect for already logged-in users
+      const roleId = Number(user.role_id);
+      if (roleId === 6) {
+        navigate("/agent", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     }
   }, [user, navigate]);
 
@@ -172,7 +177,15 @@ const LoginPage = () => {
       const role = ROLE_MAP[roleId] || "";
 
       toast.success("You are now logged in!", { duration: 4000 });
-      navigate(getHomeRouteForUser(userData), { replace: true });
+
+      // Role-based navigation after login
+      if (roleId === 6) {
+        // Agents go to tracker entry page
+        navigate("/agent", { replace: true });
+      } else {
+        // All other roles go to dashboard
+        navigate("/dashboard", { replace: true });
+      }
     } catch (err) {
       console.error('[LoginPage] ========== ERROR CAUGHT ==========');
       console.error('[LoginPage] Error object:', err);

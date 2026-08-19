@@ -5,8 +5,6 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
 import SearchableSelect from './SearchableSelect';
-import { useClientPagination } from '../../hooks/useClientPagination';
-import TablePaginationBar from './TablePaginationBar';
 
 const UserTrackingView = () => {
   const { user } = useAuth();
@@ -160,10 +158,6 @@ const UserTrackingView = () => {
       );
     });
   }, [users, searchQuery]);
-
-  const userPagination = useClientPagination(filteredUsers, {
-    resetKeys: [searchQuery, roleFilter],
-  });
 
   // Handle permission toggle
   const handlePermissionToggle = async (targetUserId, permissionType, currentValue) => {
@@ -403,14 +397,14 @@ const UserTrackingView = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {userPagination.pagedItems.map((userData, index) => (
+                  {filteredUsers.map((userData, index) => (
                     <tr 
                       key={userData.user_id} 
                       className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 group"
                     >
                       <td className="px-6 py-5 whitespace-nowrap">
                         <div className="w-10 h-10 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center">
-                          <span className="text-sm font-bold text-blue-700">{userPagination.pageStart + index}</span>
+                          <span className="text-sm font-bold text-blue-700">{index + 1}</span>
                         </div>
                       </td>
                       <td className="px-6 py-5 whitespace-nowrap">
@@ -506,7 +500,21 @@ const UserTrackingView = () => {
               </table>
             </div>
 
-            <TablePaginationBar {...userPagination} itemLabel="users" />
+            {/* Footer with Results Count */}
+            <div className="px-6 py-5 bg-gradient-to-r from-slate-50 via-blue-50 to-indigo-50 border-t-2 border-slate-200">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-lg"></div>
+                  <p className="text-sm text-slate-700 font-semibold">
+                    Showing <span className="text-blue-700 font-bold">{filteredUsers.length}</span> of <span className="text-blue-700 font-bold">{stats.totalUsers}</span> users
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
+                  <Activity className="w-4 h-4 text-blue-600" />
+                  <span className="text-xs text-slate-600 font-bold uppercase tracking-wide">Real-time Data</span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

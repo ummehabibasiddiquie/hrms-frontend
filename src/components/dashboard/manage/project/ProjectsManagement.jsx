@@ -10,8 +10,6 @@ import ProjectCard from './ProjectCard';
 import DeleteProjectModal from './DeleteProjectModal';
 import { useUserDropdowns } from "../../../../hooks/useUserDropdowns";
 import { fetchProjectsList } from '../../../../services/projectService';
-import { useClientPagination } from '../../../../hooks/useClientPagination';
-import TablePaginationBar from '../../../common/TablePaginationBar';
 
 // Utility to normalize dropdown data
 const normalizeDropdown = (arr, type = 'user') => {
@@ -243,10 +241,6 @@ const ProjectsManagement = ({
     return projects.filter(p => (p.name || p.project_name || "").toLowerCase().includes(projectNameSearch.trim().toLowerCase()));
   }, [projects, projectNameSearch]);
 
-  const projectPagination = useClientPagination(filteredProjects, {
-    resetKeys: [projectNameSearch],
-  });
-
   return (
     <div className="space-y-6 animate-fade-in p-4 md:p-0 w-full overflow-x-hidden">
       {/* Modern Header with Gradient */}
@@ -363,7 +357,7 @@ const ProjectsManagement = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {projectPagination.pagedItems.map(proj => (
+          {filteredProjects.map(proj => (
             <ProjectCard
               key={proj.id}
               project={proj}
@@ -387,7 +381,6 @@ const ProjectsManagement = ({
               onStatusChanged={() => loadProjects && loadProjects()}
             />
           ))}
-          <TablePaginationBar {...projectPagination} itemLabel="projects" />
         </div>
       )}
 

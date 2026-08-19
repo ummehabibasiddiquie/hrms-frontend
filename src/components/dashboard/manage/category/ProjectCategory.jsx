@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FolderKanban, Plus, Edit2, Trash2, Search, Save, X, FileText } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import SearchableSelect from '../../../common/SearchableSelect';
 import api from '../../../../services/api';
 import { useAuth } from '../../../../context/AuthContext';
 import LoadingSpinner from '../../../common/LoadingSpinner';
-import { useClientPagination } from '../../../../hooks/useClientPagination';
-import TablePaginationBar from '../../../common/TablePaginationBar';
 
 const ProjectCategory = () => {
   const { user } = useAuth();
@@ -189,14 +187,9 @@ const ProjectCategory = () => {
     }
   };
 
-  const filteredCategories = useMemo(
-    () => categories.filter((cat) =>
-      cat.project_category_name?.toLowerCase().includes(searchTerm.toLowerCase())
-    ),
-    [categories, searchTerm]
+  const filteredCategories = categories.filter(cat =>
+    cat.project_category_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const categoryPagination = useClientPagination(filteredCategories, { resetKeys: [searchTerm] });
 
   // Get AFD name from category object
   const getAfdLabel = (category) => {
@@ -343,10 +336,10 @@ const ProjectCategory = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {categoryPagination.pagedItems.map((category, index) => (
+              {filteredCategories.map((category, index) => (
                 <tr key={category.project_category_id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 text-sm text-slate-600 font-medium">
-                    {categoryPagination.pageStart + index}
+                    {index + 1}
                   </td>
                   <td className="px-6 py-4">
                     {editingId === category.project_category_id ? (
@@ -433,8 +426,6 @@ const ProjectCategory = () => {
             </tbody>
           </table>
         </div>
-
-        <TablePaginationBar {...categoryPagination} itemLabel="categories" />
 
         {filteredCategories.length === 0 && (
           <div className="p-12 text-center">
