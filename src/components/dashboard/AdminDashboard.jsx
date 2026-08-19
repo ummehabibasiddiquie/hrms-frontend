@@ -14,7 +14,7 @@ import QAAgentList from './QAAgentList';
 import QAAgentAudit from './QAAgentAudit';
 import { DateRangePicker } from '../common/CustomCalendar';
 
-const AdminDashboard = () => {
+const AdminDashboard = ({ initialTab = 'overview' }) => {
   // StatCard component for dashboard stats
   const StatCard = ({ title, value, subtext, icon: Icon, trend = 'neutral', alert, className = '', valueClassName = '' }) => (
     <div
@@ -62,8 +62,14 @@ const AdminDashboard = () => {
   );
 
   // Tab state for navigation
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(initialTab || 'overview');
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   // Project/task name mapping state
   const [projectNameMap, setProjectNameMap] = useState({});
   const [taskNameMap, setTaskNameMap] = useState({});

@@ -86,14 +86,16 @@ export default function UserCard({
     return 'text-red-700 bg-red-200 font-bold';
   };
 
-  // Helper function to get day color class (Saturday/Sunday in red)
+  const isWeekendDay = (dayName) => {
+    if (!dayName) return false;
+    const day = String(dayName).toLowerCase();
+    return day === 'saturday' || day === 'sunday';
+  };
+
+  // Saturday/Sunday: red date text (same for every role)
   const getDayColorClass = (dayName) => {
-  if (!dayName) return '';
-
-  const day = dayName.toLowerCase();
-
-  return day === 'saturday' || day === 'sunday';
-};
+    return isWeekendDay(dayName) ? 'text-red-600 font-bold' : '';
+  };
   
   // Helper function to get month's first and last day
   const getMonthDateRange = (monthStr) => {
@@ -213,92 +215,6 @@ export default function UserCard({
     setModalMode('add');
   };
 
-  // AGENT: Only show the table, no card, header, or controls
-  if (role === "AGENT") {
-    return (
-      <div className="mb-6 overflow-hidden rounded-xl shadow-lg border border-slate-200">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-            <tr>
-              <th className="px-6 py-4 text-left font-semibold">Date-Time</th>
-              <th className="px-6 py-4 text-center font-semibold">Assign Hours</th>
-              <th className="px-6 py-4 text-center font-semibold">Worked Hours</th>
-              <th className="px-6 py-4 text-center font-semibold">QC Score</th>
-              <th className="px-6 py-4 text-center font-semibold">Tracker Count</th>
-              <th className="px-6 py-4 text-center font-semibold">Daily Required Hours</th>
-              {canSeeActions && (
-                <th className="px-6 py-4 text-center font-semibold">Actions</th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="bg-white">
-            {filteredRows.map((row, idx) => (
-              <tr key={row.date_time || row.date || idx} className={`${getDayColorClass(row.day) ? 'bg-blue-50' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
-                <td className="px-6 py-4 font-medium whitespace-pre-line">
-                  {row.date_time || row.date || row.work_date || '-'}
-                </td>
-                <td className="px-6 py-4 text-center text-slate-700 font-semibold">{row.assigned_hours !== null && row.assigned_hours !== undefined ? Number(row.assigned_hours).toFixed(2) : '-'}</td>
-                <td className="px-6 py-4 text-center text-slate-700 font-semibold">{row.billable_hours || row.total_billable_hours_day ? Number(row.billable_hours || row.total_billable_hours_day).toFixed(2) : '-'}</td>
-                <td className="px-6 py-4 text-center">
-                  <span className={`px-2 py-1 rounded-lg inline-block ${getQCScoreColorClass(row.qc_score)}`}>
-                    {row.qc_score !== null && row.qc_score !== undefined ? `${Number(row.qc_score).toFixed(2)}%` : '-'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-center">
-                  <span className={`px-2 py-1 rounded-lg inline-block ${getTrackerCountColorClass(row.trackers_count_day)}`}>
-                    {row.trackers_count_day !== null && row.trackers_count_day !== undefined ? row.trackers_count_day : '-'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-center text-slate-700">{row.tenure_target || row.daily_required_hours ? Number(row.tenure_target || row.daily_required_hours).toFixed(2) : '-'}</td>
-                {canSeeActions && (
-                  <td className="px-6 py-4 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => handleEditClick(row)}
-                        className="group relative p-2 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 transition-all duration-200 hover:shadow-md"
-                        title="Edit Assigned Hours"
-                      >
-                        <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
-                      </button>
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-            {/* Totals Row */}
-            {filteredRows.length > 0 && (
-              <tr className="bg-gradient-to-r from-blue-100 to-blue-200 border-t-2 border-blue-300">
-                <td className="px-6 py-4 text-gray-900 font-bold whitespace-nowrap">TOTAL</td>
-                <td className="px-6 py-4 text-center text-gray-900 font-bold">
-                  {filteredRows.reduce((sum, row) => sum + (Number(row.assigned_hours) || 0), 0).toFixed(2)}
-                </td>
-                <td className="px-6 py-4 text-center text-gray-900 font-bold">
-                  {filteredRows.reduce((sum, row) => sum + (Number(row.billable_hours || row.total_billable_hours_day) || 0), 0).toFixed(2)}
-                </td>
-                <td className="px-6 py-4 text-center text-gray-900 font-bold">
-                  {(() => {
-                    const scores = filteredRows.filter(row => row.qc_score != null).map(row => Number(row.qc_score));
-                    return scores.length > 0 ? `${(scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2)}%` : '-';
-                  })()}
-                </td>
-                <td className="px-6 py-4 text-center text-gray-900 font-bold">
-                  {filteredRows.reduce((sum, row) => sum + (Number(row.trackers_count_day) || 0), 0)}
-                </td>
-                <td className="px-6 py-4 text-center text-gray-900 font-bold">
-                  {filteredRows.reduce((sum, row) => sum + (Number(row.tenure_target || row.daily_required_hours) || 0), 0).toFixed(2)}
-                </td>
-                {canSeeActions && (
-                  <td className="px-6 py-4 text-center"></td>
-                )}
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
-  // All other roles: show card UI as before
   return (
     <div className="relative bg-white border border-slate-200 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 mb-6 group">
       {/* Decorative gradient border on left */}
@@ -496,7 +412,7 @@ export default function UserCard({
                 {filteredRows.length > 0 ? (
                   <>
                     {filteredRows.map((row, idx) => (
-                    <tr key={row.date_time || row.date || idx} className={` ${getDayColorClass(row.day) ? 'bg-orange-50 border-l-4 border-l-orange-800' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
+                    <tr key={row.date_time || row.date || idx} className={` ${isWeekendDay(row.day) ? 'bg-orange-50 border-l-4 border-l-orange-800' : ''} hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200`}>
                         <td className={`px-6 py-4 font-medium whitespace-pre-line ${getDayColorClass(row.day)}`}>{row.date_time || row.date || '-'}</td>
                         <td className="px-6 py-4 text-center text-slate-700">
                           {row.assign_hours === '-' || row.assignHours === '-' ? '-' : (row.assign_hours !== undefined && row.assign_hours !== null && !isNaN(Number(row.assign_hours)) ? Number(row.assign_hours).toFixed(2) : (row.assignHours ?? row.assigned_hour ?? "-"))}

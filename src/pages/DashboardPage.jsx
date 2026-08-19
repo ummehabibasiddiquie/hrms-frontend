@@ -337,7 +337,7 @@ const DashboardPage = ({
         };
         const emptyHourlyChartData = [];
         if (isAdmin || isSuperAdmin || isProjectManager) {
-          return <AdminDashboard />;
+          return <AdminDashboard initialTab="overview" />;
         } else if (isAssistantManager) {
           return <AssistantManagerDashboard />;
         } else if (isQA) {
@@ -368,18 +368,17 @@ const DashboardPage = ({
 
 
 
-      {/* Agent Billable Report tab and view */}
+      {/* Agent Billable Report */}
       {activeTab === 'billable_report' && isAgent && (
-        <div className="max-w-7xl mx-auto mt-2">
-          {/* Navigation Tab Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-2 mb-2">
-            {/* Tab navigation bar component or markup here */}
-            {/* If AgentBillableReport renders the tab bar, you may need to move it out and render here instead */}
-          </div>
-          {/* Filter and Table Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <AgentBillableReport hideTabBar />
-          </div>
+        <div className="max-w-7xl mx-auto mt-6">
+          <AgentBillableReport />
+        </div>
+      )}
+
+      {/* Admin / Super Admin / Project Manager Billable Report */}
+      {activeTab === 'billable_report' && (isAdmin || isSuperAdmin || isProjectManager) && (
+        <div className="max-w-7xl mx-auto mt-6">
+          <AdminDashboard initialTab="billable_report" />
         </div>
       )}
 
