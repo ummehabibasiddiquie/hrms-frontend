@@ -1,12 +1,25 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { X, Trophy, AlertTriangle, Target, Clock, CalendarDays, Sparkles, TrendingUp, TrendingDown } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import api from "../../services/api";
+import { fetchDailyBillableReport, fetchMonthlyBillableReport } from "../../services/billableReportService";
 
+const MONTH_LABELS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+/** Same MonYYYY format as Agent Billable Report - user_monthly_tracker.month_year */
 const getCurrentMonthYear = () => {
-  const date = new Date();
-  const month = date.toLocaleString("en-US", { month: "short" }).toUpperCase();
-  return `${month}${date.getFullYear()}`;
+  const now = new Date();
+  return `${MONTH_LABELS[now.getMonth()]}${now.getFullYear()}`;
+};
+
+const getCurrentMonthDateRange = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const pad = (n) => String(n).padStart(2, "0");
+  return {
+    dateFrom: `${year}-${pad(month)}-01`,
+    dateTo: `${year}-${pad(month)}-${pad(now.getDate())}`,
+  };
 };
 
 const countWeekdaysTillToday = () => {
@@ -29,12 +42,14 @@ const formatHours = (value) => {
 
 const CONFETTI_COLORS = ["#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#a78bfa", "#fb7185", "#facc15", "#2dd4bf"];
 
-/** success = met/exceeded | warning = close miss (≤1 day behind) | danger = far behind */
-const getGoalTier = (achieved, expectedTillToday, dailyRequired) => {
+/** success = met/exceeded | warning = behind by up to 12 hrs | danger = behind by more than 12 hrs */
+const ORANGE_MAX_SHORTFALL_HRS = 12;
+
+const getGoalTier = (achieved, expectedTillToday) => {
   if (achieved + 0.0001 >= expectedTillToday) return "success";
   const shortfall = expectedTillToday - achieved;
-  if (shortfall <= dailyRequired) return "warning";
-  return "danger";
+  if (shortfall > ORANGE_MAX_SHORTFALL_HRS) return "danger";
+  return "warning";
 };
 
 const TIER_THEME = {
@@ -50,7 +65,7 @@ const TIER_THEME = {
     progressBar: "bg-gradient-to-r from-emerald-500 to-teal-500",
     diffText: "text-emerald-700",
     infoBox: "bg-emerald-50 text-emerald-800",
-    infoExtra: "Great work — stay consistent and you will close the month comfortably.",
+    infoExtra: "Great work â stay consistent and you will close the month comfortably.",
     button: "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700",
     buttonLabel: "Let's keep going",
     showCelebration: true,
@@ -59,7 +74,7 @@ const TIER_THEME = {
   warning: {
     label: "Almost there",
     title: (name) => `Keep pushing, ${name}!`,
-    subtitle: "You are close to today's expected target but still a little short. A small push will get you back on track.",
+    subtitle: "You are behind by up to 12 hours on today's expected target. A focused push today can get you back on track.",
     border: "border-amber-300",
     header: "bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600",
     achievedBox: "border-amber-200 bg-amber-50",
@@ -88,7 +103,7 @@ const TIER_THEME = {
     infoBox: "bg-red-50 text-red-900 border border-red-200",
     infoExtra: null,
     button: "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800",
-    buttonLabel: "Understood — I'll improve",
+    buttonLabel: "Understood â I'll improve",
     showCelebration: false,
     Icon: AlertTriangle,
   },
@@ -114,42 +129,67 @@ const AgentGoalStatusModal = () => {
     const loadGoalStatus = async () => {
       try {
         const monthYear = getCurrentMonthYear();
-        const altMonthYear = `${monthYear.slice(0, 1)}${monthYear.slice(1, 3).toLowerCase()}${monthYear.slice(3)}`;
-
-        const fetchRows = async (monthKey) => {
-          const response = await api.post("/user_monthly_report/list", {
-            logged_in_user_id: user.user_id,
-            month_year: monthKey,
-            user_id: user.user_id,
-          });
-          return Array.isArray(response.data?.data) ? response.data.data : [];
+        const { dateFrom, dateTo } = getCurrentMonthDateRange();
+        const basePayload = {
+          logged_in_user_id: user.user_id,
+          user_id: user.user_id,
         };
 
-        let rows = await fetchRows(monthYear);
-        if (!rows.length) {
-          rows = await fetchRows(altMonthYear);
-        }
-        const row = rows[0];
-        if (!row) return;
+        // Same sources as Billable Report:
+        // - monthly goal, working days, achieved â user_monthly_tracker via /user_monthly_report/list
+        // - working days elapsed & daily required â /tracker/view_daily month_summary (uses same UMT row)
+        const fetchMonthlyRow = async (monthKey) => {
+          const res = await fetchMonthlyBillableReport({ ...basePayload, month_year: monthKey });
+          const rows = Array.isArray(res?.data) ? res.data : [];
+          return rows[0] || null;
+        };
 
-        const monthlyGoal = Number(row.monthly_total_target) || 0;
-        const workingDays = Number(row.working_days) || 0;
-        const achieved = Number(row.total_billable_hours) || 0;
+        let monthlyRow = await fetchMonthlyRow(monthYear);
+        if (!monthlyRow) {
+          // Backend stores month_year as Jan2026 â try title-case variant
+          const titled = `${monthYear.slice(0, 1)}${monthYear.slice(1, 3).toLowerCase()}${monthYear.slice(3)}`;
+          monthlyRow = await fetchMonthlyRow(titled);
+        }
+        if (!monthlyRow?.user_monthly_tracker_id) return;
+
+        const dailyRes = await fetchDailyBillableReport({
+          ...basePayload,
+          date_from: dateFrom,
+          date_to: dateTo,
+        });
+        const dailyData = dailyRes?.data || {};
+        const monthSummary = Array.isArray(dailyData.month_summary) ? dailyData.month_summary[0] : null;
+        const trackers = Array.isArray(dailyData.trackers) ? dailyData.trackers : [];
+
+        // user_monthly_tracker: monthly_target + extra_assigned_hours = monthly_total_target
+        const monthlyGoal = Number(monthlyRow.monthly_total_target) || Number(monthSummary?.monthly_total_target) || 0;
+        const workingDays = Number(monthlyRow.working_days) || Number(trackers.find((t) => t.working_days != null)?.working_days) || 0;
+        const achieved = Number(monthlyRow.total_billable_hours) ?? Number(monthSummary?.total_billable_hours_month) ?? 0;
 
         if (monthlyGoal <= 0 || workingDays <= 0) return;
 
-        const dailyRequired = monthlyGoal / workingDays;
-        const workingDayNumber = Math.min(countWeekdaysTillToday(), workingDays);
+        // Working day index till today â same logic as billable daily (UMT working_days â pending_days)
+        let workingDayNumber = 0;
+        if (monthSummary?.pending_days != null) {
+          workingDayNumber = Math.max(0, Math.min(workingDays, workingDays - Number(monthSummary.pending_days)));
+        } else {
+          workingDayNumber = Math.min(countWeekdaysTillToday(), workingDays);
+        }
         if (workingDayNumber <= 0) return;
 
-        const expectedTillToday = dailyRequired * workingDayNumber;
+        const dailyRequired =
+          Number(monthSummary?.daily_required_hours) ||
+          Number(trackers.find((t) => t.daily_required_hours != null)?.daily_required_hours) ||
+          monthlyGoal / workingDays;
+
+        const expectedTillToday = (monthlyGoal / workingDays) * workingDayNumber;
         const difference = achieved - expectedTillToday;
-        const tier = getGoalTier(achieved, expectedTillToday, dailyRequired);
+        const tier = getGoalTier(achieved, expectedTillToday);
 
         if (cancelled) return;
 
         setStatus({
-          name: user.user_name || row.user_name || "Agent",
+          name: user.user_name || monthlyRow.user_name || "Agent",
           monthlyGoal,
           workingDays,
           workingDayNumber,
