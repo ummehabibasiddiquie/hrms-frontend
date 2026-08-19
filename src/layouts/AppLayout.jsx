@@ -1,26 +1,21 @@
 import React from "react";
 import Header from "../components/header/Header";
-import { ViewState } from "../utils/constants";
 import { useAuth } from "../context/AuthContext";
+import AgentGoalStatusModal from "../components/AgentDashboard/AgentGoalStatusModal";
 
 const AppLayout = ({ children }) => {
-  // Get user and permissions from context
-  const { 
-    user: currentUser, 
-    // You can add more permission logic here if needed
-  } = useAuth();
+  const { user: currentUser } = useAuth();
+  const isAgent = Number(currentUser?.role_id) === 6;
 
   return (
     <>
-      <Header
-        currentUser={currentUser}
-        // Add more props as needed, or remove unused ones
-      />
+      <Header currentUser={currentUser} />
 
-      {/* page content */}
       <main className="p-6 bg-slate-50">
         {children}
       </main>
+
+      {isAgent && <AgentGoalStatusModal />}
     </>
   );
 };
