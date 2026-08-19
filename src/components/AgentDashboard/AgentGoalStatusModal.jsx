@@ -28,7 +28,7 @@ const TIER_THEME = {
     progressBar: "bg-gradient-to-r from-emerald-500 to-teal-500",
     diffText: "text-emerald-700",
     infoBox: "bg-emerald-50 text-emerald-800",
-    infoExtra: "Great work — stay consistent and you will close the month comfortably.",
+    infoExtra: "Great work â stay consistent and you will close the month comfortably.",
     button: "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700",
     buttonLabel: "Let's keep going",
     showCelebration: true,
@@ -66,7 +66,7 @@ const TIER_THEME = {
     infoBox: "bg-red-50 text-red-900 border border-red-200",
     infoExtra: null,
     button: "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800",
-    buttonLabel: "Understood — I'll improve",
+    buttonLabel: "Understood â I'll improve",
     showCelebration: false,
     Icon: AlertTriangle,
   },
@@ -143,8 +143,10 @@ const AgentGoalStatusModal = () => {
 
   const theme = TIER_THEME[status.tier] || TIER_THEME.warning;
   const TierIcon = theme.Icon;
-  const progressPct = Math.min(100, Math.max(0, (status.achieved / status.expectedTillToday) * 100));
   const isAhead = status.difference >= 0;
+  // Don't Math.round — 116.44/117 ≈ 99.5% was showing as 100%
+  const progressPct = Math.min(100, Math.max(0, (status.achieved / status.expectedTillToday) * 100));
+  const progressPctLabel = isAhead ? "100" : progressPct.toFixed(1);
   const periodLabel = status.periodLabel === "yesterday" ? "yesterday" : "today";
   const expectedLabel = `Expected till ${periodLabel}`;
   const progressLabel = `Progress vs expected till ${periodLabel}`;
@@ -272,7 +274,7 @@ const AgentGoalStatusModal = () => {
           <div>
             <div className="flex items-center justify-between text-xs font-semibold text-slate-500 mb-1.5">
               <span>{progressLabel}</span>
-              <span>{Math.round(progressPct)}%</span>
+              <span>{progressPctLabel}%</span>
             </div>
             <div className="h-3 rounded-full bg-slate-200 overflow-hidden">
               <div className={`h-full rounded-full transition-all ${theme.progressBar}`} style={{ width: `${progressPct}%` }} />
