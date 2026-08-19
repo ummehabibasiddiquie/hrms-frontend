@@ -4,7 +4,9 @@
  * Rules:
  * - Naive MySQL/API datetimes ("YYYY-MM-DD HH:MM:SS" / "YYYY-MM-DDTHH:MM:SS")
  *   are treated as IST wall-clock (no UTC shift).
- * - Values with Z / GMT / explicit offset are converted to Asia/Kolkata.
+ * - Flask jsonify emits "Wed, 19 Aug 2026 10:02:00 GMT" for naive DB datetimes;
+ *   that suffix is NOT real UTC — we read the clock fields as IST.
+ * - Values with Z / explicit offset (except Flask GMT above) convert to Asia/Kolkata.
  */
 
 export const IST_TIMEZONE = "Asia/Kolkata";
@@ -21,8 +23,32 @@ const MONTH_UPPER = [
 const NAIVE_RE =
   /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?/;
 
+/** Flask default JSON datetime: wall-clock in DB (IST), not real UTC. */
+const FLASK_HTTP_DATE_RE =
+  /^[A-Za-z]{3},\s+(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s+(\d{2}):(\d{2}):(\d{2})\s+GMT$/i;
+
+const MONTH_NAME_TO_NUM = Object.fromEntries(
+  MONTH_SHORT.map((name, index) => [name.toLowerCase(), index + 1])
+);
+
+function parseFlaskHttpDateAsIST(raw) {
+  const match = String(raw).trim().match(FLASK_HTTP_DATE_RE);
+  if (!match) return null;
+  const month = MONTH_NAME_TO_NUM[match[2].toLowerCase()];
+  if (!month) return null;
+  return {
+    year: Number(match[3]),
+    month,
+    day: Number(match[1]),
+    hours: Number(match[4]),
+    minutes: Number(match[5]),
+    seconds: Number(match[6]),
+  };
+}
+
 function hasExplicitZone(raw) {
   const s = String(raw).trim();
+  if (FLASK_HTTP_DATE_RE.test(s)) return false;
   return (
     /[zZ]$/.test(s) ||
     /[+-]\d{2}:?\d{2}$/.test(s) ||
@@ -48,11 +74,8 @@ export function getISTParts(value) {
   const raw = String(value).trim();
   if (!raw) return null;
 
-  if (hasExplicitZone(raw)) {
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return null;
-    return partsFromDateInIST(d);
-  }
+  const flaskParts = parseFlaskHttpDateAsIST(raw);
+  if (flaskParts) return flaskParts;
 
   const m = raw.match(NAIVE_RE);
   if (m) {
@@ -64,6 +87,12 @@ export function getISTParts(value) {
       minutes: Number(m[5] ?? 0),
       seconds: Number(m[6] ?? 0),
     };
+  }
+
+  if (hasExplicitZone(raw)) {
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+    return partsFromDateInIST(d);
   }
 
   const d = new Date(raw);
