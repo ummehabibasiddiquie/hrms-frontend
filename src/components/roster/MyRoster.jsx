@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { listChangeRequests, listRosters } from "../../services/rosterService";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
@@ -14,14 +14,7 @@ import RosterSummaryCards from "./RosterSummaryCards";
 import RosterSubmissionTracker from "./RosterSubmissionTracker";
 import { MonthYearPicker } from "../common/CustomCalendar";
 
-const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
-function shiftMonthYear(monthYear, delta) {
-  const parsed = parseMonthYear(monthYear);
-  if (!parsed) return getCurrentMonthYear();
-  const d = new Date(parsed.year, parsed.month + delta, 1);
-  return `${MONTH_NAMES[d.getMonth()]}${d.getFullYear()}`;
-}
 
 const MyRoster = () => {
   const [monthYear, setMonthYear] = useState(getCurrentMonthYear());
@@ -78,7 +71,6 @@ const MyRoster = () => {
     }
   }, [loadPendingOverlay, roster?.roster_month_id]);
 
-  const isCurrentMonth = monthYear === getCurrentMonthYear();
   const hasPendingOverlay = pendingRequests.length > 0;
 
   return (
@@ -99,37 +91,13 @@ const MyRoster = () => {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
-          <MonthYearPicker
-            selectedMonthYear={monthYear}
-            onMonthYearChange={setMonthYear}
-            label="Select Month"
-            showAllOption={false}
-            allowFutureMonths
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMonthYear((m) => shiftMonthYear(m, -1))}
-              className="p-2 border border-slate-300 rounded-lg hover:bg-slate-50"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <span className="text-sm font-semibold text-slate-700 min-w-[140px] text-center">
-              {formatMonthYearLabel(monthYear)}
-              {isCurrentMonth && (
-                <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Current</span>
-              )}
-            </span>
-            <button
-              type="button"
-              onClick={() => setMonthYear((m) => shiftMonthYear(m, 1))}
-              className="p-2 border border-slate-300 rounded-lg hover:bg-slate-50"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+        <MonthYearPicker
+          selectedMonthYear={monthYear}
+          onMonthYearChange={setMonthYear}
+          label="Select Month"
+          showAllOption={false}
+          allowFutureMonths
+        />
       </div>
 
       {loading ? (

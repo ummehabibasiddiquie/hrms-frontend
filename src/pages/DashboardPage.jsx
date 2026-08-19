@@ -136,7 +136,7 @@ const DashboardPage = ({
     const visibleTabs = [
       ...(canManageUsers || isSuperAdmin || isAdmin ? ['users'] : []),
       ...(isAssistantManager || canManageProjects ? ['projects', 'afd'] : []),
-      ...(isSuperAdmin || isAdmin ? ['category', 'permissions'] : []),
+      ...(isSuperAdmin || isAdmin || isAssistantManager ? ['category', 'permissions'] : []),
       ...(canAccessRoster ? ['roster'] : []),
     ];
     if (!visibleTabs.includes(adminActiveTab) && visibleTabs.length > 0) {
@@ -485,12 +485,12 @@ const DashboardPage = ({
                 {
                   id: 'category',
                   label: 'Project Category',
-                  hidden: !(isSuperAdmin || isAdmin),
+                  hidden: !(isSuperAdmin || isAdmin || isAssistantManager),
                 },
                 {
                   id: 'permissions',
                   label: 'User Permission',
-                  hidden: !(isSuperAdmin || isAdmin),
+                  hidden: !(isSuperAdmin || isAdmin || isAssistantManager),
                 },
                 {
                   id: 'roster',
@@ -595,24 +595,10 @@ const DashboardPage = ({
         </div>
       )}
 
-      {/* My Roster — Agent & QA read-only */}
+      {/* My Roster — Agent & QA read-only (standalone, no analytics sub-tabs) */}
       {activeTab === 'my_roster' && (isAgent || isQA) && (
         <div className="max-w-7xl mx-auto mt-2">
-          {isAgent && (
-            <AgentTabsNavigation
-              activeTab={activeTab}
-              setActiveTab={setDashboardTab}
-            />
-          )}
-          {isQA && (
-            <QATabsNavigation
-              activeTab={activeTab}
-              setActiveTab={setDashboardTab}
-            />
-          )}
-          <div className="mt-4">
-            <MyRoster />
-          </div>
+          <MyRoster />
         </div>
       )}
 

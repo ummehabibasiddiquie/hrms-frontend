@@ -36,13 +36,8 @@ const TabsNavigation = ({
     ...(isProjectManager || isAssistantManager || isAdmin || isSuperAdmin || isQA ? [
       { id: 'user_monthly_report', label: 'User Monthly Report', icon: Users },
       { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
-      { id: 'incentives', label: 'Agent Incentives', icon: DollarSign },
-      { id: 'mgmt_incentives', label: 'Management Incentives', icon: Gem },
-    ] : [
-      { id: 'incentives', label: 'Agent Incentives', icon: DollarSign, hidden: !(canViewIncentivesTab && !isQA), disabled: true },
-      { id: 'mgmt_incentives', label: 'Management Incentives', icon: Gem, hidden: !(!isAgent && !isQA), disabled: true },
-    ]),
-    ...((isAgent || isQA) ? [{ id: 'my_roster', label: 'My Roster', icon: CalendarDays }] : []),
+    ] : []),
+  
   ];
 
   const visibleTabs = tabs.filter((tab) => tab && !tab.hidden);

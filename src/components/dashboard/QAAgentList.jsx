@@ -1134,7 +1134,7 @@ const QAAgentList = () => {
 
                 {/* Agents List */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {agentListPagination.pagedItems.map((agent) => {
+                  {filteredAndSortedAgents.map((agent) => {
                     const trackers = agentTrackers[agent.user_id] || [];
                     const isSelected = selectedAgentId === agent.user_id;
                     
@@ -1143,7 +1143,6 @@ const QAAgentList = () => {
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          // Call appropriate API based on active tab with global date filter
                           if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
                             fetchReworkTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
                           } else {
@@ -1157,7 +1156,6 @@ const QAAgentList = () => {
                             : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md'
                         } ${agentLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
-                        {/* Left accent border for selected */}
                         {isSelected && (
                           <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 to-indigo-600"></div>
                         )}
@@ -1188,7 +1186,6 @@ const QAAgentList = () => {
                     );
                   })}
                 </div>
-                <TablePaginationBar {...agentListPagination} itemLabel="agents" className="border-t-2 border-slate-200" />
               </div>
 
               {/* Right Panel - Agent Details */}
@@ -1437,7 +1434,7 @@ const QAAgentList = () => {
 
                 {/* Agents List */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {agentListPagination.pagedItems.map((agent) => {
+                  {filteredAndSortedAgents.map((agent) => {
                     const trackers = agentTrackers[agent.user_id] || [];
                     const isSelected = selectedAgentId === agent.user_id;
                     
@@ -1446,7 +1443,6 @@ const QAAgentList = () => {
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          // Fetch pending QC files for rework/correction using global date filter
                           fetchReworkTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
                         }}
                         disabled={agentLoading}
@@ -1456,7 +1452,6 @@ const QAAgentList = () => {
                             : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md'
                         } ${agentLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
-                        {/* Left accent border for selected */}
                         {isSelected && (
                           <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 to-indigo-600"></div>
                         )}
@@ -1487,7 +1482,6 @@ const QAAgentList = () => {
                     );
                   })}
                 </div>
-                <TablePaginationBar {...agentListPagination} itemLabel="agents" className="border-t-2 border-slate-200" />
               </div>
 
               {/* Right Panel - Agent Details */}

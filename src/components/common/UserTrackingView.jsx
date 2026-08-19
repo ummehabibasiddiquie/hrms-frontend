@@ -81,7 +81,8 @@ const UserTrackingView = () => {
     try {
       const response = await api.post('/dropdown/get', { dropdown_type: 'user roles' });
       if (response.data?.status === 200 && Array.isArray(response.data.data)) {
-        setRoleOptions(response.data.data);
+        const excludedRoles = ['agent', 'qa'];
+        setRoleOptions(response.data.data.filter(r => !excludedRoles.includes((r.label || r.role_name || '').toLowerCase())));
       } else {
         setRoleOptions([]);
       }
@@ -222,136 +223,54 @@ const UserTrackingView = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-white">
+      <div className="flex items-center justify-center py-20 bg-white">
         <LoadingSpinner />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* Header Section with Gradient */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
-                <Shield className="w-8 h-8" />
+    <div className="space-y-4">
+        {/* Header + Filters */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-md p-5 text-white">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg">
+                <Shield className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold">User Permissions Manager</h2>
-                <p className="text-blue-100 text-sm mt-1">Control and monitor user access rights across the platform</p>
+                <h2 className="text-xl font-bold">User Permissions</h2>
+                <p className="text-blue-100 text-sm">Manage user creation and project creation access</p>
               </div>
             </div>
-            <div className="hidden md:flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm">
-              <Shield className="w-5 h-5" />
+            <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg text-sm">
+              <Users className="w-4 h-4" />
               <span className="font-semibold">{stats.totalUsers} Users</span>
             </div>
           </div>
         </div>
 
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Total Users */}
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-slate-200 hover:shadow-xl transition-shadow duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Total Users</p>
-                <p className="text-3xl font-bold text-slate-800">{stats.totalUsers}</p>
-              </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-xl flex items-center justify-center">
-                <Users className="w-7 h-7 text-blue-600" />
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <p className="text-xs text-slate-500 font-medium">Active in system</p>
-            </div>
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 transition-all"
+            />
           </div>
-
-          {/* User Creation Permission */}
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-slate-200 hover:shadow-xl transition-shadow duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">User Creation</p>
-                <p className="text-3xl font-bold text-green-600">{stats.userCreationEnabled}</p>
-              </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-green-100 to-emerald-100 rounded-xl flex items-center justify-center">
-                <UserCog className="w-7 h-7 text-green-600" />
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <p className="text-xs text-slate-500 font-medium">Users with permission</p>
-            </div>
-          </div>
-
-          {/* Project Creation Permission */}
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-slate-200 hover:shadow-xl transition-shadow duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Project Creation</p>
-                <p className="text-3xl font-bold text-purple-600">{stats.projectCreationEnabled}</p>
-              </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-purple-100 to-pink-100 rounded-xl flex items-center justify-center">
-                <Activity className="w-7 h-7 text-purple-600" />
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <p className="text-xs text-slate-500 font-medium">Users with permission</p>
-            </div>
-          </div>
-
-          {/* Full Access */}
-          <div className="bg-white rounded-xl shadow-lg p-6 border border-slate-200 hover:shadow-xl transition-shadow duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-1">Full Access</p>
-                <p className="text-3xl font-bold text-indigo-600">{stats.bothPermissionsEnabled}</p>
-              </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-indigo-100 to-blue-100 rounded-xl flex items-center justify-center">
-                <CheckCircle2 className="w-7 h-7 text-indigo-600" />
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <p className="text-xs text-slate-500 font-medium">Both permissions enabled</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters Section */}
-        <div className="bg-white rounded-xl shadow-lg p-6 border border-slate-200">
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">
-                Search Users
-              </label>
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Search by name or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 text-sm border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 hover:bg-white transition-all font-medium"
-                />
-              </div>
-            </div>
-
-            {/* Role Filter Dropdown */}
-            <div className="w-full lg:w-64">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">
-                Filter by Role
-              </label>
-              <SearchableSelect
-                value={roleFilter}
-                onChange={setRoleFilter}
-                options={formattedRoleOptions}
-                icon={Filter}
-                placeholder="All Roles"
-                isClearable={false}
-              />
-            </div>
+          <div className="w-full sm:w-56">
+            <SearchableSelect
+              value={roleFilter}
+              onChange={setRoleFilter}
+              options={formattedRoleOptions}
+              icon={Filter}
+              placeholder="All Roles"
+              isClearable={false}
+            />
           </div>
         </div>
 
@@ -500,24 +419,8 @@ const UserTrackingView = () => {
               </table>
             </div>
 
-            {/* Footer with Results Count */}
-            <div className="px-6 py-5 bg-gradient-to-r from-slate-50 via-blue-50 to-indigo-50 border-t-2 border-slate-200">
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-lg"></div>
-                  <p className="text-sm text-slate-700 font-semibold">
-                    Showing <span className="text-blue-700 font-bold">{filteredUsers.length}</span> of <span className="text-blue-700 font-bold">{stats.totalUsers}</span> users
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
-                  <Activity className="w-4 h-4 text-blue-600" />
-                  <span className="text-xs text-slate-600 font-bold uppercase tracking-wide">Real-time Data</span>
-                </div>
-              </div>
-            </div>
           </div>
         )}
-      </div>
     </div>
   );
 };

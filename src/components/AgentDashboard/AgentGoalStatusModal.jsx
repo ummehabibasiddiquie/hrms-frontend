@@ -28,7 +28,7 @@ const TIER_THEME = {
     progressBar: "bg-gradient-to-r from-emerald-500 to-teal-500",
     diffText: "text-emerald-700",
     infoBox: "bg-emerald-50 text-emerald-800",
-    infoExtra: "Great work. Stay consistent and you will close the month comfortably.",
+    infoExtra: "Great work. S tay consistent and you will close the month comfortably.",
     button: "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700",
     buttonLabel: "Keep going",
     showCelebration: true,

@@ -407,7 +407,7 @@ const BillableReport = () => {
           >
             <div className="flex items-center justify-center gap-2">
               <FileText className="w-4 h-4" />
-              <span>Daily Billable Report</span>
+              <span>Daily Report</span>
             </div>
             {activeToggle === 'daily' && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
@@ -423,7 +423,7 @@ const BillableReport = () => {
           >
             <div className="flex items-center justify-center gap-2">
               <BarChart3 className="w-4 h-4" />
-              <span>Monthly Billable Report</span>
+              <span>Monthly Report</span>
             </div>
             {activeToggle === 'monthly' && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>

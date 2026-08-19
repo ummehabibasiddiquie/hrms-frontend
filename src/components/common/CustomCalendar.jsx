@@ -343,7 +343,7 @@ export const MonthYearPicker = ({
   };
 
   const pickerContent = (
-    <div className={cn("flex items-center gap-3 flex-wrap", !compact && "gap-4")}>
+    <div className={cn(compact ? "flex flex-col" : "flex items-center gap-4 flex-wrap")}>
       {!compact && (
         <div className="flex items-center gap-2">
           <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-sm">
@@ -354,7 +354,8 @@ export const MonthYearPicker = ({
       )}
 
       {compact && label && (
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0">
+        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+          <CalendarIcon className="w-4 h-4 text-blue-600" />
           {label}
         </label>
       )}
@@ -368,16 +369,28 @@ export const MonthYearPicker = ({
                 className={cn(
                   "text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all text-left flex items-center justify-between",
                   compact
-                    ? "bg-white border border-slate-300 rounded-lg px-3 py-2 w-[140px]"
+                    ? "bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 w-[220px]"
                     : "bg-slate-50 border-2 border-blue-200 rounded-lg px-4 py-2.5 hover:bg-blue-50 hover:border-blue-500 focus:border-blue-500 w-[180px]",
                   disabled && "opacity-50 cursor-not-allowed"
                 )}
               >
                 <span className="flex items-center gap-2">
-                  <CalendarIcon className={cn("text-blue-600", compact ? "w-3.5 h-3.5" : "w-4 h-4")} />
-                  {selectedMonthYear === 'all' ? 'All Months' : selectedMonthYear || 'Select Month/Year'}
+                  {!compact && <CalendarIcon className="w-4 h-4 text-blue-600" />}
+                  {selectedMonthYear === 'all'
+                    ? 'All Months'
+                    : selectedMonthYear
+                      ? (() => {
+                          const match = selectedMonthYear.match(/^([A-Z]{3})(\d{4})$/);
+                          if (!match) return selectedMonthYear;
+                          const monthMap = { JAN: 'January', FEB: 'February', MAR: 'March', APR: 'April', MAY: 'May', JUN: 'June', JUL: 'July', AUG: 'August', SEP: 'September', OCT: 'October', NOV: 'November', DEC: 'December' };
+                          return `${monthMap[match[1]] || match[1]} ${match[2]}`;
+                        })()
+                      : 'Select Month'}
                 </span>
-                <ChevronRight className={cn("w-4 h-4 transition-transform", showCalendar && "rotate-90")} />
+                {compact
+                  ? <CalendarIcon className="w-4 h-4 text-slate-400" />
+                  : <ChevronRight className={cn("w-4 h-4 transition-transform", showCalendar && "rotate-90")} />
+                }
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-[340px] border-2 border-blue-200 bg-white" align="start">

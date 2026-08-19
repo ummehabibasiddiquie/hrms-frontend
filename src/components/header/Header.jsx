@@ -195,7 +195,6 @@ const Header = ({
         { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: ViewState.ENTRY, label: "Tracker", icon: PenTool },
         { view: "AI_EVALUATION", label: "AI Evaluation", icon: Brain },
-        { view: "AGENT_PROJECTS", label: "Projects", icon: Database },
       ];
     }
     if (!role) {
@@ -279,7 +278,8 @@ const Header = ({
 
     // Check for Analytics/Dashboard
     if (view === ViewState.DASHBOARD || view === 'Analytics') {
-      return currentPath === '/dashboard' && (currentTab === 'overview' || !currentTab);
+      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report'];
+      return currentPath === '/dashboard' && (!currentTab || analyticsTabs.includes(currentTab));
     }
 
     // Check for Tracker Report

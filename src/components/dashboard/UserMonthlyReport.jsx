@@ -652,18 +652,6 @@ const UserMonthlyReport = () => {
         </p>
       </div>
 
-      {canManageAssignedHours && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          <strong>How to edit extra hours:</strong> expand a month below → click the <strong>pencil (Edit)</strong> icon
-          in the Actions column → change <strong>Extra Assign Hours</strong> → <strong>Save</strong>.
-        </div>
-      )}
-
-      {canManageAssignedHours && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          Monthly target and working days are set during roster generation and cannot be changed on this page.
-        </div>
-      )}
 
       {/* Month/Year Filter */}
       <MonthYearPicker
