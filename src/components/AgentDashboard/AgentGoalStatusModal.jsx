@@ -37,7 +37,7 @@ const TIER_THEME = {
   warning: {
     label: "Almost there",
     title: (name) => `Keep pushing, ${name}!`,
-    subtitle: "You are behind by up to 12 hours on the expected target. A focused push can get you back on track.",
+    subtitle: "You are slightly behind the expected hours for this period. Stay focused today to get back on track.",
     border: "border-amber-300",
     header: "bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600",
     achievedBox: "border-amber-200 bg-amber-50",
