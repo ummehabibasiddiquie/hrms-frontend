@@ -4,32 +4,74 @@ import { useAuth } from "../../context/AuthContext";
 import { fetchDailyBillableReport, fetchMonthlyBillableReport } from "../../services/billableReportService";
 
 const MONTH_LABELS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const IST_TIMEZONE = "Asia/Kolkata";
+const HALF_DAY_HOUR_IST = 12; // before noon IST -> yesterday; from noon -> include today
 
-/** Same MonYYYY format as Agent Billable Report - user_monthly_tracker.month_year */
-const getCurrentMonthYear = () => {
-  const now = new Date();
-  return `${MONTH_LABELS[now.getMonth()]}${now.getFullYear()}`;
-};
+const pad2 = (n) => String(n).padStart(2, "0");
 
-const getCurrentMonthDateRange = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  const pad = (n) => String(n).padStart(2, "0");
+const getISTNow = () => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: IST_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const get = (type) => Number(parts.find((p) => p.type === type)?.value || 0);
   return {
-    dateFrom: `${year}-${pad(month)}-01`,
-    dateTo: `${year}-${pad(month)}-${pad(now.getDate())}`,
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
   };
 };
 
-const countWeekdaysTillToday = () => {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+const toDateStr = ({ year, month, day }) => `${year}-${pad2(month)}-${pad2(day)}`;
+
+/** Before half-day (noon IST): compare till yesterday. After noon: include today. */
+const getEvaluationWindow = () => {
+  const ist = getISTNow();
+  const includeToday = ist.hour >= HALF_DAY_HOUR_IST;
+
+  let evalYear = ist.year;
+  let evalMonth = ist.month;
+  let evalDay = ist.day;
+
+  if (!includeToday) {
+    const evalDate = new Date(ist.year, ist.month - 1, ist.day);
+    evalDate.setDate(evalDate.getDate() - 1);
+    evalYear = evalDate.getFullYear();
+    evalMonth = evalDate.getMonth() + 1;
+    evalDay = evalDate.getDate();
+  }
+
+  const monthStart = toDateStr({ year: ist.year, month: ist.month, day: 1 });
+  const evalDateStr = toDateStr({ year: evalYear, month: evalMonth, day: evalDay });
+
+  if (evalDateStr < monthStart) {
+    return null;
+  }
+
+  return {
+    includeToday,
+    periodLabel: includeToday ? "today" : "yesterday",
+    monthYear: `${MONTH_LABELS[ist.month - 1]}${ist.year}`,
+    dateFrom: monthStart,
+    dateTo: evalDateStr,
+    evalDateStr,
+  };
+};
+
+const countWeekdaysThrough = (dateStr) => {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month - 1, day);
   let count = 0;
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const day = d.getDay();
-    if (day !== 0 && day !== 6) count += 1;
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) count += 1;
   }
   return count;
 };
@@ -42,7 +84,6 @@ const formatHours = (value) => {
 
 const CONFETTI_COLORS = ["#fbbf24", "#34d399", "#60a5fa", "#f472b6", "#a78bfa", "#fb7185", "#facc15", "#2dd4bf"];
 
-/** success = met/exceeded | warning = behind by up to 12 hrs | danger = behind by more than 12 hrs */
 const ORANGE_MAX_SHORTFALL_HRS = 12;
 
 const getGoalTier = (achieved, expectedTillToday) => {
@@ -56,7 +97,7 @@ const TIER_THEME = {
   success: {
     label: "You're on track",
     title: (name) => `Congratulations, ${name}!`,
-    subtitle: "You have achieved (or exceeded) the hours expected till today. Keep this pace going!",
+    subtitle: "You have achieved (or exceeded) the hours expected for this period. Keep this pace going!",
     border: "border-emerald-200",
     header: "bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500",
     achievedBox: "border-emerald-200 bg-emerald-50",
@@ -65,7 +106,7 @@ const TIER_THEME = {
     progressBar: "bg-gradient-to-r from-emerald-500 to-teal-500",
     diffText: "text-emerald-700",
     infoBox: "bg-emerald-50 text-emerald-800",
-    infoExtra: "Great work â stay consistent and you will close the month comfortably.",
+    infoExtra: "Great work — stay consistent and you will close the month comfortably.",
     button: "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700",
     buttonLabel: "Let's keep going",
     showCelebration: true,
@@ -74,7 +115,7 @@ const TIER_THEME = {
   warning: {
     label: "Almost there",
     title: (name) => `Keep pushing, ${name}!`,
-    subtitle: "You are behind by up to 12 hours on today's expected target. A focused push today can get you back on track.",
+    subtitle: "You are behind by up to 12 hours on the expected target. A focused push can get you back on track.",
     border: "border-amber-300",
     header: "bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600",
     achievedBox: "border-amber-200 bg-amber-50",
@@ -92,7 +133,7 @@ const TIER_THEME = {
   danger: {
     label: "Target alert",
     title: (name) => `Action needed, ${name}`,
-    subtitle: "You are significantly behind the hours expected till today. Please review your target and catch up as soon as possible.",
+    subtitle: "You are significantly behind the hours expected for this period. Please review your target and catch up.",
     border: "border-red-300",
     header: "bg-gradient-to-r from-red-600 via-rose-600 to-red-700",
     achievedBox: "border-red-200 bg-red-50",
@@ -103,7 +144,7 @@ const TIER_THEME = {
     infoBox: "bg-red-50 text-red-900 border border-red-200",
     infoExtra: null,
     button: "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800",
-    buttonLabel: "Understood â I'll improve",
+    buttonLabel: "Understood — I'll improve",
     showCelebration: false,
     Icon: AlertTriangle,
   },
@@ -128,16 +169,15 @@ const AgentGoalStatusModal = () => {
 
     const loadGoalStatus = async () => {
       try {
-        const monthYear = getCurrentMonthYear();
-        const { dateFrom, dateTo } = getCurrentMonthDateRange();
+        const evalWindow = getEvaluationWindow();
+        if (!evalWindow) return;
+
+        const { monthYear, dateFrom, dateTo, evalDateStr, includeToday, periodLabel } = evalWindow;
         const basePayload = {
           logged_in_user_id: user.user_id,
           user_id: user.user_id,
         };
 
-        // Same sources as Billable Report:
-        // - monthly goal, working days, achieved â user_monthly_tracker via /user_monthly_report/list
-        // - working days elapsed & daily required â /tracker/view_daily month_summary (uses same UMT row)
         const fetchMonthlyRow = async (monthKey) => {
           const res = await fetchMonthlyBillableReport({ ...basePayload, month_year: monthKey });
           const rows = Array.isArray(res?.data) ? res.data : [];
@@ -146,7 +186,6 @@ const AgentGoalStatusModal = () => {
 
         let monthlyRow = await fetchMonthlyRow(monthYear);
         if (!monthlyRow) {
-          // Backend stores month_year as Jan2026 â try title-case variant
           const titled = `${monthYear.slice(0, 1)}${monthYear.slice(1, 3).toLowerCase()}${monthYear.slice(3)}`;
           monthlyRow = await fetchMonthlyRow(titled);
         }
@@ -161,25 +200,44 @@ const AgentGoalStatusModal = () => {
         const monthSummary = Array.isArray(dailyData.month_summary) ? dailyData.month_summary[0] : null;
         const trackers = Array.isArray(dailyData.trackers) ? dailyData.trackers : [];
 
-        // user_monthly_tracker: monthly_target + extra_assigned_hours = monthly_total_target
         const monthlyGoal = Number(monthlyRow.monthly_total_target) || Number(monthSummary?.monthly_total_target) || 0;
         const workingDays = Number(monthlyRow.working_days) || Number(trackers.find((t) => t.working_days != null)?.working_days) || 0;
-        const achieved = Number(monthlyRow.total_billable_hours) ?? Number(monthSummary?.total_billable_hours_month) ?? 0;
 
         if (monthlyGoal <= 0 || workingDays <= 0) return;
 
-        // Working day index till today â same logic as billable daily (UMT working_days â pending_days)
-        let workingDayNumber = 0;
-        if (monthSummary?.pending_days != null) {
-          workingDayNumber = Math.max(0, Math.min(workingDays, workingDays - Number(monthSummary.pending_days)));
+        const rowsThroughEval = trackers
+          .filter((t) => t.work_date && String(t.work_date).slice(0, 10) <= evalDateStr)
+          .sort((a, b) => String(b.work_date).localeCompare(String(a.work_date)));
+        const evalRow = rowsThroughEval[0];
+
+        let achieved;
+        if (includeToday) {
+          achieved = Number(monthlyRow.total_billable_hours) ?? Number(monthSummary?.total_billable_hours_month) ?? 0;
+        } else if (evalRow?.cumulative_billable_hours_till_day != null) {
+          achieved = Number(evalRow.cumulative_billable_hours_till_day);
         } else {
-          workingDayNumber = Math.min(countWeekdaysTillToday(), workingDays);
+          achieved = rowsThroughEval.reduce(
+            (sum, t) => sum + (Number(t.total_billable_hours_day) || 0),
+            0
+          );
+        }
+
+        let workingDayNumber = 0;
+        if (monthSummary?.pending_days != null && includeToday) {
+          workingDayNumber = Math.max(0, Math.min(workingDays, workingDays - Number(monthSummary.pending_days)));
+        } else if (monthSummary?.pending_days != null && !includeToday) {
+          workingDayNumber = Math.max(
+            0,
+            Math.min(workingDays, workingDays - Number(monthSummary.pending_days) - 1)
+          );
+        } else {
+          workingDayNumber = Math.min(countWeekdaysThrough(evalDateStr), workingDays);
         }
         if (workingDayNumber <= 0) return;
 
         const dailyRequired =
+          Number(evalRow?.daily_required_hours) ||
           Number(monthSummary?.daily_required_hours) ||
-          Number(trackers.find((t) => t.daily_required_hours != null)?.daily_required_hours) ||
           monthlyGoal / workingDays;
 
         const expectedTillToday = (monthlyGoal / workingDays) * workingDayNumber;
@@ -198,6 +256,7 @@ const AgentGoalStatusModal = () => {
           achieved,
           difference,
           tier,
+          periodLabel,
         });
         setOpen(true);
         sessionStorage.setItem(storageKey, "shown");
@@ -218,6 +277,9 @@ const AgentGoalStatusModal = () => {
   const TierIcon = theme.Icon;
   const progressPct = Math.min(100, Math.max(0, (status.achieved / status.expectedTillToday) * 100));
   const isAhead = status.difference >= 0;
+  const periodLabel = status.periodLabel === "yesterday" ? "yesterday" : "today";
+  const expectedLabel = `Expected till ${periodLabel}`;
+  const progressLabel = `Progress vs expected till ${periodLabel}`;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
@@ -314,7 +376,7 @@ const AgentGoalStatusModal = () => {
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase">
-                <Target className="w-3.5 h-3.5 text-blue-600" /> Expected till today
+                <Target className="w-3.5 h-3.5 text-blue-600" /> {expectedLabel}
               </div>
               <p className="mt-1 text-xl font-extrabold text-slate-800">{formatHours(status.expectedTillToday)} hrs</p>
             </div>
@@ -349,7 +411,7 @@ const AgentGoalStatusModal = () => {
 
           <div>
             <div className="flex items-center justify-between text-xs font-semibold text-slate-500 mb-1.5">
-              <span>Progress vs expected till today</span>
+              <span>{progressLabel}</span>
               <span>{Math.round(progressPct)}%</span>
             </div>
             <div className="h-3 rounded-full bg-slate-200 overflow-hidden">
