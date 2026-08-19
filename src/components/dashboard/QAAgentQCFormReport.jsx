@@ -39,6 +39,7 @@ const QAAgentQCFormReport = () => {
   const [expandedRow, setExpandedRow] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [qcFilter, setQcFilter] = useState('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
 
@@ -55,6 +56,8 @@ const QAAgentQCFormReport = () => {
           agent_name: record.agent_name,
           project_name: record.project_name,
           task_name: record.task_name,
+          qa_user_id: record.qa_user_id,
+          qc_name: record.qc_name,
           qc_score: record.qc_score,
           status: record.status,
           qc_status: record.qc_status,
@@ -85,22 +88,37 @@ const QAAgentQCFormReport = () => {
     fetchQCHistory();
   }, []);
 
-  // Apply filters when search, status, or date range changes
+  // Unique QC names for dropdown (from loaded records)
+  const qcFilterOptions = [
+    { value: 'all', label: 'All QC' },
+    ...[...new Set(qcRecords.map(r => r.qc_name).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+      .map(name => ({ value: name, label: name }))
+  ];
+
+  // Apply filters when search, status, QC, or date range changes
   useEffect(() => {
     let filtered = [...qcRecords];
 
     // Search filter
     if (searchTerm) {
+      const term = searchTerm.toLowerCase();
       filtered = filtered.filter(record =>
-        record.agent_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.task_name?.toLowerCase().includes(searchTerm.toLowerCase())
+        record.agent_name?.toLowerCase().includes(term) ||
+        record.project_name?.toLowerCase().includes(term) ||
+        record.task_name?.toLowerCase().includes(term) ||
+        record.qc_name?.toLowerCase().includes(term)
       );
     }
 
     // Status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(record => record.status === statusFilter);
+    }
+
+    // QC name filter
+    if (qcFilter !== 'all') {
+      filtered = filtered.filter(record => record.qc_name === qcFilter);
     }
 
     // Date range filter
@@ -123,7 +141,7 @@ const QAAgentQCFormReport = () => {
     }
 
     setFilteredRecords(filtered);
-  }, [searchTerm, statusFilter, dateRange, qcRecords]);
+  }, [searchTerm, statusFilter, qcFilter, dateRange, qcRecords]);
 
   const recordsPagination = useClientPagination(filteredRecords, {
     resetKeys: [searchTerm, statusFilter, dateRange.start, dateRange.end],
@@ -226,6 +244,7 @@ const QAAgentQCFormReport = () => {
           'Agent Name': record.agent_name || 'N/A',
           'Project Name': record.project_name || 'N/A',
           'Task Name': record.task_name || 'N/A',
+          'QC Name': record.qc_name || 'N/A',
           'QC Score': record.qc_score ? `${record.qc_score}%` : '-',
           'Status': record.status || '-',
           'QC Status': record.qc_status || '-',
@@ -258,6 +277,7 @@ const QAAgentQCFormReport = () => {
               'Agent Name': record.agent_name || 'N/A',
               'Project Name': record.project_name || 'N/A',
               'Task Name': record.task_name || 'N/A',
+              'QC Name': record.qc_name || 'N/A',
               'Count': rework.rework_count || '-',
               'Status': rework.rework_status || '-',
               'Score': rework.rework_qc_score ? `${rework.rework_qc_score}%` : '-',
@@ -277,6 +297,7 @@ const QAAgentQCFormReport = () => {
               'Agent Name': record.agent_name || 'N/A',
               'Project Name': record.project_name || 'N/A',
               'Task Name': record.task_name || 'N/A',
+              'QC Name': record.qc_name || 'N/A',
               'Count': correction.correction_count || '-',
               'Status': correction.correction_status || '-',
               'Score': '-',
@@ -302,6 +323,7 @@ const QAAgentQCFormReport = () => {
         'Agent Name': '',
         'Project Name': `Total Rework: ${totalRework}`,
         'Task Name': `Total Correction: ${totalCorrection}`,
+        'QC Name': '',
         'Count': '',
         'Status': '',
         'Score': '',
@@ -475,15 +497,15 @@ const QAAgentQCFormReport = () => {
     <div className="space-y-4">
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-md p-4 border-2 border-slate-200">
-        {/* First Row: Search and Status */}
+        {/* First Row: Search, Status, and QC */}
         <div className="flex flex-col lg:flex-row items-center gap-4 lg:gap-0 mb-4">
           {/* Search */}
-          <div className="w-full lg:w-3/4 lg:pr-2">
+          <div className="w-full lg:w-1/2 lg:pr-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by agent, project, or task..."
+                placeholder="Search by agent, project, task, or QC..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 h-10 border-2 border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
@@ -492,7 +514,7 @@ const QAAgentQCFormReport = () => {
           </div>
 
           {/* Status Filter */}
-          <div className="w-full lg:w-1/4 lg:pl-2 flex-shrink-0">
+          <div className="w-full lg:w-1/4 lg:px-2 flex-shrink-0">
             <CustomSelect
               value={statusFilter}
               onChange={(value) => setStatusFilter(value)}
@@ -504,6 +526,18 @@ const QAAgentQCFormReport = () => {
               ]}
               icon={Filter}
               placeholder="Filter by status"
+              className="w-full h-10 lg:w-full"
+            />
+          </div>
+
+          {/* QC Filter */}
+          <div className="w-full lg:w-1/4 lg:pl-2 flex-shrink-0">
+            <CustomSelect
+              value={qcFilter}
+              onChange={(value) => setQcFilter(value)}
+              options={qcFilterOptions}
+              icon={User}
+              placeholder="Filter by QC"
               className="w-full h-10 lg:w-full"
             />
           </div>
@@ -561,6 +595,7 @@ const QAAgentQCFormReport = () => {
               onClick={() => {
                 setSearchTerm('');
                 setStatusFilter('all');
+                setQcFilter('all');
                 setDateRange({ start: '', end: '' });
               }}
               className="px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
@@ -581,6 +616,7 @@ const QAAgentQCFormReport = () => {
                 <th className="px-4 py-3 text-left font-semibold">Agent</th>
                 <th className="px-4 py-3 text-left font-semibold">Project</th>
                 <th className="px-4 py-3 text-left font-semibold">Task</th>
+                <th className="px-4 py-3 text-left font-semibold">QC</th>
                 <th className="px-4 py-3 text-center font-semibold">QC Score</th>
                 <th className="px-4 py-3 text-center font-semibold">Status</th>
                 <th className="px-4 py-3 text-center font-semibold">QC Status</th>
@@ -594,7 +630,7 @@ const QAAgentQCFormReport = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan="12" className="px-4 py-8 text-center text-slate-500">
                     <FileCheck className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                     <p className="font-medium">No QC records found</p>
                   </td>
@@ -615,6 +651,7 @@ const QAAgentQCFormReport = () => {
                         </td>
                         <td className="px-4 py-3 font-medium text-slate-800">{record.project_name || '—'}</td>
                         <td className="px-4 py-3 text-slate-600">{record.task_name || '—'}</td>
+                        <td className="px-4 py-3 text-slate-600">{record.qc_name || '—'}</td>
                         <td className={`px-4 py-3 text-center ${getScoreClass(record.qc_score)}`}>
                           {record.qc_score !== null && record.qc_score !== undefined ? `${record.qc_score}%` : '—'}
                         </td>
@@ -675,7 +712,7 @@ const QAAgentQCFormReport = () => {
                       {/* Expanded Row - History */}
                       {isExpanded && historyItems.length > 0 && (
                         <tr>
-                          <td colSpan="11" className="p-0">
+                          <td colSpan="12" className="p-0">
                             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t-2 border-blue-200 p-4">
                               <h4 className="text-sm font-semibold text-indigo-700 mb-3 flex items-center gap-2">
                                 <Clock className="w-4 h-4" />

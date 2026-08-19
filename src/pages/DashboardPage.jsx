@@ -374,7 +374,7 @@ const DashboardPage = ({
         };
         const emptyHourlyChartData = [];
         if (isAdmin || isSuperAdmin || isProjectManager) {
-          return <AdminDashboard />;
+          return <AdminDashboard initialTab="overview" />;
         } else if (isAssistantManager) {
           return <AssistantManagerDashboard />;
         } else if (isQA) {
@@ -420,6 +420,13 @@ const DashboardPage = ({
 
 
       {/* Agent Billable Report — handled above via analytics tabs */}
+
+      {/* Admin / Super Admin / Project Manager Billable Report */}
+      {activeTab === 'billable_report' && (isAdmin || isSuperAdmin || isProjectManager) && (
+        <div className="max-w-7xl mx-auto mt-6">
+          <AdminDashboard initialTab="billable_report" />
+        </div>
+      )}
 
       {/* User Monthly Report — handled by role dashboards via ?tab=user_monthly_report */}
 

@@ -29,6 +29,11 @@ import SubTabsBar from "../common/SubTabsBar";
 import { formatISTDateTimeParts, getISTParts } from "../../utils/dateTimeIST";
 
 
+// Project 12: all current and future tasks can enter production above 2x base target
+const UNLIMITED_PRODUCTION_PROJECT_IDS = new Set(['12']);
+const allowsUnlimitedProduction = (projectId) =>
+  UNLIMITED_PRODUCTION_PROJECT_IDS.has(String(projectId ?? '').trim());
+
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
   const today = new Date();
@@ -759,7 +764,7 @@ const QATrackerReport = () => {
       case 'production':
         if (!value) newErrors.production = 'Production is required';
         // else if (isNaN(value) || Number(value) <= 0) newErrors.production = 'Enter valid production';
-        else if (addFormData.base_target && Number(value) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42' && !['160', '161'].includes(String(addFormData.agent_id))) {
+        else if (addFormData.base_target && Number(value) > (Number(addFormData.base_target) * 2) && !allowsUnlimitedProduction(addFormData.project_id) && !['160', '161'].includes(String(addFormData.agent_id))) {
           newErrors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
         }
         else delete newErrors.production;
@@ -821,7 +826,7 @@ const QATrackerReport = () => {
     // else if (isNaN(addFormData.production) || Number(addFormData.production) <= 0) {
     //   errors.production = 'Enter valid production';
     // } 
-    else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && String(addFormData.task_id) !== '42' && !['160', '161'].includes(String(addFormData.agent_id))) {
+    else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && !allowsUnlimitedProduction(addFormData.project_id) && !['160', '161'].includes(String(addFormData.agent_id))) {
       errors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
     }
     
@@ -838,7 +843,7 @@ const QATrackerReport = () => {
       const dateTimeValue = addFormData.tracker_datetime;
       const formattedDateTime = dateTimeValue.replace('T', ' ') + ':00';
       
-      const formData = new FormData();
+      const formData = new FormData();  
       formData.append('user_id', Number(addFormData.agent_id));
       formData.append('date', formattedDateTime);
       formData.append('project_id', Number(addFormData.project_id));
@@ -946,7 +951,7 @@ const QATrackerReport = () => {
         project_id: tracker.project_id || "",
         task_id: tracker.task_id || "",
         shift_type: normalizedShift,
-        production: tracker.production || "",
+        production: tracker.production != null ? String(tracker.production) : "",
         base_target: tracker.tenure_target || tracker.actual_target || "",
         tracker_note: tracker.tracker_note || tracker.notes || "",
         tracker_file: null,
@@ -1069,7 +1074,7 @@ const QATrackerReport = () => {
         setEditProductionError('Please enter a valid number');
       } else if (productionValue < 0) {
         setEditProductionError('Production cannot be negative');
-      } else if (baseTarget && productionValue > (baseTarget * 2) && String(editFormData.task_id) !== '42' && !['160', '161'].includes(String(editingTracker?.user_id))) {
+      } else if (baseTarget && productionValue > (baseTarget * 2) && !allowsUnlimitedProduction(editFormData.project_id) && !['160', '161'].includes(String(editingTracker?.user_id))) {
         setEditProductionError(`Production cannot exceed ${(baseTarget * 2).toFixed(2)} (double of base target)`);
       } else {
         setEditProductionError('');
