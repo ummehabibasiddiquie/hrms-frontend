@@ -122,14 +122,9 @@ export const computeAgentGoalStatus = async (user) => {
     achieved = rowsThroughEval.reduce((sum, t) => sum + (Number(t.total_billable_hours_day) || 0), 0);
   }
 
-  let workingDayNumber = 0;
-  if (monthSummary?.pending_days != null && includeToday) {
-    workingDayNumber = Math.max(0, Math.min(workingDays, workingDays - Number(monthSummary.pending_days)));
-  } else if (monthSummary?.pending_days != null && !includeToday) {
-    workingDayNumber = Math.max(0, Math.min(workingDays, workingDays - Number(monthSummary.pending_days) - 1));
-  } else {
-    workingDayNumber = Math.min(countWeekdaysThrough(evalDateStr), workingDays);
-  }
+  // Elapsed Mon–Fri in the month through eval date (Sat/Sun never count).
+  // Do NOT derive from pending_days — that counts any calendar day with tracker entries.
+  let workingDayNumber = Math.min(countWeekdaysThrough(evalDateStr), workingDays);
   if (workingDayNumber <= 0) return null;
 
   const dailyRequired =
