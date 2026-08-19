@@ -1,18 +1,23 @@
 import React from 'react';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import AppRoutes from './routes/AppRoutes';
+import AgentGoalStatusModal from './components/AgentDashboard/AgentGoalStatusModal';
 import { Toaster } from "react-hot-toast";
 import { BrowserRouter } from 'react-router-dom';
+
+const AgentGoalModalHost = () => {
+  const { user } = useAuth();
+  if (Number(user?.role_id) !== 6) return null;
+  return <AgentGoalStatusModal />;
+};
 
 const App = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
-        {/* Toast system available globally with consistent design */}
         <Toaster
           position="top-right"
           toastOptions={{
-            // Default toast styles
             style: {
               borderRadius: '8px',
               background: '#18181b',
@@ -26,33 +31,20 @@ const App = () => {
               maxWidth: '90vw',
               animation: 'toastSlideIn 0.35s ease-out',
             },
-            // Success toast
             success: {
-              style: {
-                background: '#22c55e', // green-500
-                color: '#fff',
-              },
+              style: { background: '#22c55e', color: '#fff' },
               className: 'toast-success toast-animate',
-              iconTheme: {
-                primary: '#fff',
-                secondary: '#16a34a',
-              },
+              iconTheme: { primary: '#fff', secondary: '#16a34a' },
             },
-            // Error toast
             error: {
-              style: {
-                background: '#ef4444', // red-500
-                color: '#fff',
-              },
+              style: { background: '#ef4444', color: '#fff' },
               className: 'toast-animate',
-              iconTheme: {
-                primary: '#fff',
-                secondary: '#b91c1c',
-              },
+              iconTheme: { primary: '#fff', secondary: '#b91c1c' },
             },
           }}
         />
         <AppRoutes />
+        <AgentGoalModalHost />
       </BrowserRouter>
     </AuthProvider>
   );
