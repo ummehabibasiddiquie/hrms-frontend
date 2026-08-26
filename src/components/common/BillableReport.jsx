@@ -15,6 +15,7 @@ import TablePaginationBar from "./TablePaginationBar";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
 import SubTabsBar from "./SubTabsBar";
 import {
+  DateRangePicker,
   MonthYearPicker,
   yyyyMmToMonthYear,
   monthYearToYyyyMm,
@@ -214,9 +215,6 @@ const BillableReport = ({ userId }) => {
   const [activeToggle, setActiveToggle] = useRoutedSubTab('daily', {
     parentTab: 'billable_report',
   });
-  // State for month filter (monthly / daily) — YYYY-MM for API
-  const [monthlyMonth, setMonthlyMonth] = useState(getCurrentYyyyMm());
-  const [dailyMonth, setDailyMonth] = useState(getCurrentYyyyMm());
 
   // Helper function to get month's first and last day
   const getMonthDateRange = (monthStr) => {
@@ -239,6 +237,12 @@ const BillableReport = ({ userId }) => {
       end: `${year}-${pad(month)}-${pad(lastDay)}`
     };
   };
+
+  // State for month filter (monthly / daily) — YYYY-MM for API
+  const [monthlyMonth, setMonthlyMonth] = useState(getCurrentYyyyMm());
+  const [dailyMonth, setDailyMonth] = useState(getCurrentYyyyMm());
+  const [dailyStart, setDailyStart] = useState(() => getMonthDateRange(getCurrentYyyyMm()).start);
+  const [dailyEnd, setDailyEnd] = useState(() => getMonthDateRange(getCurrentYyyyMm()).end);
 
   // State for API data, loading, and error
   const [dailyData, setDailyData] = useState([]);
@@ -284,24 +288,57 @@ const BillableReport = ({ userId }) => {
     }
   }, [user?.user_id, canViewTeamFilter]);
 
-  // Reset user map when month filter changes (not for search query changes)
+  // Reset user map when date range / month filter changes
   React.useEffect(() => {
     setUserInfoMap({});
-  }, [dailyMonth]);
+  }, [dailyMonth, dailyStart, dailyEnd]);
 
   // Helper to get YYYY-MM-DD string
   const getDateString = (date) => date.toISOString().slice(0, 10);
 
+  const monthFromDate = (dateStr) => {
+    if (!dateStr || !dateStr.includes('-')) return '';
+    const [year, month] = dateStr.split('-');
+    return `${year}-${month}`;
+  };
+
+  // Month dropdown only — sets full month range
+  const handleDailyMonthChange = (my) => {
+    const yyyyMm = monthYearToYyyyMm(my);
+    if (!yyyyMm) return;
+    const range = getMonthDateRange(yyyyMm);
+    setDailyMonth(yyyyMm);
+    setDailyStart(range.start);
+    setDailyEnd(range.end);
+  };
+
+  // From date — keep exact day; update month label only
+  const handleDailyStartChange = (next) => {
+    setDailyStart(next);
+    if (dailyEnd && next > dailyEnd) setDailyEnd(next);
+    const nextMonth = monthFromDate(next);
+    if (nextMonth) setDailyMonth(nextMonth);
+  };
+
+  // To date — keep exact day; do not reset From
+  const handleDailyEndChange = (next) => {
+    setDailyEnd(next);
+    if (dailyStart && next < dailyStart) {
+      setDailyStart(next);
+      const nextMonth = monthFromDate(next);
+      if (nextMonth) setDailyMonth(nextMonth);
+    }
+  };
+
   // Track if this is a date-only filter change (to avoid showing loading spinner)
-  const prevFiltersRef = React.useRef({ dailyMonth });
+  const prevFiltersRef = React.useRef({ dailyMonth, dailyStart, dailyEnd });
 
   React.useEffect(() => {
     const prev = prevFiltersRef.current;
-    // Check if month changed
-    if (prev.dailyMonth !== dailyMonth) {
-      prevFiltersRef.current = { dailyMonth };
+    if (prev.dailyMonth !== dailyMonth || prev.dailyStart !== dailyStart || prev.dailyEnd !== dailyEnd) {
+      prevFiltersRef.current = { dailyMonth, dailyStart, dailyEnd };
     }
-  }, [dailyMonth]);
+  }, [dailyMonth, dailyStart, dailyEnd]);
 
   // Fetch daily report data using /tracker/view_daily API
   useEffect(() => {
@@ -317,9 +354,10 @@ const BillableReport = ({ userId }) => {
         let payload = {
           logged_in_user_id: user.user_id
         };
-        // Month filter
-        if (dailyMonth) {
-          const [year, month] = dailyMonth.split('-');
+        if (dailyStart) payload.date_from = dailyStart;
+        if (dailyEnd) payload.date_to = dailyEnd;
+        if (dailyStart) {
+          const [year, month] = dailyStart.split('-');
           const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
           const monthLabel = monthNames[Number(month) - 1];
           payload.month_year = `${monthLabel}${year}`;
@@ -330,15 +368,9 @@ const BillableReport = ({ userId }) => {
         }
         // User filter (if userId is passed as prop)
         if (userId) payload.user_id = userId;
-        // Call the /tracker/view_daily API
         const res = await api.post('/tracker/view_daily', payload);
-        console.log('Daily report API response:', res.data);
-        console.log('Payload sent:', payload);
-        // Get trackers from API response
         let trackers = Array.isArray(res.data?.data?.trackers) ? res.data.data.trackers : [];
-        console.log('Trackers extracted:', trackers);
         
-        // Store user information for all users (persists across date filter changes)
         const newUserInfoMap = {};
         trackers.forEach(tracker => {
           if (tracker.user_id) {
@@ -361,7 +393,7 @@ const BillableReport = ({ userId }) => {
     };
     fetchData();
     // eslint-disable-next-line
-  }, [userId, dailyMonth, selectedTeam, refreshTrigger]);
+  }, [userId, dailyStart, dailyEnd, selectedTeam, refreshTrigger]);
 
   // Function to refresh daily data
   const handleRefreshData = () => {
@@ -553,10 +585,10 @@ const BillableReport = ({ userId }) => {
       {activeToggle === 'daily' && (
         <div className="w-full max-w-7xl mx-auto mt-4">
           {/* Filter Section - Enhanced Design */}
-          <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
-            <div className="flex flex-wrap items-end gap-4">
+          <div className="bg-white rounded-xl shadow-md border border-blue-100 p-5 mb-6">
+            <div className="flex flex-nowrap items-end gap-3 overflow-x-auto pb-1">
               {/* Search Filter */}
-              <div className="relative w-96">
+              <div className="w-[260px] shrink-0">
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-blue-600" />
                   Search Agent
@@ -566,39 +598,43 @@ const BillableReport = ({ userId }) => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search by agent name..."
-                  className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 transition-all hover:border-blue-400"
+                  className="w-full h-11 px-4 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 transition-all hover:border-blue-400"
+                />
+              </div>
+
+              <DateRangePicker
+                startDate={dailyStart}
+                endDate={dailyEnd}
+                onStartDateChange={handleDailyStartChange}
+                onEndDateChange={handleDailyEndChange}
+                noWrapper
+                showClearButton={false}
+                fieldWidth="170px"
+              />
+              
+              {/* Month Filter */}
+              <div className="shrink-0">
+                <MonthYearPicker
+                  compact
+                  label="Month"
+                  selectedMonthYear={yyyyMmToMonthYear(dailyMonth)}
+                  onMonthYearChange={handleDailyMonthChange}
+                  showAllOption={false}
                 />
               </div>
               
-              {/* Month Filter */}
-              <MonthYearPicker
-                compact
-                label="Month"
-                selectedMonthYear={yyyyMmToMonthYear(dailyMonth)}
-                onMonthYearChange={(my) => {
-                  const yyyyMm = monthYearToYyyyMm(my);
-                  if (yyyyMm) setDailyMonth(yyyyMm);
-                }}
-                showAllOption={false}
-              />
-              
               {/* Team Filter (Admin, Super Admin, Project Manager only) */}
               {canViewTeamFilter && (
-                <div className="relative w-[220px]">
+                <div className="w-[200px] shrink-0">
                   <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
                     <Users className="w-4 h-4 text-blue-600" />
                     Team
                   </label>
                   <SearchableSelect
-                    options={(() => {
-                      const opts = [
-                        { value: 'all', label: 'All Teams' },
-                        ...teams.map(team => ({ value: String(team.team_id), label: team.label }))
-                      ];
-                      console.log('SearchableSelect options:', opts);
-                      console.log('teams state:', teams);
-                      return opts;
-                    })()}
+                    options={[
+                      { value: 'all', label: 'All Teams' },
+                      ...teams.map(team => ({ value: String(team.team_id), label: team.label }))
+                    ]}
                     value={selectedTeam}
                     onChange={(val) => setSelectedTeam(val)}
                     placeholder={loadingTeams ? "Loading teams..." : "Select team"}
@@ -607,32 +643,37 @@ const BillableReport = ({ userId }) => {
                 </div>
               )}
               
-              {/* Reset Filters Button */}
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setDailyMonth(getCurrentYyyyMm());
-                  setSelectedTeam('all');
-                }}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg px-6 py-2.5 transition-all shadow-sm hover:shadow-md group"
-                type="button"
-              >
-                <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
-                Reset Filters
-              </button>
-              
-              {/* Export All Button */}
-              <button
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-                onClick={handleExportAllUsers}
-              >
-                <Download className="w-4 h-4" />
-                Export All
-              </button>
+              <div className="flex items-end gap-3 shrink-0 ml-auto">
+                <button
+                  onClick={() => {
+                    const current = getCurrentYyyyMm();
+                    const range = getMonthDateRange(current);
+                    setSearchQuery('');
+                    setDailyMonth(current);
+                    setDailyStart(range.start);
+                    setDailyEnd(range.end);
+                    setSelectedTeam('all');
+                  }}
+                  className="h-11 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-lg px-5 transition-all shadow-sm hover:shadow-md group whitespace-nowrap"
+                  type="button"
+                >
+                  <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
+                  Reset Filters
+                </button>
+                
+                <button
+                  className="h-11 inline-flex items-center gap-2 px-5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 whitespace-nowrap"
+                  onClick={handleExportAllUsers}
+                  type="button"
+                >
+                  <Download className="w-4 h-4" />
+                  Export All
+                </button>
+              </div>
             </div>
             
             {/* User Guidance Message */}
-            {dailyMonth && (
+            {(dailyStart || dailyEnd) && (
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-start gap-2">
                   <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -642,15 +683,11 @@ const BillableReport = ({ userId }) => {
                   </div>
                   <div className="text-sm">
                     <p className="font-medium text-blue-800">
-                      📅 Date Range Filter Active
+                      Date Range Filter Active
                     </p>
                     <p className="text-blue-700 mt-1">
-                      The date range calendars in user cards are now restricted to <span className="font-semibold">{(() => {
-                        const [year, month] = dailyMonth.split('-');
-                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                        return `${monthNames[parseInt(month) - 1]} ${year}`;
-                      })()}</span> only. 
-                      Select a different month from the Month Filter to change the available dates.
+                      Showing daily data from <span className="font-semibold">{dailyStart || '—'}</span> to <span className="font-semibold">{dailyEnd || '—'}</span>.
+                      Change From / To, or pick another month, to update the report.
                     </p>
                   </div>
                 </div>
@@ -730,9 +767,10 @@ const BillableReport = ({ userId }) => {
                     setExpandedCards(prev => ({ ...prev, [userId]: isExpanded }));
                   }}
                   selectedMonth={dailyMonth}
+                  rangeStart={dailyStart}
+                  rangeEnd={dailyEnd}
                   formatDateTime={formatDateTime}
                   onRefresh={handleRefreshData}
-                  showOnlySelectedMonth={true}
                 />
                 ))}
                 <TablePaginationBar {...dailyUserPagination} itemLabel="agents" />

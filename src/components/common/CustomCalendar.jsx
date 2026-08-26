@@ -61,22 +61,32 @@ export const DateRangePicker = ({
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
-  // Convert yyyy-mm-dd to Date object
+  // Convert yyyy-mm-dd to Date object (local midnight — avoid UTC shift)
   const parseDate = (dateStr) => {
     if (!dateStr) return undefined;
+    const match = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    }
     return new Date(dateStr);
   };
 
-  // Convert Date to yyyy-mm-dd
+  // Convert Date to yyyy-mm-dd (local calendar day)
   const formatDate = (date) => {
     if (!date) return '';
-    return format(date, 'yyyy-MM-dd');
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   };
 
   // Convert yyyy-mm-dd to dd/mm/yyyy for display
   const formatToDisplay = (dateStr) => {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
+    const match = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+    const date = parseDate(dateStr);
+    if (!date || Number.isNaN(date.getTime())) return '';
     return format(date, 'dd/MM/yyyy');
   };
 
@@ -100,7 +110,7 @@ export const DateRangePicker = ({
     if (onClear) {
       onClear();
     } else {
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDate(new Date());
       onStartDateChange(today);
       onEndDateChange(today);
     }
@@ -126,11 +136,12 @@ export const DateRangePicker = ({
 
   // Disable dates that are not in the allowed month(s)
   const isDateDisabled = (date) => {
-    // First check if date is in the future
-    if (date > new Date()) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    if (day > today) {
       return true;
     }
-    // Then check if date is in the allowed month
     return !isDateInAllowedMonth(date);
   };
 
@@ -138,7 +149,10 @@ export const DateRangePicker = ({
   const content = (
     <>
       {/* Filter Controls */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
+      <div className={cn(
+        "flex items-end gap-3",
+        !noWrapper && "flex-col lg:flex-row items-stretch lg:items-center gap-4"
+      )}>
         {/* Header with Calendar Icon - Left side (only show if not noWrapper) */}
         {!noWrapper && (
           <div className="flex items-center gap-3">
@@ -154,11 +168,11 @@ export const DateRangePicker = ({
 
         {/* Start Date Picker */}
         <div 
-          className={`relative ${fieldWidth ? 'flex-shrink-0' : 'flex-1'}`}
+          className={`relative shrink-0 ${fieldWidth ? '' : 'flex-1'}`}
           style={fieldWidth ? { width: fieldWidth } : {}}
         >
-          <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
-            <CalendarIcon className="w-3 h-3 text-blue-600" />
+          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+            <CalendarIcon className="w-4 h-4 text-blue-600" />
             From
           </label>
           <Popover open={showStartPicker} onOpenChange={setShowStartPicker}>
@@ -167,14 +181,14 @@ export const DateRangePicker = ({
                 type="button"
                 disabled={disabled}
                 className={cn(
-                  "w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all shadow-sm text-left flex items-center justify-between",
+                  "w-full h-11 bg-slate-50 border border-slate-300 rounded-lg px-3 text-sm font-medium text-slate-800 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-left flex items-center justify-between",
                   disabled && "opacity-50 cursor-not-allowed"
                 )}
               >
                 <span className={!startDate ? "text-slate-400" : "text-slate-800"}>
                   {formatToDisplay(startDate) || 'DD/MM/YYYY'}
                 </span>
-                <CalendarIcon className="w-4 h-4 text-blue-600" />
+                <CalendarIcon className="w-4 h-4 text-blue-600 shrink-0" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 border-2 border-blue-200 bg-white" align="start">
@@ -214,11 +228,11 @@ export const DateRangePicker = ({
 
         {/* End Date Picker */}
         <div 
-          className={`relative ${fieldWidth ? 'flex-shrink-0' : 'flex-1'}`}
+          className={`relative shrink-0 ${fieldWidth ? '' : 'flex-1'}`}
           style={fieldWidth ? { width: fieldWidth } : {}}
         >
-          <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
-            <CalendarIcon className="w-3 h-3 text-blue-600" />
+          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+            <CalendarIcon className="w-4 h-4 text-blue-600" />
             To
           </label>
           <Popover open={showEndPicker} onOpenChange={setShowEndPicker}>
@@ -227,14 +241,14 @@ export const DateRangePicker = ({
                 type="button"
                 disabled={disabled}
                 className={cn(
-                  "w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all shadow-sm text-left flex items-center justify-between",
+                  "w-full h-11 bg-slate-50 border border-slate-300 rounded-lg px-3 text-sm font-medium text-slate-800 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-left flex items-center justify-between",
                   disabled && "opacity-50 cursor-not-allowed"
                 )}
               >
                 <span className={!endDate ? "text-slate-400" : "text-slate-800"}>
                   {formatToDisplay(endDate) || 'DD/MM/YYYY'}
                 </span>
-                <CalendarIcon className="w-4 h-4 text-blue-600" />
+                <CalendarIcon className="w-4 h-4 text-blue-600 shrink-0" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0 border-2 border-blue-200 bg-white" align="start">
@@ -369,12 +383,12 @@ export const MonthYearPicker = ({
                 className={cn(
                   "text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all text-left flex items-center justify-between",
                   compact
-                    ? "bg-slate-50 border border-slate-300 rounded-lg px-4 py-2.5 w-[220px]"
+                    ? "bg-slate-50 border border-slate-300 rounded-lg px-4 h-11 w-[190px]"
                     : "bg-slate-50 border-2 border-blue-200 rounded-lg px-4 py-2.5 hover:bg-blue-50 hover:border-blue-500 focus:border-blue-500 w-[180px]",
                   disabled && "opacity-50 cursor-not-allowed"
                 )}
               >
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 truncate">
                   {!compact && <CalendarIcon className="w-4 h-4 text-blue-600" />}
                   {selectedMonthYear === 'all'
                     ? 'All Months'
@@ -388,7 +402,7 @@ export const MonthYearPicker = ({
                       : 'Select Month'}
                 </span>
                 {compact
-                  ? <CalendarIcon className="w-4 h-4 text-slate-400" />
+                  ? <CalendarIcon className="w-4 h-4 text-blue-600 shrink-0" />
                   : <ChevronRight className={cn("w-4 h-4 transition-transform", showCalendar && "rotate-90")} />
                 }
               </button>

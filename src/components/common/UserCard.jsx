@@ -4,9 +4,8 @@ import { useCurrentUserRole } from "../../hooks/useCurrentUserRole";
 import { useAuth } from "../../context/AuthContext";
 import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
-import { User, Download, ChevronUp, Calendar, X, RotateCcw, Edit } from "lucide-react";
+import { User, Download, ChevronUp, Calendar, X, Edit } from "lucide-react";
 import DailyEntryFormModal from "./DailyEntryFormModal";
-import { DateRangePicker } from "./CustomCalendar";
 import { formatISTDateTime } from "../../utils/dateTimeIST";
 
 function formatDateTime(dt) {
@@ -18,10 +17,11 @@ export default function UserCard({
   expanded: controlledExpanded,
   onToggleExpand = () => {},
   selectedMonth = '',
+  rangeStart = '',
+  rangeEnd = '',
   onRefresh = () => {},
   team_name = '',
   showTeam = false,
-  showOnlySelectedMonth = false
 }) {
   const role = useCurrentUserRole();
   const { user: currentUser } = useAuth();
@@ -99,93 +99,14 @@ export default function UserCard({
   const getDayColorClass = (dayName) => {
     return isWeekendDay(dayName) ? 'text-red-600 font-bold' : '';
   };
-  
-  // Helper function to get month's first and last day
-  const getMonthDateRange = (monthStr) => {
-    let year, month;
-    
-    if (!monthStr) {
-      // Default to current month
-      const now = new Date();
-      year = now.getFullYear();
-      month = now.getMonth() + 1; // Convert to 1-based
-    } else {
-      [year, month] = monthStr.split('-').map(Number);
-    }
-    
-    // Calculate first day of the month (day 1)
-    const firstDay = 1;
-    
-    // Calculate last day of the month
-    const lastDay = new Date(year, month, 0).getDate();
-    
-    // Format as YYYY-MM-DD without timezone issues
-    const pad = (n) => String(n).padStart(2, '0');
-    
-    return {
-      start: `${year}-${pad(month)}-${pad(firstDay)}`,
-      end: `${year}-${pad(month)}-${pad(lastDay)}`
-    };
-  };
 
-  // Use controlled expanded state from parent (persists across re-renders)
   const expanded = controlledExpanded !== undefined ? controlledExpanded : false;
-  
-  // Each card manages its own date range state independently
-  const monthRange = getMonthDateRange(selectedMonth);
-  const [start, setStart] = useState(monthRange.start);
-  const [end, setEnd] = useState(monthRange.end);
-
-  // Modal state
+  const filteredRows = dailyData;
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' or 'edit'
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Update date range when selectedMonth changes
-  React.useEffect(() => {
-    const newRange = getMonthDateRange(selectedMonth);
-    setStart(newRange.start);
-    setEnd(newRange.end);
-  }, [selectedMonth]);
-
-  // Filter dailyData according to this card's date range (client-side filtering)
-  const filteredRows = dailyData.filter(row => {
-    // Use work_date (YYYY-MM-DD format) for accurate date comparison
-    const rowDateStr = row.work_date || row.date_time || row.date;
-    if (!rowDateStr) return true; // Include rows without dates
-    
-    // Extract just the date part (YYYY-MM-DD) for comparison
-    let dateStr;
-    if (rowDateStr.includes('-') && rowDateStr.split('-').length >= 3) {
-      // Already in YYYY-MM-DD or DD-MM-YYYY format
-      const parts = rowDateStr.split('-');
-      if (parts[0].length === 4) {
-        // YYYY-MM-DD format
-        dateStr = rowDateStr.split('T')[0]; // Remove time part if exists
-      } else {
-        // DD-MM-YYYY format - convert to YYYY-MM-DD
-        dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
-      }
-    } else {
-      // Try parsing as date
-      const date = new Date(rowDateStr);
-      if (!isNaN(date.getTime())) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        dateStr = `${year}-${month}-${day}`;
-      } else {
-        return true; // Can't parse, include it
-      }
-    }
-    
-    // Compare as strings (YYYY-MM-DD format allows string comparison)
-    if (start && dateStr < start) return false;
-    if (end && dateStr > end) return false;
-    return true;
-  });
 
   // Handle Edit button click
   const handleEditClick = (rowData) => {
@@ -346,144 +267,64 @@ export default function UserCard({
           </button>
         </div>
         
-        {/* Filter Section */}
         {expanded && (
-          <div className="px-6 pb-5 pt-0">
-            {/* Date Range Card */}
-            <div className="bg-white p-4 rounded-xl shadow-md border-2 border-blue-100">
-              <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
-                {/* Icon and Title */}
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-sm">
-                    <Calendar className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-800 leading-tight">Date Range Filter</h3>
-                  </div>
-                </div>
-                
-                {/* Date Range Picker - Using shadcn calendar */}
-                <div className="flex-1">
-                  <DateRangePicker
-                    startDate={start}
-                    endDate={end}
-                    onStartDateChange={setStart}
-                    onEndDateChange={setEnd}
-                    label=""
-                    description={null}
-                    showClearButton={false}
-                    compact={true}
-                    fieldWidth="220px"
-                    noWrapper={true}
-                    disabledMonths={selectedMonth ? [selectedMonth] : null}
-                    showOnlySelectedMonth={showOnlySelectedMonth}
-                  />
-                </div>
-                
-                {/* Action Buttons - Aligned with date fields */}
-                <div className="flex flex-wrap items-center gap-3 self-end">
-                  {/* Reset Button */}
-                  <button
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg px-6 py-2.5 transition-all shadow-sm hover:shadow-md group"
-                    onClick={() => {
-                      const newRange = getMonthDateRange(selectedMonth);
-                      setStart(newRange.start);
-                      setEnd(newRange.end);
-                    }}
-                    type="button"
-                  >
-                    <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
-                    Reset Filter
-                  </button>
-                  
-                  {/* Export Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      try {
-                      // Helper to safely format number or return '-'
-                      const formatNumber = (val) => {
-                        if (val === null || val === undefined || val === '' || val === '-') return '-';
-                        const num = Number(val);
-                        return isNaN(num) ? '-' : num.toFixed(2);
-                      };
-                      
-                      // Use filteredRows (already filtered by date range)
-                      let exportData = filteredRows.map(row => ({
-                        'Date': formatDateTime(row.date_time ?? row.date),
-                        'Day Status': getRosterStatus(row),
-                        'Assign Hours': formatNumber(row.assigned_hours ?? row.assign_hours ?? row.assignHours),
-                        'Worked Hours': formatNumber(row.billable_hours ?? row.workedHours ?? row.worked_hours),
-                        'QC Score': row.qc_score != null || row.qcScore != null ? `${formatNumber(row.qc_score ?? row.qcScore)}%` : '-',
-                        'Tracker Count': row.trackers_count_day !== null && row.trackers_count_day !== undefined ? row.trackers_count_day : '-',
-                        'Daily Required Hours': formatNumber(row.tenure_target ?? row.dailyRequiredHours ?? row.daily_required_hours)
-                      }));
-                      if (exportData.length > 0) {
-                        const totalAssigned = exportData.reduce((sum, r) => sum + (parseFloat(r['Assign Hours']) || 0), 0);
-                        const totalWorked = exportData.reduce((sum, r) => sum + (parseFloat(r['Worked Hours']) || 0), 0);
-                        const totalRequired = exportData.reduce((sum, r) => sum + (parseFloat(r['Daily Required Hours']) || 0), 0);
-                        const qcScores = exportData.map(r => parseFloat(r['QC Score'])).filter(v => !isNaN(v));
-                        const avgQC = qcScores.length > 0 ? `${(qcScores.reduce((a, b) => a + b, 0) / qcScores.length).toFixed(2)}%` : '-';
-                        
-                        const totalTrackers = exportData.reduce((sum, r) => {
-                          const count = r['Tracker Count'];
-                          return sum + (count !== '-' ? parseInt(count) : 0);
-                        }, 0);
-                        
-                        exportData.push({
-                          'Date': 'TOTAL',
-                          'Day Status': '',
-                          'Assign Hours': totalAssigned.toFixed(2),
-                          'Worked Hours': totalWorked.toFixed(2),
-                          'QC Score': avgQC,
-                          'Tracker Count': totalTrackers,
-                          'Daily Required Hours': totalRequired.toFixed(2)
-                        });
-                      }
-                      const filename = `Daily_Report_${user.user_name || 'User'}_${start || 'all'}_${end || 'all'}.csv`;
-                      exportToCSV(exportData, filename);
-                      toast.success('Daily report exported successfully!');
-                    } catch {
-                      toast.error('Failed to export daily report');
-                    }
-                  }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-                    title="Export filtered data"
-                    aria-label="Export"
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    <Download className="w-4 h-4" />
-                    Export
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            {/* User Guidance Message */}
-            {selectedMonth && (
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="text-sm">
-                    <p className="font-medium text-blue-800">
-                      📅 Date Range Filter Active
-                    </p>
-                    <p className="text-blue-700 mt-1">
-                      This calendar is restricted to <span className="font-semibold">{(() => {
-                        const [year, month] = selectedMonth.split('-');
-                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                        return `${monthNames[parseInt(month) - 1]} ${year}`;
-                      })()}</span> only. 
-                      The month filter above controls the available dates.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="px-6 pb-4 pt-0 flex justify-end">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                try {
+                  const formatNumber = (val) => {
+                    if (val === null || val === undefined || val === '' || val === '-') return '-';
+                    const num = Number(val);
+                    return isNaN(num) ? '-' : num.toFixed(2);
+                  };
+
+                  let exportData = filteredRows.map(row => ({
+                    'Date': formatDateTime(row.date_time ?? row.date),
+                    'Day Status': getRosterStatus(row),
+                    'Assign Hours': formatNumber(row.assigned_hours ?? row.assign_hours ?? row.assignHours),
+                    'Worked Hours': formatNumber(row.billable_hours ?? row.workedHours ?? row.worked_hours),
+                    'QC Score': row.qc_score != null || row.qcScore != null ? `${formatNumber(row.qc_score ?? row.qcScore)}%` : '-',
+                    'Tracker Count': row.trackers_count_day !== null && row.trackers_count_day !== undefined ? row.trackers_count_day : '-',
+                    'Daily Required Hours': formatNumber(row.tenure_target ?? row.dailyRequiredHours ?? row.daily_required_hours)
+                  }));
+                  if (exportData.length > 0) {
+                    const totalAssigned = exportData.reduce((sum, r) => sum + (parseFloat(r['Assign Hours']) || 0), 0);
+                    const totalWorked = exportData.reduce((sum, r) => sum + (parseFloat(r['Worked Hours']) || 0), 0);
+                    const totalRequired = exportData.reduce((sum, r) => sum + (parseFloat(r['Daily Required Hours']) || 0), 0);
+                    const qcScores = exportData.map(r => parseFloat(r['QC Score'])).filter(v => !isNaN(v));
+                    const avgQC = qcScores.length > 0 ? `${(qcScores.reduce((a, b) => a + b, 0) / qcScores.length).toFixed(2)}%` : '-';
+
+                    const totalTrackers = exportData.reduce((sum, r) => {
+                      const count = r['Tracker Count'];
+                      return sum + (count !== '-' ? parseInt(count) : 0);
+                    }, 0);
+
+                    exportData.push({
+                      'Date': 'TOTAL',
+                      'Day Status': '',
+                      'Assign Hours': totalAssigned.toFixed(2),
+                      'Worked Hours': totalWorked.toFixed(2),
+                      'QC Score': avgQC,
+                      'Tracker Count': totalTrackers,
+                      'Daily Required Hours': totalRequired.toFixed(2)
+                    });
+                  }
+                  const filename = `Daily_Report_${user.user_name || 'User'}_${rangeStart || selectedMonth || 'all'}_${rangeEnd || 'all'}.csv`;
+                  exportToCSV(exportData, filename);
+                  toast.success('Daily report exported successfully!');
+                } catch {
+                  toast.error('Failed to export daily report');
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200"
+              title="Export filtered data"
+              aria-label="Export"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
           </div>
         )}
       </div>
