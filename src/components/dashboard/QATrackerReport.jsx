@@ -1185,9 +1185,11 @@ const QATrackerReport = () => {
       formData.append('production', Number(editFormData.production));
       formData.append('base_target', Number(editFormData.base_target));
 
-      if (editFormData.tracker_note && editFormData.tracker_note.trim()) {
-        formData.append('tracker_note', editFormData.tracker_note.trim());
-      }
+      // Always send note on update — empty string clears a previously saved note
+      formData.append(
+        'tracker_note',
+        editFormData.tracker_note != null ? String(editFormData.tracker_note).trim() : ''
+      );
 
       if (editFormData.newFile) {
         formData.append('tracker_file', editFormData.newFile);
