@@ -33,6 +33,7 @@ import { MonthYearPicker } from "../common/CustomCalendar";
 import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
 
 const PAGE_SIZE = 8;
+const BULK_APPROVE_CHUNK = 10;
 
 const STATUS_TABS = [
   { id: "Pending", label: "Pending" },
@@ -75,6 +76,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
   const [page, setPage] = useState(1);
   const [actionId, setActionId] = useState(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(null); // { done, total, action }
   const [comment, setComment] = useState("");
   const [modal, setModal] = useState(null);
   const [detailRequest, setDetailRequest] = useState(null);
@@ -206,33 +208,52 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
         }
       } else if (type === "approve_selected") {
         setBulkLoading(true);
-        const res = await approveChangeRequestsBulk({
-          request_ids: Array.from(selectedIds),
-          ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
-        });
-        const approved = res.data?.approved ?? 0;
-        const failed = res.data?.failed || [];
+        const ids = Array.from(selectedIds);
+        const total = ids.length;
+        setBulkProgress({ done: 0, total, action: "approve" });
+
+        let approved = 0;
+        let failed = [];
+        for (let i = 0; i < ids.length; i += BULK_APPROVE_CHUNK) {
+          const chunk = ids.slice(i, i + BULK_APPROVE_CHUNK);
+          const res = await approveChangeRequestsBulk({
+            request_ids: chunk,
+            ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
+          });
+          approved += res.data?.approved ?? 0;
+          failed = failed.concat(res.data?.failed || []);
+          setBulkProgress({
+            done: Math.min(i + chunk.length, total),
+            total,
+            action: "approve",
+          });
+        }
+
         if (failed.length) {
           toast.error(`Approved ${approved}; ${failed.length} failed`);
         } else {
-          toast.success(res.message || `Approved ${approved} request(s)`);
+          toast.success(`Approved ${approved} request(s)`);
         }
         setSelectedIds(new Set());
       } else if (type === "reject_selected") {
         setBulkLoading(true);
         const ids = Array.from(selectedIds);
+        const total = ids.length;
+        setBulkProgress({ done: 0, total, action: "reject" });
+
         let ok = 0;
         let fail = 0;
-        for (const id of ids) {
+        for (let i = 0; i < ids.length; i += 1) {
           try {
             await rejectChangeRequest({
-              request_id: id,
+              request_id: ids[i],
               reviewer_comment: comment.trim(),
             });
             ok += 1;
           } catch {
             fail += 1;
           }
+          setBulkProgress({ done: i + 1, total, action: "reject" });
         }
         if (fail) toast.error(`Rejected ${ok}; ${fail} failed`);
         else toast.success(`Rejected ${ok} request(s)`);
@@ -249,6 +270,7 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
     } finally {
       setActionId(null);
       setBulkLoading(false);
+      setBulkProgress(null);
     }
   };
 
@@ -624,25 +646,66 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
               )}
             </div>
             <div className="p-5 space-y-3">
-              <label className="block">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                  Reviewer comment
-                  {(modal.type === "reject" || modal.type === "reject_selected") && (
-                    <span className="text-red-500"> *</span>
-                  )}
-                </span>
-                <textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={3}
-                  placeholder={
-                    modal.type === "reject" || modal.type === "reject_selected"
-                      ? "Reason for rejection..."
-                      : "Optional note..."
-                  }
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-                />
-              </label>
+              {!bulkLoading && (
+                <label className="block">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    Reviewer comment
+                    {(modal.type === "reject" || modal.type === "reject_selected") && (
+                      <span className="text-red-500"> *</span>
+                    )}
+                  </span>
+                  <textarea
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    rows={3}
+                    placeholder={
+                      modal.type === "reject" || modal.type === "reject_selected"
+                        ? "Reason for rejection..."
+                        : "Optional note..."
+                    }
+                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </label>
+              )}
+
+              {bulkLoading && bulkProgress && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-800">
+                      {bulkProgress.action === "reject" ? "Rejecting requests…" : "Approving requests…"}
+                    </p>
+                    <p className="text-sm font-bold tabular-nums text-slate-700">
+                      {bulkProgress.done} / {bulkProgress.total}
+                    </p>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ease-out ${
+                        bulkProgress.action === "reject" ? "bg-red-500" : "bg-green-500"
+                      }`}
+                      style={{
+                        width: `${
+                          bulkProgress.total
+                            ? Math.min(100, Math.round((bulkProgress.done / bulkProgress.total) * 100))
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {bulkProgress.total
+                      ? `${Math.min(100, Math.round((bulkProgress.done / bulkProgress.total) * 100))}% complete — please keep this window open`
+                      : "Please keep this window open"}
+                  </p>
+                </div>
+              )}
+
+              {busy && !bulkProgress && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 flex items-center gap-3">
+                  <div className="h-4 w-4 rounded-full border-2 border-slate-300 border-t-blue-600 animate-spin" />
+                  <p className="text-sm text-slate-600">Processing request…</p>
+                </div>
+              )}
             </div>
             <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-2">
               <button
@@ -663,7 +726,11 @@ const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
                     : "bg-green-600 hover:bg-green-700"
                 }`}
               >
-                {busy ? "Working..." : "Confirm"}
+                {bulkProgress
+                  ? `Processing ${bulkProgress.done}/${bulkProgress.total}`
+                  : busy
+                    ? "Processing…"
+                    : "Confirm"}
               </button>
             </div>
           </div>

@@ -157,6 +157,11 @@ export function getDayDisplayInfo(day, options = null) {
     if (leaveType && effectiveDay.day_type === "Leave") {
       effectiveDay.leave_type = leaveType;
     }
+    // Preview overrides day_type but keeps base flags like is_holiday_on_week_off.
+    // Recompute so a Working draft on a holiday week-off day shows Working, not Week Off.
+    const dt = (effectiveDay.day_type || "").trim();
+    effectiveDay.is_holiday_on_week_off =
+      dt === "WeekOff" && Boolean(effectiveDay.holiday_id);
   }
 
   if (!effectiveDay) {

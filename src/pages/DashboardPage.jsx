@@ -452,7 +452,7 @@ const DashboardPage = ({
                 </div>
               </div>
             </div>
-              
+
             {/* Admin Tabs Navigation */}
             <SubTabsBar
               className="mb-6"
