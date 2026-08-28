@@ -199,9 +199,9 @@ const AdminDashboard = () => {
   const handleEndDateChange = (value) => handleDateRangeChange('end', value);
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-10">
+    <div className={`max-w-7xl mx-auto ${activeTab === 'billable_report' ? 'pb-2' : 'space-y-4 pb-10'}`}>
       {/* Navigation Tabs */}
-      <AdminTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+      <AdminTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} compact={activeTab === 'billable_report'} />
       
       {/* Overview Tab Content */}
       {activeTab === 'overview' && (
@@ -384,11 +384,7 @@ const AdminDashboard = () => {
       )}
       
       {/* Billable Report Tab */}
-      {activeTab === 'billable_report' && (
-        <div className="max-w-7xl mx-auto mt-6">
-          <BillableReport />
-        </div>
-      )}
+      {activeTab === 'billable_report' && <BillableReport />}
       {activeTab === 'tracker_report' && (
         <div className="max-w-7xl mx-auto mt-6">
           <QATrackerReport />

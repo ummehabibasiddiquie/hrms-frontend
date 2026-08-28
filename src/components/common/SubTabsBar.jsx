@@ -13,6 +13,8 @@ const SubTabsBar = ({
   bordered = true,
   /** Stretch tabs evenly across the row (default true). */
   equalWidth = true,
+  /** Tighter tabs for data-heavy views (e.g. daily report). */
+  compact = false,
   listClassName = "",
 }) => {
   const visibleTabs = tabs.filter((tab) => tab && !tab.hidden);
@@ -40,7 +42,7 @@ const SubTabsBar = ({
             onClick={() => {
               if (!disabled && onChange) onChange(tab.id);
             }}
-            className={`px-6 py-4 text-sm font-bold transition-all relative whitespace-nowrap ${
+            className={`px-6 ${compact ? "py-2" : "py-4"} text-sm font-bold transition-all relative whitespace-nowrap ${
               equalWidth || tab.flex ? "flex-1 min-w-fit" : ""
             } ${
               isActive
@@ -76,7 +78,7 @@ const SubTabsBar = ({
   if (bordered) {
     return (
       <div
-        className={`bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden ${className}`}
+        className={`bg-white ${compact ? "rounded-xl shadow-md mb-2" : "rounded-2xl shadow-lg mb-6"} border border-slate-200 overflow-hidden ${className}`}
       >
         {list}
       </div>

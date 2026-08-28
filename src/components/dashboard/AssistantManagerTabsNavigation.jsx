@@ -9,7 +9,7 @@ import {
   DollarSign
 } from 'lucide-react';
 
-const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
+const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab, compact = false }) => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
@@ -21,7 +21,7 @@ const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
   return (
     <div className="max-w-7xl mx-auto mt-2">
       {/* Navigation Tab Card */}
-      <div className="bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden">
+      <div className={`bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden ${compact ? 'mb-1.5' : 'mb-3'}`}>
         <div className="flex border-b border-slate-200">
           {tabs.map(tab => {
             const Icon = tab.icon;
@@ -31,7 +31,7 @@ const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab }) => {
                 key={tab.id}
                 onClick={() => !tab.disabled && setActiveTab(tab.id)}
                 disabled={tab.disabled}
-                className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+                className={`flex-1 px-6 ${compact ? 'py-2.5' : 'py-4'} text-sm font-bold transition-all relative ${
                   isActive
                     ? 'text-blue-600 bg-blue-50'
                     : tab.disabled

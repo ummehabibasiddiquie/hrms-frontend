@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
@@ -175,7 +175,10 @@ export const DateRangePicker = ({
             <CalendarIcon className="w-4 h-4 text-blue-600" />
             From
           </label>
-          <Popover open={showStartPicker} onOpenChange={setShowStartPicker}>
+          <Popover open={showStartPicker} onOpenChange={(open) => {
+            setShowStartPicker(open);
+            if (open) setShowEndPicker(false);
+          }}>
             <PopoverTrigger asChild>
               <button
                 type="button"
@@ -235,7 +238,10 @@ export const DateRangePicker = ({
             <CalendarIcon className="w-4 h-4 text-blue-600" />
             To
           </label>
-          <Popover open={showEndPicker} onOpenChange={setShowEndPicker}>
+          <Popover open={showEndPicker} onOpenChange={(open) => {
+            setShowEndPicker(open);
+            if (open) setShowStartPicker(false);
+          }}>
             <PopoverTrigger asChild>
               <button
                 type="button"
@@ -337,6 +343,12 @@ export const MonthYearPicker = ({
   const now = new Date();
   const currentYear = now.getFullYear();
   const maxYear = allowFutureMonths ? currentYear + 2 : currentYear;
+
+  useEffect(() => {
+    if (!selectedMonthYear || selectedMonthYear === 'all') return;
+    const match = String(selectedMonthYear).match(/^([A-Z]{3})(\d{4})$/);
+    if (match) setCalendarYear(parseInt(match[2], 10));
+  }, [selectedMonthYear]);
 
   // Handle month selection
   const handleMonthSelect = (month, year) => {
