@@ -448,27 +448,37 @@ const BillableReport = ({ userId }) => {
       }
     });
 
-    return Object.entries(groupedData).filter(([, { user }]) => {
-      if (!searchQuery) return true;
-      const userName = (user.user_name || "").toLowerCase();
-      return userName.includes(searchQuery.toLowerCase());
-    });
+    return Object.entries(groupedData)
+      .filter(([, { user }]) => {
+        if (!searchQuery) return true;
+        const userName = (user.user_name || "").toLowerCase();
+        return userName.includes(searchQuery.toLowerCase());
+      })
+      .sort(([, a], [, b]) =>
+        (a.user?.user_name || "").localeCompare(b.user?.user_name || "", undefined, {
+          sensitivity: "base",
+        })
+      );
   }, [filteredDailyData, userInfoMap, searchQuery]);
 
   const filteredMonthlyUsers = useMemo(() => {
-    return monthlySummaryData.filter((u) => {
-      if (searchQuery) {
-        const userName = (u.user_name || "").toLowerCase();
-        if (!userName.includes(searchQuery.toLowerCase())) return false;
-      }
-      if (canViewTeamFilter && selectedTeam && selectedTeam !== "all") {
-        const team = teams.find((t) => String(t.team_id) === String(selectedTeam));
-        if (team && String(u.team_name || "").toLowerCase() !== String(team.label || "").toLowerCase()) {
-          return false;
+    return monthlySummaryData
+      .filter((u) => {
+        if (searchQuery) {
+          const userName = (u.user_name || "").toLowerCase();
+          if (!userName.includes(searchQuery.toLowerCase())) return false;
         }
-      }
-      return true;
-    });
+        if (canViewTeamFilter && selectedTeam && selectedTeam !== "all") {
+          const team = teams.find((t) => String(t.team_id) === String(selectedTeam));
+          if (team && String(u.team_name || "").toLowerCase() !== String(team.label || "").toLowerCase()) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) =>
+        (a.user_name || "").localeCompare(b.user_name || "", undefined, { sensitivity: "base" })
+      );
   }, [monthlySummaryData, searchQuery, selectedTeam, teams, canViewTeamFilter]);
 
   const monthlyDisplayMonth = useMemo(() => {
