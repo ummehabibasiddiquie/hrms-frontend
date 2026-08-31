@@ -32,6 +32,20 @@ import { DateRangePicker } from '../common/CustomCalendar';
 import { exportToCSV } from '../../utils/csvExport';
 import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
 
+const formatLocalDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDefaultDateRange = () => {
+  const today = new Date();
+  return {
+    startDate: formatLocalDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+    endDate: formatLocalDate(today),
+  };
+};
 
 const ManagerQCReportsOverview = () => {
   const { user } = useAuth();
@@ -63,10 +77,11 @@ const ManagerQCReportsOverview = () => {
   const [error, setError] = useState(null);
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
   
-  // Filters
+  // Filters — default to current month (1st through today)
+  const defaultDateRange = getDefaultDateRange();
   const [searchTerm, setSearchTerm] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(defaultDateRange.startDate);
+  const [endDate, setEndDate] = useState(defaultDateRange.endDate);
 
   const qcPagination = useClientPagination(filteredRecords, {
     resetKeys: [searchTerm, startDate, endDate],
@@ -263,10 +278,10 @@ const ManagerQCReportsOverview = () => {
   };
 
   const handleReset = () => {
-    setFilteredRecords(qcRecords);
+    const range = getDefaultDateRange();
     setSearchTerm('');
-    setStartDate('');
-    setEndDate('');
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
     setSelectedRecord(null);
   };
 
