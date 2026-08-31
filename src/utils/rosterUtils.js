@@ -192,18 +192,21 @@ export function getDayDisplayInfo(day, options = null) {
   const isHalfWorking =
     effectiveDay.day_type === "Working" && effectiveDay.working_type === "Half";
 
+  const isNightShift = String(effectiveDay.shift || "").toUpperCase() === "NIGHT";
+
   // Half-day leave and Half Working feel the same: Half Working + hours
   if (isHalfLeave || isHalfWorking) {
-    cellClass = "bg-emerald-50 border-emerald-200";
+    cellClass = isNightShift
+      ? "bg-teal-100 border-teal-500"
+      : "bg-emerald-50 border-emerald-200";
     primaryLabel = "Half Working";
     badges.push("Half Day");
     if (isHalfLeave) {
-      const leaveName = effectiveDay.leave_type || "Leave";
-      badges.push(leaveName);
+      badges.push("Leave");
     }
   } else if (effectiveDay.day_type === "Leave") {
     cellClass = "bg-amber-50 border-amber-200";
-    primaryLabel = effectiveDay.leave_type || "Leave";
+    primaryLabel = "Leave";
     badges.push("Full Day");
   } else if (effectiveDay.is_holiday_on_week_off) {
     cellClass = "bg-slate-100 border-slate-300";
@@ -216,12 +219,28 @@ export function getDayDisplayInfo(day, options = null) {
     cellClass = "bg-purple-50 border-purple-200";
     primaryLabel = "Holiday";
   } else if (effectiveDay.day_type === "Working") {
-    cellClass = "bg-green-50 border-green-200";
+    cellClass = isNightShift
+      ? "bg-teal-100 border-teal-500"
+      : "bg-green-50 border-green-200";
     primaryLabel = "Working";
+    if (effectiveDay.shift) badges.push(isNightShift ? "Night" : "Day");
     badges.push("Full Day");
   }
 
-  if (effectiveDay.shift) badges.push(effectiveDay.shift === "NIGHT" ? "Night" : "Day");
+  // Shift badge for half working / other day types (Working already added above)
+  if (
+    effectiveDay.shift &&
+    effectiveDay.day_type !== "Working" &&
+    !(isHalfLeave || isHalfWorking)
+  ) {
+    badges.push(isNightShift ? "Night" : "Day");
+  }
+  if (isHalfLeave || isHalfWorking) {
+    if (effectiveDay.shift) {
+      // Keep Night/Day near the front so it stays visible with "Awaiting approval"
+      badges.splice(1, 0, isNightShift ? "Night" : "Day");
+    }
+  }
   // Show hours for half working, half leave, and full working days
   const hoursBadge = displayHoursForDay(
     effectiveDay,
@@ -247,13 +266,18 @@ export function getDayDisplayInfo(day, options = null) {
   }
 
   if (hasPending) {
-    cellClass = `${cellClass} ring-2 ring-dashed ${
-      pending?.submitted ? "ring-blue-400" : "ring-amber-400"
-    }`;
-    const pendingBadge = pending?.submitted ? "Awaiting approval" : "Draft change";
+    cellClass = `${cellClass} ring-2 ring-dashed ring-blue-400`;
+    const pendingBadge = "Awaiting approval";
     if (!badges.some((b) => b === pendingBadge)) {
       badges.unshift(pendingBadge);
     }
+  }
+
+  // Keep Night/Day visible when badges are truncated in the week grid
+  const shiftBadgeIdx = badges.findIndex((b) => b === "Night" || b === "Day");
+  if (shiftBadgeIdx > 1) {
+    const [shiftBadge] = badges.splice(shiftBadgeIdx, 1);
+    badges.splice(hasPending ? 1 : 0, 0, shiftBadge);
   }
 
   return {
@@ -373,6 +397,26 @@ export function getMonthCalendarLockMessage(monthYear, lockInfo) {
   return when
     ? `The ${monthYear} calendar has been locked by ${locker} on ${when}. No changes can be made until it is unlocked.`
     : `The ${monthYear} calendar has been locked by ${locker}. No changes can be made until it is unlocked.`;
+}
+
+export function getWeekLockMessage(lock) {
+  if (!lock) return null;
+  const wn = lock.week_number;
+  const locker = lock.locked_by_name || "Super Admin / Admin";
+  const when = lock.locked_date_display || formatLockedDate(lock.locked_date);
+  const range =
+    lock.week_start && lock.week_end
+      ? ` (${lock.week_start} – ${lock.week_end})`
+      : "";
+  return when
+    ? `Week ${wn}${range} is locked by ${locker} on ${when}. Managers cannot edit this week until an admin unlocks it.`
+    : `Week ${wn}${range} is locked by ${locker}. Managers cannot edit this week until an admin unlocks it.`;
+}
+
+export function isWeekNumberLocked(weekLocks, weekNumber) {
+  return (weekLocks || []).some(
+    (l) => Number(l.week_number) === Number(weekNumber)
+  );
 }
 
 export function isMonthCalendarLocked(rosterList, monthCalendarLockedFlag) {
@@ -558,14 +602,11 @@ function mergePendingDate(byDate, dateStr, preview, summary, { submitted = false
   const key = dateStr.slice(0, 10);
   const existing = byDate[key] || { preview: {}, summaries: [], submitted: false };
   const summaries = [...existing.summaries, summary];
-  const isSubmitted = submitted || existing.submitted;
-  const phaseLabel = isSubmitted
-    ? "Submitted — awaiting approval"
-    : "Draft — not submitted yet";
+  const phaseLabel = "Submitted — awaiting approval";
   byDate[key] = {
     preview: { ...existing.preview, ...preview },
     summaries,
-    submitted: isSubmitted,
+    submitted: true,
     tooltip: `${phaseLabel}: ${summaries.join(" • ")}`,
   };
 }
@@ -580,6 +621,7 @@ export function buildPendingCalendarOverlay(requests, rosterMonthId) {
   const relevant = (requests || []).filter(
     (r) =>
       r.status === "Pending" &&
+      Boolean(r.batch_id) &&
       (!rosterMonthId || String(r.roster_month_id) === String(rosterMonthId))
   );
 
@@ -619,7 +661,7 @@ export function buildPendingCalendarOverlay(requests, rosterMonthId) {
             leave_is_half_day: half,
             is_half_day: half,
             display_as_half_working: half,
-            _pendingLeaveType: p.leave_type || "Leave",
+            _pendingLeaveType: "Leave",
           }, summary, overlayOpts);
         });
         break;

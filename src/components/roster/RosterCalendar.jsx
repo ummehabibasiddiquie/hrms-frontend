@@ -33,11 +33,7 @@ const RosterCalendar = ({
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       {hasPendingChanges && (
-        <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800 flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="inline-flex items-center gap-2">
-            <span className="inline-block w-3 h-3 rounded-sm border-2 border-dashed border-amber-400 bg-amber-50 shrink-0" />
-            Amber = draft change (not submitted yet)
-          </span>
+        <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 text-xs text-blue-800 flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="inline-flex items-center gap-2">
             <span className="inline-block w-3 h-3 rounded-sm border-2 border-dashed border-blue-400 bg-blue-50 shrink-0" />
             Blue = submitted, awaiting approval

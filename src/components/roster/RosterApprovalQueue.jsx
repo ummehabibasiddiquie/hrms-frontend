@@ -67,8 +67,17 @@ function formatSubmittedDate(value) {
   return formatISTDateTimeLong(value, value);
 }
 
-const RosterApprovalQueue = ({ defaultMonthYear, onActionComplete }) => {
-  const [monthYear, setMonthYear] = useState(defaultMonthYear || getCurrentMonthYear());
+const RosterApprovalQueue = ({
+  monthYear: controlledMonthYear,
+  onMonthYearChange,
+  defaultMonthYear,
+  onActionComplete,
+}) => {
+  const [internalMonthYear, setInternalMonthYear] = useState(
+    controlledMonthYear || defaultMonthYear || getCurrentMonthYear()
+  );
+  const monthYear = controlledMonthYear ?? internalMonthYear;
+  const setMonthYear = onMonthYearChange || setInternalMonthYear;
   const [statusFilter, setStatusFilter] = useState("Pending");
   const [search, setSearch] = useState("");
   const [requests, setRequests] = useState([]);

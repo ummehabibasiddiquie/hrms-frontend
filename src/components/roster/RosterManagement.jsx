@@ -2,9 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   RefreshCw,
-  Send,
-  Undo2,
-  Lock,
   Unlock,
   UserPlus,
   RotateCcw,
@@ -20,12 +17,9 @@ import {
   listChangeRequests,
   listRosterEmployees,
   listRosters,
-  lockRosterMonth,
   resetRegenerateRoster,
   resetRegenerateEmployeeRoster,
-  submitRosterBatch,
-  unlockRosterMonth,
-  withdrawRosterSubmission,
+  unlockRosterWeek,
 } from "../../services/rosterService";
 import { useRosterRoles } from "../../hooks/useRosterRoles";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
@@ -36,19 +30,12 @@ import {
   formatMonthYearLabel,
   getCurrentMonthYear,
   getNextMonthYear,
-  isRosterEditable,
-  isRosterLocked,
-  isRosterLockable,
-  canLockRosterMonthByDate,
-  getRosterLockDateHint,
-  isMonthCalendarLocked,
   getMonthCalendarLockMessage,
-  getRosterLockMessage,
+  getWeekLockMessage,
 } from "../../utils/rosterUtils";
 import LoadingSpinner from "../common/LoadingSpinner";
 import { MonthYearPicker } from "../common/CustomCalendar";
 import RosterTeamWeekGrid from "./RosterTeamWeekGrid";
-import RosterDayEditor from "./RosterDayEditor";
 import RosterApprovalQueue from "./RosterApprovalQueue";
 import RosterSubmissionTracker from "./RosterSubmissionTracker";
 import HolidayMaster from "./HolidayMaster";
@@ -114,14 +101,14 @@ const RosterManagement = () => {
   const [rosters, setRosters] = useState([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
-  const [canGenerate, setCanGenerate] = useState(false);
+  const [canGenerateNextMonth, setCanGenerateNextMonth] = useState(false);
+  const [nextMonthTarget, setNextMonthTarget] = useState(getNextMonthYear());
+  const [nextMonthNeedsGenerate, setNextMonthNeedsGenerate] = useState(false);
   const [monthCalendarLocked, setMonthCalendarLocked] = useState(false);
   const [monthLockInfo, setMonthLockInfo] = useState(null);
+  const [weekLocks, setWeekLocks] = useState([]);
   const [monthStatusRosters, setMonthStatusRosters] = useState([]);
   const [monthPendingAll, setMonthPendingAll] = useState([]);
-  const [canWithdrawOwnSubmission, setCanWithdrawOwnSubmission] = useState(false);
-  const [editorDay, setEditorDay] = useState(null);
-  const [editorRoster, setEditorRoster] = useState(null);
   const [teamWeekRosters, setTeamWeekRosters] = useState([]);
   const [teamWeekLoading, setTeamWeekLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
@@ -155,11 +142,6 @@ const RosterManagement = () => {
     setSelectedUserId(actionUserId);
   }, [actionUserId]);
 
-  const monthSubmitPendingCount = useMemo(
-    () => monthPendingAll.filter((r) => (r.status || "") === "Pending" && !r.batch_id).length,
-    [monthPendingAll]
-  );
-
   const monthTotalPendingCount = useMemo(
     () => monthPendingAll.filter((r) => (r.status || "") === "Pending").length,
     [monthPendingAll]
@@ -181,22 +163,9 @@ const RosterManagement = () => {
     [pendingRequests]
   );
 
-  const applyPendingRows = useCallback(
-    (rows) => {
-      const list = Array.isArray(rows) ? rows : [];
-      const loggedInUserId = String(user?.user_id ?? "");
-      setMonthPendingAll(list);
-      setCanWithdrawOwnSubmission(
-        list.some(
-          (r) =>
-            (r.status || "") === "Pending" &&
-            r.batch_id &&
-            String(r.submitted_by) === loggedInUserId
-        )
-      );
-    },
-    [user?.user_id]
-  );
+  const applyPendingRows = useCallback((rows) => {
+    setMonthPendingAll(Array.isArray(rows) ? rows : []);
+  }, []);
 
   const loadMonthSummary = useCallback(async () => {
     if (!(isAdmin || isSuperAdmin)) {
@@ -212,9 +181,11 @@ const RosterManagement = () => {
       setMonthStatusRosters(list);
       setMonthCalendarLocked(Boolean(res.data?.month_calendar_locked));
       setMonthLockInfo(res.data?.month_lock_info || null);
+      setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
       return {
         monthCalendarLocked: Boolean(res.data?.month_calendar_locked),
         monthLockInfo: res.data?.month_lock_info || null,
+        weekLocks: Array.isArray(res.data?.week_locks) ? res.data.week_locks : [],
       };
     } catch {
       setMonthStatusRosters([]);
@@ -252,12 +223,14 @@ const RosterManagement = () => {
         setRosters(list);
         setMonthCalendarLocked(Boolean(res.data?.month_calendar_locked));
         setMonthLockInfo(res.data?.month_lock_info || null);
+        setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
         return list;
       } catch (err) {
         toast.error(getFriendlyErrorMessage(err));
         setRosters([]);
         setMonthCalendarLocked(false);
         setMonthLockInfo(null);
+        setWeekLocks([]);
         return null;
       } finally {
         if (!silent) setLoading(false);
@@ -279,12 +252,14 @@ const RosterManagement = () => {
         setTeamWeekRosters(list);
         setMonthCalendarLocked(Boolean(res.data?.month_calendar_locked));
         setMonthLockInfo(res.data?.month_lock_info || null);
+        setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
         return list;
       } catch (err) {
         toast.error(getFriendlyErrorMessage(err));
         setTeamWeekRosters([]);
         setMonthCalendarLocked(false);
         setMonthLockInfo(null);
+        setWeekLocks([]);
         return null;
       } finally {
         if (!silent) setTeamWeekLoading(false);
@@ -327,10 +302,39 @@ const RosterManagement = () => {
         .then((res) => setTeams(res.data?.data || []))
         .catch(() => setTeams([]));
     }
-    canGenerateRoster({})
-      .then((res) => setCanGenerate(Boolean(res.data?.can_generate)))
-      .catch(() => setCanGenerate(false));
   }, [user?.user_id, isAssistantManager]);
+
+  const refreshNextMonthGenerateState = useCallback(async () => {
+    try {
+      const gen = await canGenerateRoster({});
+      const allowed = Boolean(gen.data?.can_generate);
+      const target = gen.data?.target_month_year || getNextMonthYear();
+      setCanGenerateNextMonth(allowed);
+      setNextMonthTarget(target);
+
+      if (!allowed) {
+        setNextMonthNeedsGenerate(false);
+        return;
+      }
+
+      const [empRes, rosterRes] = await Promise.all([
+        listRosterEmployees({ month_year: target }),
+        listRosters({ month_year: target, include_days: false }),
+      ]);
+      const empList = empRes.data?.employees || [];
+      const rosterList = rosterRes.data?.rosters || [];
+      const rosterUserIds = new Set(rosterList.map((r) => String(r.user_id)));
+      const hasMissing = empList.some((e) => !rosterUserIds.has(String(e.user_id)));
+      setNextMonthNeedsGenerate(hasMissing);
+    } catch {
+      setCanGenerateNextMonth(false);
+      setNextMonthNeedsGenerate(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshNextMonthGenerateState();
+  }, [refreshNextMonthGenerateState]);
 
   // Employees when month/team changes
   useEffect(() => {
@@ -401,10 +405,14 @@ const RosterManagement = () => {
           setMonthStatusRosters(summaryRes.data?.rosters || []);
           setMonthCalendarLocked(Boolean(summaryRes.data?.month_calendar_locked));
           setMonthLockInfo(summaryRes.data?.month_lock_info || null);
+          setWeekLocks(
+            Array.isArray(summaryRes.data?.week_locks) ? summaryRes.data.week_locks : []
+          );
         } else {
           setMonthStatusRosters([]);
           setMonthCalendarLocked(false);
           setMonthLockInfo(null);
+          setWeekLocks([]);
         }
       } catch {
         if (!cancelled) {
@@ -412,6 +420,7 @@ const RosterManagement = () => {
           setMonthStatusRosters([]);
           setMonthCalendarLocked(false);
           setMonthLockInfo(null);
+          setWeekLocks([]);
         }
       }
     })();
@@ -439,12 +448,14 @@ const RosterManagement = () => {
         setRosters(res.data?.rosters || []);
         setMonthCalendarLocked(Boolean(res.data?.month_calendar_locked));
         setMonthLockInfo(res.data?.month_lock_info || null);
+        setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
       } catch (err) {
         if (!cancelled) {
           toast.error(getFriendlyErrorMessage(err));
           setRosters([]);
           setMonthCalendarLocked(false);
           setMonthLockInfo(null);
+          setWeekLocks([]);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -470,12 +481,14 @@ const RosterManagement = () => {
         setTeamWeekRosters(res.data?.rosters || []);
         setMonthCalendarLocked(Boolean(res.data?.month_calendar_locked));
         setMonthLockInfo(res.data?.month_lock_info || null);
+        setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
       } catch (err) {
         if (!cancelled) {
           toast.error(getFriendlyErrorMessage(err));
           setTeamWeekRosters([]);
           setMonthCalendarLocked(false);
           setMonthLockInfo(null);
+          setWeekLocks([]);
         }
       } finally {
         if (!cancelled) setTeamWeekLoading(false);
@@ -500,26 +513,9 @@ const RosterManagement = () => {
     return () => window.removeEventListener("focus", onFocus);
   }, [refreshRosterViews]);
 
-  const readOnly = selectedRoster?.access_mode === "read_only" || !isRosterEditable(selectedRoster, false);
-  const status = selectedRoster?.status || "";
-  const rosterLocked = isRosterLocked(selectedRoster) || monthCalendarLocked;
-  const calendarFrozen = monthCalendarLocked || isRosterLocked(selectedRoster);
-  const lockDateAllowed = canLockRosterMonthByDate(monthYear);
-  const lockDateHint = getRosterLockDateHint(monthYear);
-  const monthLockableCount = useMemo(
-    () =>
-      lockDateAllowed
-        ? monthStatusRosters.filter((r) => isRosterLockable(r)).length
-        : 0,
-    [monthStatusRosters, lockDateAllowed]
-  );
-  const hasMonthPendingRequests = monthTotalPendingCount > 0;
-  const canLockMonth =
-    lockDateAllowed && !hasMonthPendingRequests && monthLockableCount > 0;
+  const canManageWeekLocks = isAdmin || isSuperAdmin;
   const showTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
-  const canLockUnlock = isAdmin || isSuperAdmin;
   const isBusy = !!actionLoading;
-  const hasSubmitPending = monthSubmitPendingCount > 0;
 
   const runAction = async (key, fn) => {
     // Close confirm dialog immediately so it doesn't stick during long API/refresh work
@@ -536,8 +532,7 @@ const RosterManagement = () => {
     setActionLoading("");
     try {
       await refreshRosterViews({ silent: true });
-      const gen = await canGenerateRoster({});
-      setCanGenerate(Boolean(gen.data?.can_generate));
+      await refreshNextMonthGenerateState();
     } catch {
       toast.error(
         `Action completed, but refresh timed out. Reload the page if data looks stale.`
@@ -545,34 +540,37 @@ const RosterManagement = () => {
     }
   };
 
-  const handleGenerateNextMonth = () => {
-    const nextMonth = getNextMonthYear();
-    setConfirmAction({
-      title: "Generate Next Month Roster",
-      message: `Generate rosters for ${formatMonthYearLabel(nextMonth)}? Only employees without existing rosters will be created. Available during the last week of the current month only.`,
-      onConfirm: () =>
-        runAction("generate", async () => {
-          const res = await generateRoster({});
-          toast.success(
-            `${res.message || "Generation completed"} (${res.data?.month_year || nextMonth})`
-          );
-          setMonthYear(res.data?.month_year || nextMonth);
-        }),
-    });
-  };
-
   const handleGenerateSelectedMonth = () => {
     setConfirmAction({
       title: "Generate Missing Rosters",
-      message: `Create rosters for ${formatMonthYearLabel(monthYear)} for all eligible employees who do not have one yet? Existing rosters will not be changed.`,
+      message: `Create rosters for ${formatMonthYearLabel(monthYear)} only for eligible employees who do not have a roster yet? Existing rosters will not be changed.`,
       onConfirm: () =>
         runAction("generate-month", async () => {
           const res = await generateRoster({ month_year: monthYear });
           const created = res.data?.created_count ?? 0;
           const skipped = res.data?.skipped_count ?? 0;
           toast.success(
-            `${res.message || "Done"} — ${created} created, ${skipped} skipped (${monthYear})`
+            `${res.message || "Done"} — ${created} created, ${skipped} already had a roster (${monthYear})`
           );
+        }),
+    });
+  };
+
+  const handleGenerateNextMonth = () => {
+    const nextMonth = nextMonthTarget || getNextMonthYear();
+    setConfirmAction({
+      title: "Generate Next Month Rosters",
+      message: `Create rosters for ${formatMonthYearLabel(nextMonth)} only for eligible employees who do not have a roster yet? Available at the end of the current month.`,
+      onConfirm: () =>
+        runAction("generate-next", async () => {
+          const res = await generateRoster({});
+          const created = res.data?.created_count ?? 0;
+          const skipped = res.data?.skipped_count ?? 0;
+          const resolvedMonth = res.data?.month_year || nextMonth;
+          toast.success(
+            `${res.message || "Done"} — ${created} created, ${skipped} already had a roster (${resolvedMonth})`
+          );
+          setMonthYear(resolvedMonth);
         }),
     });
   };
@@ -638,82 +636,20 @@ const RosterManagement = () => {
     });
   };
 
-  const handleSubmit = () => {
+  const handleUnlockWeek = (lock) => {
+    const wn = lock.week_number;
     setConfirmAction({
-      title: "Submit for Approval",
-      message: `Submit all roster change requests for ${formatMonthYearLabel(monthYear)}?`,
+      title: `Unlock Week ${wn}`,
+      message: `Unlock Week ${wn} for ${formatMonthYearLabel(monthYear)}? Managers and assistant managers will be able to edit that week again. Other locked weeks stay locked.`,
       onConfirm: () =>
-        runAction("submit", async () => {
-          const res = await submitRosterBatch({ month_year: monthYear });
-          toast.success(res.message || "Submitted for approval");
+        runAction(`unlock-week-${wn}`, async () => {
+          const res = await unlockRosterWeek({
+            month_year: monthYear,
+            week_number: wn,
+          });
+          toast.success(res.message || `Week ${wn} unlocked`);
         }),
     });
-  };
-
-  const handleWithdraw = () => {
-    setConfirmAction({
-      title: "Withdraw Submission",
-      message: "Withdraw submission and return rosters to Draft? Pending requests will be cancelled.",
-      onConfirm: () =>
-        runAction("withdraw", async () => {
-          const res = await withdrawRosterSubmission({ month_year: monthYear });
-          toast.success(res.message || "Submission withdrawn");
-        }),
-    });
-  };
-
-  const handleLock = () => {
-    if (hasMonthPendingRequests) {
-      toast.error(
-        `Cannot lock: ${monthTotalPendingCount} pending request(s) must be approved, rejected, or withdrawn first.`
-      );
-      return;
-    }
-    setConfirmAction({
-      title: "Lock Calendar",
-      message: `Lock all agent calendars for ${formatMonthYearLabel(monthYear)}? No one will be able to edit leave, week-off, or other roster changes until unlock.`,
-      onConfirm: () =>
-        runAction("lock", async () => {
-          const res = await lockRosterMonth({ month_year: monthYear });
-          toast.success(res.message || "Calendar locked");
-        }),
-    });
-  };
-
-  const handleUnlock = () => {
-    setConfirmAction({
-      title: "Unlock Calendar",
-      message: `Unlock all locked agent calendars for ${formatMonthYearLabel(monthYear)}? Editing will be allowed again.`,
-      onConfirm: () =>
-        runAction("unlock", async () => {
-          const res = await unlockRosterMonth({ month_year: monthYear });
-          toast.success(res.message || "Calendar unlocked");
-        }),
-    });
-  };
-
-  const handleTeamCellClick = ({ roster, day }) => {
-    if (!roster) return;
-    if (monthCalendarLocked || isRosterLocked(roster)) {
-      toast.error(
-        monthCalendarLocked
-          ? getMonthCalendarLockMessage(monthYear, monthLockInfo)
-          : getRosterLockMessage(roster)
-      );
-      return;
-    }
-    if ((roster.status || "") === "Pending Approval") {
-      toast.error("This roster is pending approval and cannot be edited.");
-      return;
-    }
-    const rosterReadOnly =
-      roster.access_mode === "read_only" || !isRosterEditable(roster, false);
-    if (!isRosterEditable(roster, rosterReadOnly)) {
-      toast.error("This roster cannot be edited right now.");
-      return;
-    }
-    setEditorRoster(roster);
-    setEditorDay(day);
   };
 
   const tabs = [
@@ -755,7 +691,8 @@ const RosterManagement = () => {
           <div className="p-4">
             <RosterSubmissionTracker
               variant="manager"
-              defaultMonthYear={monthYear}
+              monthYear={monthYear}
+              onMonthYearChange={setMonthYear}
             />
           </div>
         )}
@@ -763,7 +700,8 @@ const RosterManagement = () => {
         {view === "approval" && canApproveRoster && (
           <div className="p-4">
             <RosterApprovalQueue
-              defaultMonthYear={monthYear}
+              monthYear={monthYear}
+              onMonthYearChange={setMonthYear}
               onActionComplete={() => {
                 refreshRosterViews({ silent: true });
               }}
@@ -851,9 +789,9 @@ const RosterManagement = () => {
                       loading={actionLoading === "generate-month"}
                       disabled={isBusy}
                       onClick={handleGenerateSelectedMonth}
-                      title={`Generate missing rosters for ${monthYear}`}
+                      title={`Create rosters for ${formatMonthYearLabel(monthYear)} only for employees who do not have one yet`}
                     >
-                      Missing ({monthYear})
+                      Generate Missing Rosters
                     </ActionBtn>
                     <ActionBtn
                       icon={UserPlus}
@@ -862,20 +800,26 @@ const RosterManagement = () => {
                       onClick={handleGenerateEmployee}
                       title={
                         actionUserId
-                          ? "Generate roster for the employee matching search"
+                          ? `Generate roster for the selected employee for ${formatMonthYearLabel(monthYear)}`
                           : "Search until one employee remains"
                       }
                     >
                       Single Employee
                     </ActionBtn>
-                    <ActionBtn
-                      loading={actionLoading === "generate"}
-                      disabled={!canGenerate || isBusy}
-                      onClick={handleGenerateNextMonth}
-                      title={canGenerate ? `Generate ${getNextMonthYear()}` : "Available in last week of month"}
-                    >
-                      Next Month ({getNextMonthYear()})
-                    </ActionBtn>
+                    {canGenerateNextMonth && (
+                      <ActionBtn
+                        loading={actionLoading === "generate-next"}
+                        disabled={isBusy || !nextMonthNeedsGenerate}
+                        onClick={handleGenerateNextMonth}
+                        title={
+                          nextMonthNeedsGenerate
+                            ? `Creates rosters for ${formatMonthYearLabel(nextMonthTarget)} for employees who don't have one yet`
+                            : `All eligible employees already have a roster for ${formatMonthYearLabel(nextMonthTarget)}`
+                        }
+                      >
+                        Generate Next Month Rosters
+                      </ActionBtn>
+                    )}
                   </ActionGroup>
 
                   <ActionGroup title="Workflow">
@@ -883,73 +827,37 @@ const RosterManagement = () => {
                       monthYear={monthYear}
                       teamId={selectedTeam}
                       disabled={isBusy || monthCalendarLocked}
+                      weekLocks={weekLocks}
                       onApplied={() => refreshRosterViews({ silent: true })}
                     />
-                    <ActionBtn
-                      icon={Send}
-                      loading={actionLoading === "submit"}
-                      disabled={isBusy || !hasSubmitPending || monthCalendarLocked}
-                      onClick={handleSubmit}
-                      title={
-                        hasSubmitPending
-                          ? `Submit ${monthSubmitPendingCount} pending change(s) for ${formatMonthYearLabel(monthYear)}`
-                          : "Make roster edits first — nothing pending to submit"
-                      }
-                    >
-                      Submit{hasSubmitPending ? ` (${monthSubmitPendingCount})` : ""}
-                    </ActionBtn>
-                    {canWithdrawOwnSubmission && (
-                      <ActionBtn
-                        icon={Undo2}
-                        loading={actionLoading === "withdraw"}
-                        disabled={isBusy}
-                        onClick={handleWithdraw}
-                        title="Withdraw your submitted roster changes back to Draft"
-                      >
-                        Withdraw
-                      </ActionBtn>
-                    )}
                   </ActionGroup>
 
-                  {canLockUnlock && (
+                  {canManageWeekLocks && (
                     <ActionGroup title="Admin">
-                      {lockDateAllowed && hasMonthPendingRequests && (
-                        <p className="w-full text-[11px] text-red-800 bg-red-50 border border-red-200 rounded-lg px-2.5 py-2 mb-1">
-                          Cannot lock: {monthTotalPendingCount} pending request
-                          {monthTotalPendingCount !== 1 ? "s" : ""} must be approved, rejected, or
-                          withdrawn first.
+                      {weekLocks.length === 0 ? (
+                        <p className="w-full text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 mb-1">
+                          Weeks lock automatically when you approve submitted roster
+                          changes. Unlock a week here to allow edits again.
+                        </p>
+                      ) : (
+                        <p className="w-full text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-1">
+                          {weekLocks.length} locked week
+                          {weekLocks.length !== 1 ? "s" : ""} — other weeks stay
+                          editable.
                         </p>
                       )}
-                      <ActionBtn
-                        icon={Lock}
-                        loading={actionLoading === "lock"}
-                        disabled={isBusy || !canLockMonth}
-                        onClick={handleLock}
-                        title={
-                          !lockDateAllowed
-                            ? lockDateHint
-                            : hasMonthPendingRequests
-                              ? `${monthTotalPendingCount} pending request(s) — resolve before locking`
-                              : monthLockableCount > 0
-                                ? `Lock all agent calendars for ${monthYear}`
-                                : "All rosters are already locked or pending approval"
-                        }
-                      >
-                        Lock ({monthYear})
-                      </ActionBtn>
-                      <ActionBtn
-                        icon={Unlock}
-                        loading={actionLoading === "unlock"}
-                        disabled={isBusy || !monthCalendarLocked}
-                        onClick={handleUnlock}
-                        title={
-                          monthCalendarLocked
-                            ? `Unlock all locked calendars for ${monthYear}`
-                            : "No locked rosters for this month"
-                        }
-                      >
-                        Unlock ({monthYear})
-                      </ActionBtn>
+                      {weekLocks.map((lock) => (
+                        <ActionBtn
+                          key={lock.week_number}
+                          icon={Unlock}
+                          loading={actionLoading === `unlock-week-${lock.week_number}`}
+                          disabled={isBusy}
+                          onClick={() => handleUnlockWeek(lock)}
+                          title={getWeekLockMessage(lock) || `Unlock Week ${lock.week_number}`}
+                        >
+                          Unlock Week {lock.week_number}
+                        </ActionBtn>
+                      ))}
                       {canResetRegenerate && (
                         <>
                           <ActionBtn
@@ -995,10 +903,22 @@ const RosterManagement = () => {
               message={getMonthCalendarLockMessage(monthYear, monthLockInfo)}
             />
           )}
+          {weekLocks.length > 0 && !monthCalendarLocked && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
+              <p className="text-xs font-semibold text-amber-900">
+                Locked weeks (approved — edits blocked until admin unlock)
+              </p>
+              {weekLocks.map((lock) => (
+                <p key={lock.week_number} className="text-xs text-amber-800">
+                  {getWeekLockMessage(lock)}
+                </p>
+              ))}
+            </div>
+          )}
           {monthTotalPendingCount > 0 && !monthCalendarLocked && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              {monthTotalPendingCount} change(s) pending — working days update after approval. Click a
-              cell to edit; use Submit when ready.
+              {monthTotalPendingCount} change(s) pending approval — working days update after approval.
+              Use Excel Upload to apply and submit more changes.
             </p>
           )}
           {teamWeekLoading ? (
@@ -1010,32 +930,12 @@ const RosterManagement = () => {
               employees={filteredEmployees}
               pendingRequests={monthPendingAll}
               monthCalendarLocked={monthCalendarLocked}
-              readOnly={false}
-              onCellClick={handleTeamCellClick}
+              weekLocks={weekLocks}
+              readOnly
             />
           )}
         </div>
       )}
-
-      <RosterDayEditor
-        isOpen={!!editorDay}
-        day={editorDay}
-        roster={editorRoster || selectedRoster}
-        readOnly={
-          (editorRoster || selectedRoster)?.access_mode === "read_only" ||
-          !isRosterEditable(editorRoster || selectedRoster, false) ||
-          monthCalendarLocked ||
-          isRosterLocked(editorRoster || selectedRoster) ||
-          ((editorRoster || selectedRoster)?.status || "") === "Pending Approval"
-        }
-        onClose={() => {
-          setEditorDay(null);
-          setEditorRoster(null);
-        }}
-        onSaved={() => {
-          refreshRosterViews({ silent: true });
-        }}
-      />
 
       {confirmAction && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">

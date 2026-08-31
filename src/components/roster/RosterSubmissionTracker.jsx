@@ -8,12 +8,11 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  Undo2,
   X,
   UserCheck,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { listChangeRequests, withdrawDraftChangeRequest } from "../../services/rosterService";
+import { listChangeRequests } from "../../services/rosterService";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
 import {
   statusBadgeClass,
@@ -30,7 +29,6 @@ import { formatISTDateTime } from "../../utils/dateTimeIST";
 const PAGE_SIZE = 8;
 
 const STATUS_TABS = [
-  { id: "Draft", label: "Draft" },
   { id: "Pending", label: "Pending" },
   { id: "Approved", label: "Approved" },
   { id: "Rejected", label: "Rejected" },
@@ -70,35 +68,41 @@ function getReviewNote(request) {
   );
 }
 
-function isDraftRequest(r) {
+/** Unsubmitted Excel/UI drafts — hidden now that Excel auto-submits. */
+function isUnsubmittedDraft(r) {
   return r.status === "Pending" && !r.batch_id;
 }
 
 /**
  * Tracker for managers (own submissions) and agents (changes on their roster).
- * Styled to match Roster Approval Queue / other roster pages.
  * variant: "manager" | "employee"
  */
 const RosterSubmissionTracker = ({
   variant = "manager",
+  monthYear: controlledMonthYear,
+  onMonthYearChange,
   defaultMonthYear,
   title,
   subtitle,
 }) => {
-  const [monthYear, setMonthYear] = useState(defaultMonthYear || getCurrentMonthYear());
-  const [statusFilter, setStatusFilter] = useState(variant === "manager" ? "Draft" : "Pending");
+  const [internalMonthYear, setInternalMonthYear] = useState(
+    controlledMonthYear || defaultMonthYear || getCurrentMonthYear()
+  );
+  const monthYear = controlledMonthYear ?? internalMonthYear;
+  const setMonthYear = onMonthYearChange || setInternalMonthYear;
+  const [statusFilter, setStatusFilter] = useState("Pending");
   const [search, setSearch] = useState("");
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [detailRequest, setDetailRequest] = useState(null);
-  const [withdrawingId, setWithdrawingId] = useState(null);
 
   const loadRequests = useCallback(async () => {
     try {
       setLoading(true);
       const res = await listChangeRequests({ month_year: monthYear });
-      setRequests(Array.isArray(res.data) ? res.data : []);
+      const rows = Array.isArray(res.data) ? res.data : [];
+      setRequests(rows.filter((r) => !isUnsubmittedDraft(r)));
       setPage(1);
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
@@ -117,11 +121,10 @@ const RosterSubmissionTracker = ({
   }, [statusFilter, search]);
 
   const counts = useMemo(() => {
-    const c = { draft: 0, pending: 0, approved: 0, rejected: 0, total: requests.length };
+    const c = { pending: 0, approved: 0, rejected: 0, total: requests.length };
     requests.forEach((r) => {
       const s = (r.status || "").toLowerCase();
-      if (isDraftRequest(r)) c.draft += 1;
-      else if (s === "pending") c.pending += 1;
+      if (s === "pending") c.pending += 1;
       else if (s === "approved") c.approved += 1;
       else if (s === "rejected") c.rejected += 1;
     });
@@ -130,10 +133,6 @@ const RosterSubmissionTracker = ({
 
   const statusFiltered = useMemo(() => {
     if (!statusFilter) return requests;
-    if (statusFilter === "Draft") return requests.filter((r) => isDraftRequest(r));
-    if (statusFilter === "Pending") {
-      return requests.filter((r) => r.status === "Pending" && !!r.batch_id);
-    }
     return requests.filter((r) => (r.status || "") === statusFilter);
   }, [requests, statusFilter]);
 
@@ -160,48 +159,20 @@ const RosterSubmissionTracker = ({
     ? getChangeRequestDetailLines(detailRequest.change_type, detailRequest.change_payload)
     : [];
 
-  const handleWithdrawDraft = (req) => {
-    if (!window.confirm("Withdraw this draft request? It will be removed before submit.")) {
-      return;
-    }
-    setWithdrawingId(req.request_id);
-    withdrawDraftChangeRequest({ request_id: req.request_id })
-      .then((res) => {
-        toast.success(res.message || "Draft withdrawn");
-        loadRequests();
-      })
-      .catch((err) => toast.error(getFriendlyErrorMessage(err)))
-      .finally(() => setWithdrawingId(null));
-  };
-
   const heading =
     title || (variant === "employee" ? "Roster Change Requests" : "My Submissions");
   const desc =
     subtitle ||
     (variant === "employee"
       ? "Changes requested by your manager — track approval status and reviewer notes"
-      : "Track roster changes you created or submitted for approval");
+      : "Track roster changes you submitted for approval");
 
-  const statusTabs =
-    variant === "manager"
-      ? STATUS_TABS
-      : STATUS_TABS.filter((t) => t.id !== "Draft");
-
-  const summaryStats =
-    variant === "manager"
-      ? [
-          { label: "Total", value: counts.total, className: "bg-slate-50 text-slate-700 border-slate-100" },
-          { label: "Draft", value: counts.draft, className: "bg-slate-100 text-slate-700 border-slate-200" },
-          { label: "Pending", value: counts.pending, className: "bg-amber-50 text-amber-700 border-amber-100" },
-          { label: "Approved", value: counts.approved, className: "bg-green-50 text-green-700 border-green-100" },
-          { label: "Rejected", value: counts.rejected, className: "bg-red-50 text-red-700 border-red-100" },
-        ]
-      : [
-          { label: "Total", value: counts.total, className: "bg-slate-50 text-slate-700 border-slate-100" },
-          { label: "Pending", value: counts.pending, className: "bg-amber-50 text-amber-700 border-amber-100" },
-          { label: "Approved", value: counts.approved, className: "bg-green-50 text-green-700 border-green-100" },
-          { label: "Rejected", value: counts.rejected, className: "bg-red-50 text-red-700 border-red-100" },
-        ];
+  const summaryStats = [
+    { label: "Total", value: counts.total, className: "bg-slate-50 text-slate-700 border-slate-100" },
+    { label: "Pending", value: counts.pending, className: "bg-amber-50 text-amber-700 border-amber-100" },
+    { label: "Approved", value: counts.approved, className: "bg-green-50 text-green-700 border-green-100" },
+    { label: "Rejected", value: counts.rejected, className: "bg-red-50 text-red-700 border-red-100" },
+  ];
 
   return (
     <div className="space-y-4">
@@ -215,12 +186,7 @@ const RosterSubmissionTracker = ({
         </div>
       </div>
 
-      {/* Summary strip — same style as Approval Queue */}
-      <div
-        className={`grid grid-cols-2 gap-2 ${
-          variant === "manager" ? "sm:grid-cols-5" : "sm:grid-cols-4"
-        }`}
-      >
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {summaryStats.map((stat) => (
           <div
             key={stat.label}
@@ -232,7 +198,6 @@ const RosterSubmissionTracker = ({
         ))}
       </div>
 
-      {/* Filters */}
       <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-end gap-3">
           <MonthYearPicker
@@ -264,7 +229,7 @@ const RosterSubmissionTracker = ({
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          {statusTabs.map((tab) => (
+          {STATUS_TABS.map((tab) => (
             <button
               key={tab.id || "all"}
               type="button"
@@ -281,7 +246,6 @@ const RosterSubmissionTracker = ({
         </div>
       </div>
 
-      {/* List */}
       {loading ? (
         <LoadingSpinner />
       ) : paged.length === 0 ? (
@@ -295,11 +259,8 @@ const RosterSubmissionTracker = ({
           {paged.map((req) => {
             const summary = formatChangeRequestSummary(req.change_type, req.change_payload);
             const reviewNote = getReviewNote(req);
-            const draftPending = isDraftRequest(req);
-            const displayStatus = draftPending ? "Draft" : req.status;
             const typeStyle =
               CHANGE_TYPE_STYLES[req.change_type] || "bg-slate-50 text-slate-700 border-slate-100";
-            const canWithdrawDraft = variant === "manager" && draftPending;
             const primaryName =
               variant === "manager" ? req.user_name : req.submitted_by_name || "Manager";
 
@@ -322,9 +283,9 @@ const RosterSubmissionTracker = ({
                           {getChangeTypeLabel(req.change_type)}
                         </span>
                         <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${statusBadgeClass(displayStatus)}`}
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${statusBadgeClass(req.status)}`}
                         >
-                          {displayStatus}
+                          {req.status}
                         </span>
                       </div>
 
@@ -365,18 +326,6 @@ const RosterSubmissionTracker = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 lg:pt-1">
-                    {canWithdrawDraft && (
-                      <button
-                        type="button"
-                        disabled={withdrawingId === req.request_id}
-                        onClick={() => handleWithdrawDraft(req)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-                        title="Withdraw this draft before submitting for approval"
-                      >
-                        <Undo2 className="w-3.5 h-3.5" />
-                        {withdrawingId === req.request_id ? "Withdrawing..." : "Withdraw"}
-                      </button>
-                    )}
                     <button
                       type="button"
                       onClick={() => setDetailRequest(req)}
@@ -445,10 +394,10 @@ const RosterSubmissionTracker = ({
                 </span>
                 <span
                   className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${statusBadgeClass(
-                    isDraftRequest(detailRequest) ? "Draft" : detailRequest.status
+                    detailRequest.status
                   )}`}
                 >
-                  {isDraftRequest(detailRequest) ? "Draft" : detailRequest.status}
+                  {detailRequest.status}
                 </span>
               </div>
 
@@ -480,18 +429,6 @@ const RosterSubmissionTracker = ({
                   <p className="font-semibold text-slate-700 mb-1">Reviewer note</p>
                   <p className="text-slate-600">{getReviewNote(detailRequest)}</p>
                 </div>
-              )}
-
-              {variant === "manager" && isDraftRequest(detailRequest) && (
-                <button
-                  type="button"
-                  disabled={withdrawingId === detailRequest.request_id}
-                  onClick={() => handleWithdrawDraft(detailRequest)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-                >
-                  <Undo2 className="w-3.5 h-3.5" />
-                  Withdraw draft
-                </button>
               )}
             </div>
           </div>

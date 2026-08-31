@@ -6,6 +6,7 @@ import {
   downloadRosterExcelTemplate,
   listRosterExcelWeeks,
   previewRosterExcel,
+  submitRosterBatch,
 } from "../../services/rosterService";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
 import { formatMonthYearLabel } from "../../utils/rosterUtils";
@@ -26,6 +27,7 @@ const RosterExcelUpload = ({
   monthYear,
   teamId = "all",
   disabled = false,
+  weekLocks = [],
   onApplied,
 }) => {
   const [open, setOpen] = useState(false);
@@ -44,6 +46,19 @@ const RosterExcelUpload = ({
     () => weeks.find((w) => Number(w.week_number) === Number(weekNumber)) || null,
     [weeks, weekNumber]
   );
+
+  const lockedWeekNumbers = useMemo(() => {
+    const set = new Set();
+    (weekLocks || []).forEach((l) => {
+      if (l?.week_number != null) set.add(Number(l.week_number));
+    });
+    (weeks || []).forEach((w) => {
+      if (w?.is_locked) set.add(Number(w.week_number));
+    });
+    return set;
+  }, [weekLocks, weeks]);
+
+  const selectedWeekLocked = lockedWeekNumbers.has(Number(weekNumber));
 
   const abortPreview = useCallback(() => {
     if (previewAbortRef.current) {
@@ -151,6 +166,14 @@ const RosterExcelUpload = ({
     e.target.value = "";
     if (!file) return;
 
+    if (selectedWeekLocked) {
+      const label = selectedWeek?.short_label || `Week ${weekNumber}`;
+      toast.error(
+        `${label} is locked. You cannot edit this week until an administrator unlocks it.`
+      );
+      return;
+    }
+
     abortPreview();
     const controller = new AbortController();
     previewAbortRef.current = controller;
@@ -166,7 +189,24 @@ const RosterExcelUpload = ({
       if (controller.signal.aborted) return;
       setPreview(res.data || null);
       const s = res.data?.summary;
-      if (s?.errors) {
+      const lockedWeeks = res.data?.locked_weeks || [];
+      if (lockedWeeks.length > 0 && (s?.changes || 0) === 0) {
+        const names = lockedWeeks
+          .map((w) => w.short_label || `Week ${w.week_number}`)
+          .join(", ");
+        toast.error(
+          `${names} ${lockedWeeks.length === 1 ? "is" : "are"} locked. You cannot edit ${
+            lockedWeeks.length === 1 ? "this week" : "these weeks"
+          } until an administrator unlocks ${lockedWeeks.length === 1 ? "it" : "them"}.`
+        );
+      } else if (lockedWeeks.length > 0) {
+        const names = lockedWeeks
+          .map((w) => w.short_label || `Week ${w.week_number}`)
+          .join(", ");
+        toast.error(
+          `${names} ${lockedWeeks.length === 1 ? "is" : "are"} locked and cannot be edited. Other unlocked weeks in this file can still be applied.`
+        );
+      } else if (s?.errors) {
         toast.error(`${s.errors} error(s) found — fix before applying`);
       } else if (s?.changes === 0) {
         toast.success(
@@ -201,13 +241,29 @@ const RosterExcelUpload = ({
       const created = res.data?.created || 0;
       const updated = res.data?.updated || 0;
       const failed = res.data?.failed || [];
-      if (failed.length) {
-        toast.error(`Applied with ${failed.length} failure(s)`);
-      } else {
-        toast.success(
-          `Created ${created} pending request(s)${updated ? `, updated ${updated}` : ""}. Submit for approval when ready.`
+      if (failed.length && created + updated === 0) {
+        toast.error(`Apply failed — ${failed.length} error(s)`);
+        return;
+      }
+
+      try {
+        const submitRes = await submitRosterBatch({ month_year: monthYear });
+        if (failed.length) {
+          toast.error(
+            `Submitted with ${failed.length} row failure(s). ${submitRes.message || "Sent for approval."}`
+          );
+        } else {
+          toast.success(
+            submitRes.message ||
+              `Applied and submitted ${created + updated} change(s) for approval`
+          );
+        }
+      } catch (submitErr) {
+        toast.error(
+          `Changes were applied, but submit failed: ${getFriendlyErrorMessage(submitErr)}`
         );
       }
+
       closeModal();
       onApplied?.();
     } catch (err) {
@@ -265,6 +321,7 @@ const RosterExcelUpload = ({
                   <div className="flex flex-wrap gap-2">
                     {weeks.map((w) => {
                       const active = Number(w.week_number) === Number(weekNumber);
+                      const locked = lockedWeekNumbers.has(Number(w.week_number));
                       return (
                         <button
                           key={w.week_start}
@@ -273,19 +330,48 @@ const RosterExcelUpload = ({
                           disabled={previewing || applying}
                           className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-colors text-left min-w-[7.5rem] disabled:opacity-50 ${
                             active
-                              ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                              : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50"
+                              ? locked
+                                ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                                : "bg-blue-600 text-white border-blue-600 shadow-sm"
+                              : locked
+                                ? "bg-amber-50 text-amber-800 border-amber-300"
+                                : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50"
                           }`}
-                          title={w.date_range}
+                          title={
+                            locked
+                              ? `${w.date_range} — locked (cannot upload until admin unlocks)`
+                              : w.date_range
+                          }
                         >
-                          <span className="block">{w.short_label}</span>
-                          <span className={`block mt-0.5 font-normal ${active ? "text-blue-100" : "text-slate-400"}`}>
+                          <span className="block">
+                            {w.short_label}
+                            {locked ? " · Locked" : ""}
+                          </span>
+                          <span
+                            className={`block mt-0.5 font-normal ${
+                              active
+                                ? locked
+                                  ? "text-amber-100"
+                                  : "text-blue-100"
+                                : locked
+                                  ? "text-amber-600/80"
+                                  : "text-slate-400"
+                            }`}
+                          >
                             {w.date_range}
                           </span>
                         </button>
                       );
                     })}
                   </div>
+                )}
+
+                {selectedWeekLocked && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    {selectedWeek?.short_label || `Week ${weekNumber}`} is locked after
+                    admin approval. Download is still available; uploads for this week
+                    are blocked until an administrator unlocks it.
+                  </p>
                 )}
 
                 <div className="flex flex-col sm:flex-row gap-2 pt-1">
@@ -324,7 +410,17 @@ const RosterExcelUpload = ({
 
               <section className="rounded-xl border border-slate-200 p-4 space-y-3">
                 <h3 className="text-sm font-semibold text-slate-800">2. Upload filled file</h3>
-                {previewing ? (
+                {selectedWeekLocked ? (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-5 text-center space-y-1">
+                    <p className="text-sm font-semibold text-amber-900">
+                      {selectedWeek?.short_label || `Week ${weekNumber}`} is locked
+                    </p>
+                    <p className="text-xs text-amber-800">
+                      You cannot upload or edit this week until an administrator unlocks it.
+                      Choose an unlocked week, or ask admin to unlock this one.
+                    </p>
+                  </div>
+                ) : previewing ? (
                   <div className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-blue-300 bg-blue-50/50 rounded-xl px-4 py-6">
                     <LoadingSpinner size="sm" />
                     <span className="text-sm font-medium text-slate-700">Reading Excel…</span>
@@ -357,12 +453,26 @@ const RosterExcelUpload = ({
                       type="file"
                       accept=".xlsx,.xls"
                       className="hidden"
-                      disabled={applying}
+                      disabled={applying || selectedWeekLocked}
                       onChange={handleFile}
                     />
                   </label>
                 )}
               </section>
+
+              {preview && (preview.locked_weeks?.length || 0) > 0 && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 space-y-1">
+                  {(preview.locked_weeks || []).map((w) => (
+                    <p
+                      key={`${w.month_year}-${w.week_number}`}
+                      className="text-sm font-semibold text-amber-900"
+                    >
+                      {w.message ||
+                        `${w.short_label || `Week ${w.week_number}`} is locked. You cannot edit this week until an administrator unlocks it.`}
+                    </p>
+                  ))}
+                </div>
+              )}
 
               {preview && (
                 <section className="rounded-xl border border-slate-200 overflow-hidden">
@@ -454,7 +564,7 @@ const RosterExcelUpload = ({
                 ) : (
                   <CheckCircle2 className="w-4 h-4" />
                 )}
-                Apply as pending requests
+                Apply & submit for approval
               </button>
             </div>
           </div>

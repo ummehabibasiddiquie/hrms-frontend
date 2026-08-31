@@ -10,7 +10,7 @@ const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /**
  * Excel-style team roster: Week tabs × employee rows × day cells.
- * Click a cell to edit that person's day (parent opens RosterDayEditor).
+ * Cells are view-only; roster changes go through Excel Upload.
  */
 const RosterTeamWeekGrid = ({
   monthYear,
@@ -18,11 +18,22 @@ const RosterTeamWeekGrid = ({
   employees = [],
   pendingRequests = [],
   monthCalendarLocked = false,
+  weekLocks = [],
   readOnly = false,
   onCellClick,
 }) => {
   const weeks = useMemo(() => getWeeksInMonth(monthYear), [monthYear]);
   const [activeWeek, setActiveWeek] = useState(1);
+
+  const lockedWeekNumbers = useMemo(() => {
+    const set = new Set();
+    (weekLocks || []).forEach((l) => {
+      if (l?.week_number != null) set.add(Number(l.week_number));
+    });
+    return set;
+  }, [weekLocks]);
+
+  const activeWeekLocked = lockedWeekNumbers.has(Number(activeWeek));
 
   useEffect(() => {
     if (!weeks.length) return;
@@ -74,23 +85,32 @@ const RosterTeamWeekGrid = ({
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-3 py-2 border-b border-slate-100 flex flex-wrap gap-1.5 bg-slate-50">
-        {weeks.map((w) => (
-          <button
-            key={w.week_number}
-            type="button"
-            onClick={() => setActiveWeek(w.week_number)}
-            title={w.label}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-              activeWeek === w.week_number
-                ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700"
-            }`}
-          >
-            {w.short_label}
-          </button>
-        ))}
+        {weeks.map((w) => {
+          const locked = lockedWeekNumbers.has(Number(w.week_number));
+          return (
+            <button
+              key={w.week_number}
+              type="button"
+              onClick={() => setActiveWeek(w.week_number)}
+              title={locked ? `${w.label} — locked` : w.label}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                activeWeek === w.week_number
+                  ? locked
+                    ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                    : "bg-blue-600 text-white border-blue-600 shadow-sm"
+                  : locked
+                    ? "bg-amber-50 text-amber-800 border-amber-300"
+                    : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700"
+              }`}
+            >
+              {w.short_label}
+              {locked ? " · Locked" : ""}
+            </button>
+          );
+        })}
         <span className="ml-auto self-center text-[11px] text-slate-400 px-1">
           {week?.label}
+          {activeWeekLocked ? " · Locked" : ""}
         </span>
       </div>
 
@@ -142,6 +162,7 @@ const RosterTeamWeekGrid = ({
                 );
                 const frozen =
                   monthCalendarLocked ||
+                  activeWeekLocked ||
                   Boolean(roster?.locked_date) ||
                   (roster?.status || "") === "Pending Approval";
 
@@ -219,7 +240,7 @@ const RosterTeamWeekGrid = ({
                               {info.primaryLabel || "—"}
                             </div>
                             <div className="mt-0.5 flex flex-wrap gap-0.5">
-                              {info.badges.slice(0, 2).map((badge) => (
+                              {info.badges.slice(0, 3).map((badge) => (
                                 <span
                                   key={badge}
                                   className="text-[9px] px-1 py-0 rounded bg-white/80 text-slate-600 border border-slate-200/80"

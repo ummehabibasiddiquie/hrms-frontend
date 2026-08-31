@@ -83,8 +83,8 @@ const MyRoster = () => {
           <div>
             <h1 className="text-2xl font-bold">My Roster</h1>
             <p className="text-blue-100 text-sm mt-1">
-              View-only calendar and request status. Only your manager, admin, or super admin can
-              edit roster days, leave, or week-offs.
+              View-only calendar and request status. Roster changes are made by your manager via
+              Excel upload.
             </p>
           </div>
         </div>
@@ -127,7 +127,8 @@ const MyRoster = () => {
 
       <RosterSubmissionTracker
         variant="employee"
-        defaultMonthYear={monthYear}
+        monthYear={monthYear}
+        onMonthYearChange={setMonthYear}
       />
     </div>
   );
