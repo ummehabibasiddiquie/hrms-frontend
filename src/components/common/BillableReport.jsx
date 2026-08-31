@@ -11,9 +11,7 @@ import { fetchMonthlyBillableReport } from "../../services/billableReportService
 import api from "../../services/api";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { Users, Calendar, Download, RotateCcw } from "lucide-react";
-import { Calendar as CalendarComponent } from "../ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { format } from "date-fns";
+import { DateRangePicker } from "./CustomCalendar";
 
 const BillableReport = ({ userId }) => {
   // Device info (declare once at top)
@@ -79,14 +77,43 @@ const BillableReport = ({ userId }) => {
   // Export all users' daily data (filtered by search query if set)
   function handleExportAllUsers() {
     try {
-      // Filter daily data by search query
+      // Filter daily data by search query and date range (same logic as UserCard)
       const exportRows = dailyData.filter(row => {
-        // Filter by search query (agent name)
         if (searchQuery) {
           const userName = (row.user_name || '').toLowerCase();
           const query = searchQuery.toLowerCase();
           if (!userName.includes(query)) return false;
         }
+        
+        // Use same date parsing logic as UserCard for consistency
+        const rowDateStr = row.work_date || row.date_time || row.date;
+        if (!rowDateStr) return true;
+        
+        let dateStr;
+        if (rowDateStr.includes('-') && rowDateStr.split('-').length >= 3) {
+          const parts = rowDateStr.split('-');
+          if (parts[0].length === 4) {
+            // YYYY-MM-DD format
+            dateStr = rowDateStr.split('T')[0];
+          } else {
+            // DD-MM-YYYY format - convert to YYYY-MM-DD
+            dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          }
+        } else {
+          // Try parsing as date
+          const date = new Date(rowDateStr);
+          if (!isNaN(date.getTime())) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            dateStr = `${year}-${month}-${day}`;
+          } else {
+            return true; // Can't parse, include it
+          }
+        }
+        
+        if (dailyRangeStart && dateStr && dateStr < dailyRangeStart) return false;
+        if (dailyRangeEnd && dateStr && dateStr > dailyRangeEnd) return false;
         return true;
       });
 
@@ -242,15 +269,10 @@ const BillableReport = ({ userId }) => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   };
-  // State for month filter (monthly) - default to current month
-  const [monthlyMonth, setMonthlyMonth] = useState(getCurrentMonth());
-  // State for month filter (daily report) - default to current month
-  const [dailyMonth, setDailyMonth] = useState(getCurrentMonth());
 
-  // Helper function to get month's first and last day
   const getMonthDateRange = (monthStr) => {
     let year, month;
-    
+
     if (!monthStr) {
       const now = new Date();
       year = now.getFullYear();
@@ -258,16 +280,21 @@ const BillableReport = ({ userId }) => {
     } else {
       [year, month] = monthStr.split('-').map(Number);
     }
-    
+
     const firstDay = 1;
     const lastDay = new Date(year, month, 0).getDate();
     const pad = (n) => String(n).padStart(2, '0');
-    
+
     return {
       start: `${year}-${pad(month)}-${pad(firstDay)}`,
       end: `${year}-${pad(month)}-${pad(lastDay)}`
     };
   };
+
+  const [monthlyMonth, setMonthlyMonth] = useState(getCurrentMonth());
+  const [dailyMonth, setDailyMonth] = useState(getCurrentMonth());
+  const [dailyRangeStart, setDailyRangeStart] = useState(() => getMonthDateRange(getCurrentMonth()).start);
+  const [dailyRangeEnd, setDailyRangeEnd] = useState(() => getMonthDateRange(getCurrentMonth()).end);
 
   // State for API data, loading, and error
   const [dailyData, setDailyData] = useState([]);
@@ -318,6 +345,39 @@ const BillableReport = ({ userId }) => {
     setUserInfoMap({});
   }, [dailyMonth]);
 
+  // Track if date range change came from month filter (to avoid circular updates)
+  const isMonthFilterChangeRef = React.useRef(false);
+  const isDateRangeChangeRef = React.useRef(false);
+
+  React.useEffect(() => {
+    // Only reset date range if month was changed manually (not from date selection)
+    if (!isDateRangeChangeRef.current) {
+      const range = getMonthDateRange(dailyMonth);
+      isMonthFilterChangeRef.current = true;
+      setDailyRangeStart(range.start);
+      setDailyRangeEnd(range.end);
+    }
+    isDateRangeChangeRef.current = false;
+  }, [dailyMonth]);
+
+  // Sync month filter when date range changes (but not if triggered by month filter)
+  React.useEffect(() => {
+    if (dailyRangeStart && !isMonthFilterChangeRef.current) {
+      const date = new Date(dailyRangeStart);
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const newMonth = `${year}-${month}`;
+        if (newMonth !== dailyMonth) {
+          isDateRangeChangeRef.current = true;
+          setDailyMonth(newMonth);
+        }
+      }
+    }
+    // Reset flag after processing
+    isMonthFilterChangeRef.current = false;
+  }, [dailyRangeStart]);
+
   // Helper to get YYYY-MM-DD string
   const getDateString = (date) => date.toISOString().slice(0, 10);
 
@@ -346,12 +406,19 @@ const BillableReport = ({ userId }) => {
         let payload = {
           logged_in_user_id: user.user_id
         };
-        // Month filter
-        if (dailyMonth) {
+        // Month filter - only send if date range is not set or matches the month
+        if (dailyMonth && (!dailyRangeStart || !dailyRangeEnd)) {
           const [year, month] = dailyMonth.split('-');
           const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
           const monthLabel = monthNames[Number(month) - 1];
           payload.month_year = `${monthLabel}${year}`;
+        }
+        // Date range filter - takes precedence over month filter
+        if (dailyRangeStart) {
+          payload.date_from = dailyRangeStart;
+        }
+        if (dailyRangeEnd) {
+          payload.date_to = dailyRangeEnd;
         }
         // Team filter
         if (selectedTeam && selectedTeam !== 'all') {
@@ -390,7 +457,7 @@ const BillableReport = ({ userId }) => {
     };
     fetchData();
     // eslint-disable-next-line
-  }, [userId, dailyMonth, selectedTeam, refreshTrigger]);
+  }, [userId, dailyMonth, dailyRangeStart, dailyRangeEnd, selectedTeam, refreshTrigger]);
 
   // Function to refresh daily data
   const handleRefreshData = () => {
@@ -741,6 +808,25 @@ const BillableReport = ({ userId }) => {
                   />
                 </div>
               </div>
+
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  Date Range
+                </label>
+                <DateRangePicker
+                  startDate={dailyRangeStart}
+                  endDate={dailyRangeEnd}
+                  onStartDateChange={setDailyRangeStart}
+                  onEndDateChange={setDailyRangeEnd}
+                  label=""
+                  description={null}
+                  showClearButton={false}
+                  compact={true}
+                  fieldWidth="180px"
+                  noWrapper={true}
+                />
+              </div>
               
               {/* Team Filter (Admin, Super Admin, Project Manager only) */}
               {canViewTeamFilter && (
@@ -770,8 +856,12 @@ const BillableReport = ({ userId }) => {
               {/* Reset Filters Button */}
               <button
                 onClick={() => {
+                  const current = getCurrentMonth();
                   setSearchQuery('');
-                  setDailyMonth(getCurrentMonth());
+                  setDailyMonth(current);
+                  const range = getMonthDateRange(current);
+                  setDailyRangeStart(range.start);
+                  setDailyRangeEnd(range.end);
                   setSelectedTeam('all');
                 }}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg px-6 py-2.5 transition-all shadow-sm hover:shadow-md group"
@@ -790,34 +880,8 @@ const BillableReport = ({ userId }) => {
                 Export All
               </button>
             </div>
-            
-            {/* User Guidance Message */}
-            {dailyMonth && (
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="text-sm">
-                    <p className="font-medium text-blue-800">
-                      📅 Date Range Filter Active
-                    </p>
-                    <p className="text-blue-700 mt-1">
-                      The date range calendars in user cards are now restricted to <span className="font-semibold">{(() => {
-                        const [year, month] = dailyMonth.split('-');
-                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                        return `${monthNames[parseInt(month) - 1]} ${year}`;
-                      })()}</span> only. 
-                      Select a different month from the Month Filter to change the available dates.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-          {/* User Cards for QA agent daily data, each with its own date range and export */}
+          {/* User Cards for QA agent daily data */}
           <div className="space-y-6">
             {loadingDaily ? (
               <div className="py-8 text-center text-blue-700 font-semibold">Loading daily report...</div>
@@ -919,9 +983,10 @@ const BillableReport = ({ userId }) => {
                     setExpandedCards(prev => ({ ...prev, [userId]: isExpanded }));
                   }}
                   selectedMonth={dailyMonth}
+                  rangeStart={dailyRangeStart}
+                  rangeEnd={dailyRangeEnd}
                   formatDateTime={formatDateTime}
                   onRefresh={handleRefreshData}
-                  showOnlySelectedMonth={true}
                 />
                 ));
               })()
