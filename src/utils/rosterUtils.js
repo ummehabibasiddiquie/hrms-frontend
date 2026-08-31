@@ -9,6 +9,7 @@ export function getCurrentMonthYear() {
 
 export function getNextMonthYear() {
   const date = new Date();
+  date.setDate(1);
   date.setMonth(date.getMonth() + 1);
   return `${MONTH_NAMES[date.getMonth()]}${date.getFullYear()}`;
 }

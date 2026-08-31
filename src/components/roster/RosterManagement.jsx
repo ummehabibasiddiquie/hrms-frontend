@@ -256,6 +256,8 @@ const RosterManagement = () => {
       } catch (err) {
         toast.error(getFriendlyErrorMessage(err));
         setRosters([]);
+        setMonthCalendarLocked(false);
+        setMonthLockInfo(null);
         return null;
       } finally {
         if (!silent) setLoading(false);
@@ -281,6 +283,8 @@ const RosterManagement = () => {
       } catch (err) {
         toast.error(getFriendlyErrorMessage(err));
         setTeamWeekRosters([]);
+        setMonthCalendarLocked(false);
+        setMonthLockInfo(null);
         return null;
       } finally {
         if (!silent) setTeamWeekLoading(false);
@@ -386,7 +390,7 @@ const RosterManagement = () => {
         const summaryPromise =
           isAdmin || isSuperAdmin
             ? listRosters({ month_year: monthYear, include_days: false })
-            : Promise.resolve(null);
+            : listRosters({ month_year: monthYear, include_days: false });
 
         const [pendingRes, summaryRes] = await Promise.all([pendingPromise, summaryPromise]);
         if (cancelled) return;
@@ -399,11 +403,15 @@ const RosterManagement = () => {
           setMonthLockInfo(summaryRes.data?.month_lock_info || null);
         } else {
           setMonthStatusRosters([]);
+          setMonthCalendarLocked(false);
+          setMonthLockInfo(null);
         }
       } catch {
         if (!cancelled) {
           applyPendingRows([]);
           setMonthStatusRosters([]);
+          setMonthCalendarLocked(false);
+          setMonthLockInfo(null);
         }
       }
     })();
@@ -435,6 +443,8 @@ const RosterManagement = () => {
         if (!cancelled) {
           toast.error(getFriendlyErrorMessage(err));
           setRosters([]);
+          setMonthCalendarLocked(false);
+          setMonthLockInfo(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -464,6 +474,8 @@ const RosterManagement = () => {
         if (!cancelled) {
           toast.error(getFriendlyErrorMessage(err));
           setTeamWeekRosters([]);
+          setMonthCalendarLocked(false);
+          setMonthLockInfo(null);
         }
       } finally {
         if (!cancelled) setTeamWeekLoading(false);
@@ -544,6 +556,7 @@ const RosterManagement = () => {
           toast.success(
             `${res.message || "Generation completed"} (${res.data?.month_year || nextMonth})`
           );
+          setMonthYear(res.data?.month_year || nextMonth);
         }),
     });
   };

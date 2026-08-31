@@ -48,7 +48,7 @@ const BillableReport = ({ userId }) => {
   // Export all users' daily data (filtered by search query if set)
   function handleExportAllUsers() {
     try {
-      // Filter daily data by search query
+      // Filter daily data by search query and date range
       const exportRows = dailyData.filter(row => {
         // Filter by search query (agent name)
         if (searchQuery) {
@@ -56,6 +56,35 @@ const BillableReport = ({ userId }) => {
           const query = searchQuery.toLowerCase();
           if (!userName.includes(query)) return false;
         }
+        // Filter by date range
+        const rowDateStr = row.work_date || row.date_time || row.date;
+        if (!rowDateStr) return true;
+        
+        let dateStr;
+        if (rowDateStr.includes('-') && rowDateStr.split('-').length >= 3) {
+          const parts = rowDateStr.split('-');
+          if (parts[0].length === 4) {
+            // YYYY-MM-DD format
+            dateStr = rowDateStr.split('T')[0];
+          } else {
+            // DD-MM-YYYY format - convert to YYYY-MM-DD
+            dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          }
+        } else {
+          // Try parsing as date
+          const date = new Date(rowDateStr);
+          if (!isNaN(date.getTime())) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            dateStr = `${year}-${month}-${day}`;
+          } else {
+            return true; // Can't parse, include it
+          }
+        }
+        
+        if (dailyStart && dateStr && dateStr < dailyStart) return false;
+        if (dailyEnd && dateStr && dateStr > dailyEnd) return false;
         return true;
       });
 
