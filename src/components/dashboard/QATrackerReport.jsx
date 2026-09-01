@@ -24,6 +24,10 @@ import {
   PaginationPrevious,
 } from "../ui/pagination";
 import TaskEODReport from "./TaskEODReport";
+import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
+import SubTabsBar from "../common/SubTabsBar";
+import { formatISTDateTimeParts, getISTParts } from "../../utils/dateTimeIST";
+
 
 // Project 12: all current and future tasks can enter production above 2x base target
 const UNLIMITED_PRODUCTION_PROJECT_IDS = new Set(['12']);
@@ -43,8 +47,10 @@ const QATrackerReport = () => {
   const { user } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
   
-  // Sub-tab state
-  const [activeSubTab, setActiveSubTab] = useState('tracker_report');
+  // Sub-tab state synced to ?subtab= (e.g. /dashboard?tab=tracker_report&subtab=task_eod_report)
+  const [activeSubTab, setActiveSubTab] = useRoutedSubTab('tracker_report', {
+    parentTab: 'tracker_report',
+  });
   
   // Check if user is QA agent (QA agents should not see edit/delete actions)
   const roleId = user?.role_id;
@@ -96,7 +102,7 @@ const QATrackerReport = () => {
     if (activeSubTab === 'task_eod_report' && !canAccessTaskEODReport) {
       setActiveSubTab('tracker_report');
     }
-  }, [activeSubTab, canAccessTaskEODReport]);
+  }, [activeSubTab, canAccessTaskEODReport, setActiveSubTab]);
   
   // Edit modal dropdown states
   const [showEditProjectDropdown, setShowEditProjectDropdown] = useState(false);
@@ -457,31 +463,8 @@ const QATrackerReport = () => {
     return tasksList.filter(task => String(task.project_id) === String(selectedProject));
   }, [tasksList, selectedProject]);
 
-  // Format date and time to display format
-  const formatDateTime = (dateTimeStr) => {
-    if (!dateTimeStr) return { date: '-', time: '-' };
-    
-    try {
-      const dt = new Date(dateTimeStr);
-      if (isNaN(dt.getTime())) return { date: '-', time: '-' };
-      
-      const day = dt.getUTCDate();
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const month = monthNames[dt.getUTCMonth()];
-      const year = dt.getUTCFullYear();
-      const date = `${day}/${month}/${year}`;
-      
-      let hours = dt.getUTCHours();
-      const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12 || 12;
-      const time = `${hours}:${minutes} ${ampm}`;
-      
-      return { date, time };
-    } catch {
-      return { date: '-', time: '-' };
-    }
-  };
+  // Format date and time in IST (Asia/Kolkata)
+  const formatDateTime = (dateTimeStr) => formatISTDateTimeParts(dateTimeStr);
 
   // Format number to 2 decimal places
   const formatDecimal = (value) => {
@@ -687,78 +670,63 @@ const QATrackerReport = () => {
 
   // Handle add form field changes
   const handleAddFieldChange = (field, value) => {
-    setAddFormData(prev => ({ ...prev, [field]: value }));
+    setAddFormData(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'project_id') {
+        next.task_id = "";
+        next.base_target = "";
+      }
+      return next;
+    });
     setAddTouched(prev => ({ ...prev, [field]: true }));
-    
+
     if (field === 'production') {
       setAddProductionError("");
     }
-    
-    if (field === 'agent_id' && value) {
-      log('[QATrackerReport] Looking for agent_id:', value, 'in usersList of', usersList.length, 'agents');
-      log('[QATrackerReport] First agent in usersList:', usersList[0]);
-      const selectedAgent = usersList.find(u => String(u.user_id) === String(value));
-      log('[QATrackerReport] Found agent:', selectedAgent);
-      log('[QATrackerReport] Agent has user_tenure:', selectedAgent?.user_tenure);
-      if (selectedAgent && addFormData.task_id) {
-        const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
-        const task = project?.tasks?.find(t => String(t.task_id) === String(addFormData.task_id));
-        log('[QATrackerReport] Task for recalc:', task);
-        // user_tenure comes as string from API, convert to number
-        const userTenure = Number(selectedAgent.user_tenure) || Number(selectedAgent.tenure) || 1;
-        log('[QATrackerReport] User tenure:', userTenure, 'raw:', selectedAgent.user_tenure);
-        if (task && userTenure) {
-          const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
-          const calculated = Number(perHourTarget) * Number(userTenure);
-          log('[QATrackerReport] Recalculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
-          setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
-        }
-      }
-    }
-    
+
     if (field === 'project_id') {
       const project = addProjects.find(p => String(p.project_id) === String(value));
       setAddTasks(project?.tasks || []);
-      setAddFormData(prev => ({ ...prev, task_id: "", base_target: "" }));
     }
-    
-    if (field === 'task_id' && value) {
-      const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
-      const task = project?.tasks?.find(t => String(t.task_id) === String(value));
-      log('[QATrackerReport] Task changed in add modal:', value);
-      log('[QATrackerReport] Project:', addFormData.project_id, 'Found project:', project);
-      log('[QATrackerReport] Task details:', { 
-        task_id: task?.task_id, 
-        task_name: task?.task_name,
-        task_target: task?.task_target,
-        per_hour_target: task?.per_hour_target,
-        target: task?.target,
-        label_value: task?.label_value,
-        all_task_keys: task ? Object.keys(task) : null
-      });
-      const selectedAgent = usersList.find(u => String(u.user_id) === String(addFormData.agent_id));
-      log('[QATrackerReport] Selected agent for calc:', selectedAgent);
-      log('[QATrackerReport] Agent ID being searched:', addFormData.agent_id, 'type:', typeof addFormData.agent_id);
-      log('[QATrackerReport] usersList count:', usersList.length);
-      // user_tenure comes as string from API, convert to number
-      const userTenure = Number(selectedAgent?.user_tenure) || Number(selectedAgent?.tenure) || 1;
-      log('[QATrackerReport] User tenure from agent:', userTenure, 'agent_tenure_sources:', {
-        user_tenure: selectedAgent?.user_tenure,
-        tenure: selectedAgent?.tenure,
-        raw_agent: selectedAgent
-      });
-      if (task) {
-        const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
-        const calculated = Number(perHourTarget) * Number(userTenure);
-        log('[QATrackerReport] Calculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
-        setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
-      } else {
-        log('[QATrackerReport] Could not calculate - task not found');
-      }
-    }
-    
+
     validateAddField(field, value);
   };
+
+  // Base Target = task_target × tenure (if tenure < 1 → use 1)
+  useEffect(() => {
+    if (!showAddModal) return;
+
+    const agent = usersList.find((u) => String(u.user_id) === String(addFormData.agent_id));
+    const project = addProjects.find((p) => String(p.project_id) === String(addFormData.project_id));
+    const task =
+      project?.tasks?.find((t) => String(t.task_id) === String(addFormData.task_id)) ||
+      addTasks.find((t) => String(t.task_id) === String(addFormData.task_id));
+
+    if (!agent || !task) {
+      setAddFormData((prev) => (prev.base_target === "" ? prev : { ...prev, base_target: "" }));
+      return;
+    }
+
+    let tenure = Number(agent.user_tenure ?? agent.tenure) || 1;
+    if (tenure < 1) tenure = 1;
+    const perHourTarget = Number(
+      task.task_target ?? task.per_hour_target ?? task.target ?? task.label_value ?? 0
+    ) || 0;
+    const calculated = (perHourTarget * tenure).toFixed(2);
+
+    setAddFormData((prev) =>
+      prev.base_target === calculated ? prev : { ...prev, base_target: calculated }
+    );
+  }, [
+    showAddModal,
+    addFormData.agent_id,
+    addFormData.project_id,
+    addFormData.task_id,
+    usersList,
+    addProjects,
+    addTasks,
+  ]);
+
 
   // Validate add form field
   const validateAddField = (field, value) => {
@@ -882,8 +850,18 @@ const QATrackerReport = () => {
       formData.append('task_id', Number(addFormData.task_id));
       formData.append('shift', addFormData.shift_type);
       formData.append('production', Number(addFormData.production));
-      formData.append('tenure_target', Number(addFormData.base_target));
-      
+      {
+        const agent = usersList.find((u) => String(u.user_id) === String(addFormData.agent_id));
+        const project = addProjects.find((p) => String(p.project_id) === String(addFormData.project_id));
+        const task =
+          project?.tasks?.find((t) => String(t.task_id) === String(addFormData.task_id)) ||
+          addTasks.find((t) => String(t.task_id) === String(addFormData.task_id));
+        const perHour =
+          Number(task?.task_target ?? task?.per_hour_target ?? task?.target ?? 0) || 0;
+        let tenure = Number(agent?.user_tenure ?? agent?.tenure) || 1;
+        if (tenure < 1) tenure = 1;
+        formData.append('tenure_target', perHour * tenure);
+      }      
       if (addFormData.tracker_note && addFormData.tracker_note.trim()) {
         formData.append('tracker_note', addFormData.tracker_note.trim());
       }
@@ -958,14 +936,11 @@ const QATrackerReport = () => {
       let formattedDateTime = '';
       if (tracker.date_time) {
         try {
-          const dateObj = new Date(tracker.date_time);
-          const year = dateObj.getUTCFullYear();
-          const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-          const day = String(dateObj.getUTCDate()).padStart(2, '0');
-          const hours = String(dateObj.getUTCHours()).padStart(2, '0');
-          const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
-          formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-          log('[QATrackerReport] Formatted date_time (UTC):', formattedDateTime, 'from:', tracker.date_time);
+          const parts = getISTParts(tracker.date_time);
+          if (parts) {
+            formattedDateTime = `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}T${String(parts.hours).padStart(2, '0')}:${String(parts.minutes).padStart(2, '0')}`;
+          }
+          log('[QATrackerReport] Formatted date_time (IST):', formattedDateTime, 'from:', tracker.date_time);
         } catch (err) {
           logError('[QATrackerReport] Error formatting date_time:', err);
         }
@@ -1439,44 +1414,21 @@ const QATrackerReport = () => {
         </div>
 
         {/* Sub-tab Navigation */}
-        <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden mb-6">
-          <div className="flex overflow-x-auto border-b border-slate-200 scrollbar-hide">
-            <button
-              onClick={() => setActiveSubTab('tracker_report')}
-              className={`flex-1 min-w-fit px-6 py-4 text-sm font-bold transition-all relative whitespace-nowrap ${
-                activeSubTab === 'tracker_report'
-                  ? 'text-blue-600 bg-blue-50'
-                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <UsersIcon className="w-4 h-4" />
-                <span>Tracker Entries</span>
-              </div>
-              {activeSubTab === 'tracker_report' && (
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              )}
-            </button>
-            {canAccessTaskEODReport && (
-              <button
-                onClick={() => setActiveSubTab('task_eod_report')}
-                className={`flex-1 min-w-fit px-6 py-4 text-sm font-bold transition-all relative whitespace-nowrap ${
-                  activeSubTab === 'task_eod_report'
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  <span>Task EOD Report</span>
-                </div>
-                {activeSubTab === 'task_eod_report' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-                )}
-              </button>
-            )}
-          </div>
-        </div>
+        <SubTabsBar
+          bordered
+          equalWidth
+          activeTab={activeSubTab}
+          onChange={setActiveSubTab}
+          tabs={[
+            { id: 'tracker_report', label: 'Tracker Entries', icon: UsersIcon },
+            {
+              id: 'task_eod_report',
+              label: 'Task EOD Report',
+              icon: FileText,
+              hidden: !canAccessTaskEODReport,
+            },
+          ]}
+        />
 
         {/* Sub-tab Content */}
         {activeSubTab === 'task_eod_report' && canAccessTaskEODReport ? (

@@ -29,12 +29,11 @@ import { log, logError } from "../../config/environment";
 import SearchableSelect from "../common/SearchableSelect";
 import { DateRangePicker } from "../common/CustomCalendar";
 import { Briefcase, ListChecks } from "lucide-react";
+import { formatISTDateTimeParts, getISTParts, formatISTDateMedium, todayISTISO } from "../../utils/dateTimeIST";
 
-// Helper to get today's date in YYYY-MM-DD format
-const getTodayDate = () => {
-  const today = new Date();
-  return today.toISOString().split('T')[0];
-};
+
+// Helper to get today's date in YYYY-MM-DD format (IST)
+const getTodayDate = () => todayISTISO() || new Date().toISOString().split('T')[0];
 
 const Tracker = ({ embedded = false }) => {
   // Auth context for user info
@@ -234,20 +233,25 @@ const Tracker = ({ embedded = false }) => {
     setLoadingTasks(false);
   }, [selectedProject, projects, selectedTask]);
 
-  // Calculate base target as user_tenure * task_target
+  // Base Target = task_target × tenure (if tenure < 1 → use 1)
   useEffect(() => {
-    if (!selectedProject || !selectedTask || !user?.user_tenure) {
+    if (!selectedProject || !selectedTask) {
       setBaseTarget("");
       return;
     }
-    setBaseTargetLoading(true);
-    const project = projects.find(p => String(p.project_id) === String(selectedProject));
-    const task = project?.tasks?.find(t => String(t.task_id) === String(selectedTask));
-    if (task && user.user_tenure) {
-      setBaseTarget(Number(task.task_target) * Number(user.user_tenure));
-    } else {
+    const project = projects.find((p) => String(p.project_id) === String(selectedProject));
+    const task = project?.tasks?.find((t) => String(t.task_id) === String(selectedTask));
+    if (!task) {
       setBaseTarget("");
+      return;
     }
+
+    let tenure = Number(user?.user_tenure ?? user?.tenure) || 1;
+    if (tenure < 1) tenure = 1;
+    const taskTarget = Number(task.task_target ?? task.per_hour_target ?? task.target ?? 0) || 0;
+
+    setBaseTargetLoading(true);
+    setBaseTarget(taskTarget * tenure);
     setBaseTargetLoading(false);
   }, [selectedProject, selectedTask, projects, user]);
 
@@ -610,7 +614,14 @@ const Tracker = ({ embedded = false }) => {
       formData.append('shift', shiftType);
       formData.append('user_id', user?.user_id);
       formData.append('production', Number(productionTarget));
-      formData.append('tenure_target', Number(baseTarget));
+      {
+        const project = projects.find((p) => String(p.project_id) === String(selectedProject));
+        const task = project?.tasks?.find((t) => String(t.task_id) === String(selectedTask));
+        const taskTarget = Number(task?.task_target ?? task?.per_hour_target ?? task?.target ?? 0) || 0;
+        let tenure = Number(user?.user_tenure ?? user?.tenure) || 1;
+        if (tenure < 1) tenure = 1;
+        formData.append('tenure_target', taskTarget * tenure);
+      }
       
       if (notes && notes.trim()) {
         formData.append('tracker_note', notes.trim());
@@ -731,12 +742,13 @@ const Tracker = ({ embedded = false }) => {
   // Check if tracker entry is from today (using UTC to match formatDateTime)
   const isToday = (dateTime) => {
     if (!dateTime) return false;
-    const trackerDate = new Date(dateTime);
-    const today = new Date();
+    const trackerParts = getISTParts(dateTime);
+    const todayParts = getISTParts(new Date());
+    if (!trackerParts || !todayParts) return false;
     return (
-      trackerDate.getUTCFullYear() === today.getUTCFullYear() &&
-      trackerDate.getUTCMonth() === today.getUTCMonth() &&
-      trackerDate.getUTCDate() === today.getUTCDate()
+      trackerParts.year === todayParts.year &&
+      trackerParts.month === todayParts.month &&
+      trackerParts.day === todayParts.day
     );
   };
 
@@ -805,33 +817,7 @@ const Tracker = ({ embedded = false }) => {
   }, [user?.user_id, startDate, endDate, filterProject, filterTask]);
 
   // Format date and time
-  const formatDateTime = (dateTimeStr) => {
-    if (!dateTimeStr) return { date: '-', time: '' };
-    
-    try {
-      const date = new Date(dateTimeStr);
-      if (isNaN(date.getTime())) return { date: dateTimeStr, time: '' };
-      
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const day = date.getUTCDate();
-      const month = monthNames[date.getUTCMonth()];
-      const year = date.getUTCFullYear();
-      
-      let hours = date.getUTCHours();
-      const minutes = date.getUTCMinutes();
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12;
-      const minutesStr = String(minutes).padStart(2, '0');
-      
-      return {
-        date: `${day}/${month}/${year}`,
-        time: `${hours}:${minutesStr} ${ampm}`
-      };
-    } catch  {
-      return { date: dateTimeStr, time: '' };
-    }
-  };
+  const formatDateTime = (dateTimeStr) => formatISTDateTimeParts(dateTimeStr);
 
   // Handle delete
   const handleDelete = (tracker_id) => setDeleteConfirm(tracker_id);
@@ -1388,7 +1374,7 @@ const Tracker = ({ embedded = false }) => {
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold text-white tracking-tight">Add New Tracker</h2>
-                      <p className="text-blue-100 text-sm font-medium mt-1">{new Date(entryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                      <p className="text-blue-100 text-sm font-medium mt-1">{formatISTDateMedium(entryDate)}</p>
                     </div>
                   </div>
                   <button
@@ -1469,9 +1455,12 @@ const Tracker = ({ embedded = false }) => {
                         setTimeout(() => {
                           const project = projects.find(p => String(p.project_id) === String(selectedProject));
                           const task = project?.tasks?.find(t => String(t.task_id) === String(taskValue));
-                          if (task && user?.user_tenure) {
-                            const calculated = Number(task.task_target) * Number(user.user_tenure);
-                            setBaseTarget(calculated.toFixed(2));
+                          if (task) {
+                            let tenure = Number(user?.user_tenure ?? user?.tenure) || 1;
+                            if (tenure < 1) tenure = 1;
+                            const taskTarget =
+                              Number(task.task_target ?? task.per_hour_target ?? task.target ?? 0) || 0;
+                            setBaseTarget((taskTarget * tenure).toFixed(2));
                           } else {
                             setBaseTarget("");
                           }

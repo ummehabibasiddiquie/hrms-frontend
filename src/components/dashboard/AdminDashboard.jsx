@@ -13,8 +13,10 @@ import QATrackerReport from './QATrackerReport';
 import QAAgentList from './QAAgentList';
 import QAAgentAudit from './QAAgentAudit';
 import { DateRangePicker } from '../common/CustomCalendar';
+import { useRoutedDashboardTab } from '../../hooks/useRoutedDashboardTab';
+import { formatISTDateTimeParts } from '../../utils/dateTimeIST';
 
-const AdminDashboard = ({ initialTab = 'overview' }) => {
+const AdminDashboard = () => {
   // StatCard component for dashboard stats
   const StatCard = ({ title, value, subtext, icon: Icon, trend = 'neutral', alert, className = '', valueClassName = '' }) => (
     <div
@@ -61,15 +63,9 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
     </div>
   );
 
-  // Tab state for navigation
-  const [activeTab, setActiveTab] = useState(initialTab || 'overview');
+  // Tab state synced to ?tab= (same pattern as Manage → adminTab)
+  const [activeTab, setActiveTab] = useRoutedDashboardTab('overview');
   const { user } = useAuth();
-
-  useEffect(() => {
-    if (initialTab && initialTab !== activeTab) {
-      setActiveTab(initialTab);
-    }
-  }, [initialTab]);
   // Project/task name mapping state
   const [projectNameMap, setProjectNameMap] = useState({});
   const [taskNameMap, setTaskNameMap] = useState({});
@@ -203,9 +199,9 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
   const handleEndDateChange = (value) => handleDateRangeChange('end', value);
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-10">
+    <div className={`max-w-7xl mx-auto ${activeTab === 'billable_report' ? 'pb-2' : 'space-y-4 pb-10'}`}>
       {/* Navigation Tabs */}
-      <AdminTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+      <AdminTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} compact={activeTab === 'billable_report'} />
       
       {/* Overview Tab Content */}
       {activeTab === 'overview' && (
@@ -331,19 +327,11 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
                             </p>
                             <div className="text-sm font-bold text-slate-800">
                               {file.date_time ? (() => {
-                                const date = new Date(file.date_time);
-                                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                const day = date.getUTCDate();
-                                const month = monthNames[date.getUTCMonth()];
-                                const year = date.getUTCFullYear();
-                                let hours = date.getUTCHours();
-                                const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                const ampm = hours >= 12 ? 'PM' : 'AM';
-                                hours = hours % 12 || 12;
+                                const { date, time } = formatISTDateTimeParts(file.date_time);
                                 return (
                                   <>
-                                    <div>{day}/{month}/{year}</div>
-                                    <div className="text-xs text-slate-600">{hours}:{minutes} {ampm}</div>
+                                    <div>{date}</div>
+                                    <div className="text-xs text-slate-600">{time}</div>
                                   </>
                                 );
                               })() : "-"}
@@ -396,11 +384,7 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
       )}
       
       {/* Billable Report Tab */}
-      {activeTab === 'billable_report' && (
-        <div className="max-w-7xl mx-auto mt-6">
-          <BillableReport />
-        </div>
-      )}
+      {activeTab === 'billable_report' && <BillableReport />}
       {activeTab === 'tracker_report' && (
         <div className="max-w-7xl mx-auto mt-6">
           <QATrackerReport />

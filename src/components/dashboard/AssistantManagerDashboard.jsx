@@ -13,6 +13,8 @@ import QATrackerReport from './QATrackerReport';
 import QAAgentList from './QAAgentList';
 import QAAgentAudit from './QAAgentAudit';
 import { DateRangePicker } from '../common/CustomCalendar';
+import { formatISTDateTimeParts } from '../../utils/dateTimeIST';
+import { useRoutedDashboardTab } from '../../hooks/useRoutedDashboardTab';
 
 const AssistantManagerDashboard = () => {
   // StatCard component for dashboard stats
@@ -61,8 +63,8 @@ const AssistantManagerDashboard = () => {
     </div>
   );
 
-  // Tab state for navigation
-  const [activeTab, setActiveTab] = useState('overview');
+  // Tab state synced to ?tab= (same pattern as Manage → adminTab)
+  const [activeTab, setActiveTab] = useRoutedDashboardTab('overview');
   const { user } = useAuth();
   // Project/task name mapping state
   const [projectNameMap, setProjectNameMap] = useState({});
@@ -191,9 +193,9 @@ const AssistantManagerDashboard = () => {
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-10">
+    <div className={`max-w-7xl mx-auto ${activeTab === 'billable_report' ? 'pb-2' : 'space-y-4 pb-10'}`}>
       {/* Navigation Tabs */}
-      <AssistantManagerTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+      <AssistantManagerTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} compact={activeTab === 'billable_report'} />
       
       {/* Overview Tab Content */}
       {activeTab === 'overview' && (
@@ -347,19 +349,11 @@ const AssistantManagerDashboard = () => {
                             </p>
                             <div className="text-sm font-bold text-slate-800">
                               {file.date_time ? (() => {
-                                const date = new Date(file.date_time);
-                                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                const day = date.getUTCDate();
-                                const month = monthNames[date.getUTCMonth()];
-                                const year = date.getUTCFullYear();
-                                let hours = date.getUTCHours();
-                                const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                const ampm = hours >= 12 ? 'PM' : 'AM';
-                                hours = hours % 12 || 12;
+                                const { date, time } = formatISTDateTimeParts(file.date_time);
                                 return (
                                   <>
-                                    <div>{day}/{month}/{year}</div>
-                                    <div className="text-xs text-slate-600">{hours}:{minutes} {ampm}</div>
+                                    <div>{date}</div>
+                                    <div className="text-xs text-slate-600">{time}</div>
                                   </>
                                 );
                               })() : "-"}
@@ -412,11 +406,7 @@ const AssistantManagerDashboard = () => {
       )}
       
       {/* Billable Report Tab */}
-      {activeTab === 'billable_report' && (
-        <div className="max-w-7xl mx-auto mt-6">
-          <BillableReport />
-        </div>
-      )}
+      {activeTab === 'billable_report' && <BillableReport />}
       {activeTab === 'tracker_report' && (
         <div className="max-w-7xl mx-auto mt-6">
           <QATrackerReport />

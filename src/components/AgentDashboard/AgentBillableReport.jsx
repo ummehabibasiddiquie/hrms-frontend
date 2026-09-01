@@ -1,18 +1,25 @@
+// ...existing imports...
 import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
 import React, { useState, useEffect, useRef } from "react";
 import { getFriendlyErrorMessage } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
-import { fetchMonthlyBillableReport } from "../../services/billableReportService";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+dayjs.extend(customParseFormat);
+import { fetchDailyBillableReport, fetchMonthlyBillableReport } from "../../services/billableReportService";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import { Download, Calendar as CalendarIcon, RotateCcw, ChevronDown } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { Download, RotateCcw, FileText, BarChart3, Award, FileSpreadsheet } from "lucide-react";
+import {
+  DateRangePicker,
+  MonthYearPicker,
+  yyyyMmToMonthYear,
+  monthYearToYyyyMm,
+} from '../common/CustomCalendar';
 import AgentQCReportPage from '../../pages/AgentQCReportPage';
-import UserCard from "../common/UserCard";
-import MonthCard from "../common/MonthCard";
-import { DateRangePicker } from "../common/CustomCalendar";
+import { formatISTDateTimeExport, formatISTDateDash, formatISTDateUpper } from "../../utils/dateTimeIST";
+
 
 
 
@@ -20,94 +27,38 @@ const BillableReport = () => {
   // Always call hooks at the top
   const { user } = useAuth();
   
-  // Simple MonthPicker component for selecting month/year in YYYY-MM format
-  const MonthPicker = ({ value, onChange }) => {
-    const [showPicker, setShowPicker] = useState(false);
-    const [viewYear, setViewYear] = useState(() => {
-      if (value) {
-        const [year] = value.split('-');
-        return parseInt(year);
-      }
-      return new Date().getFullYear();
-    });
-
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    const handleMonthSelect = (monthIndex) => {
-      const monthStr = String(monthIndex + 1).padStart(2, '0');
-      const dateStr = `${viewYear}-${monthStr}`;
-      onChange(dateStr);
-      setShowPicker(false);
-    };
-
-    const selectedMonth = value ? parseInt(value.split('-')[1]) - 1 : -1;
-    const selectedYear = value ? parseInt(value.split('-')[0]) : -1;
-
-    const displayValue = value ? (() => {
-      const [year, month] = value.split('-');
-      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      return `${monthNames[parseInt(month) - 1]} ${year}`;
-    })() : 'Select Month';
-
-    return (
-      <div>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
-          <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />
-          Month
-        </label>
-        <Popover open={showPicker} onOpenChange={setShowPicker}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-left flex items-center justify-between"
-            >
-              <span>{displayValue}</span>
-              <ChevronDown className="w-4 h-4 text-blue-600" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[280px] border-2 border-blue-200 bg-white p-4" align="start">
-            <div className="flex items-center justify-between mb-4">
-              <button
-                type="button"
-                onClick={() => setViewYear(y => y - 1)}
-                className="p-1.5 hover:bg-slate-100 rounded transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              </button>
-              <span className="font-bold text-sm text-slate-800">{viewYear}</span>
-              <button
-                type="button"
-                onClick={() => setViewYear(y => y + 1)}
-                className="p-1.5 hover:bg-slate-100 rounded transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {monthNames.map((month, index) => {
-                const isSelected = selectedYear === viewYear && selectedMonth === index;
-                return (
-                  <button
-                    key={month}
-                    type="button"
-                    onClick={() => handleMonthSelect(index)}
-                    className={cn(
-                      "text-sm p-2.5 rounded-lg transition-colors font-medium",
-                      isSelected
-                        ? "bg-blue-600 text-white font-bold"
-                        : "text-slate-700 hover:bg-blue-100"
-                    )}
-                  >
-                    {month}
-                  </button>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>
-    );
+  // Helper function to get QC score color classes
+  const getQCScoreColorClass = (score) => {
+    if (score === null || score === undefined || score === '-' || isNaN(Number(score))) return 'text-slate-700';
+    const numScore = Number(score);
+    if (numScore >= 98) return 'text-green-800 bg-green-100 font-bold';
+    if (numScore >= 95) return 'text-yellow-700 bg-yellow-100 font-bold';
+    return 'text-red-700 bg-red-200 font-bold';
   };
+
+  const getRosterStatus = (row) => row?.roster_status || row?.day_status || '—';
+
+  const getRosterStatusClass = (status) => {
+    const s = String(status || '').toLowerCase();
+    if (s.includes('week off')) return 'text-slate-700 bg-slate-100 font-semibold';
+    if (s.includes('holiday')) return 'text-purple-800 bg-purple-100 font-semibold';
+    if (s.includes('half day leave')) return 'text-amber-800 bg-amber-100 font-semibold';
+    if (s.includes('leave')) return 'text-orange-800 bg-orange-100 font-semibold';
+    if (s.includes('half day')) return 'text-amber-800 bg-amber-50 font-semibold';
+    if (s.includes('pre join')) return 'text-slate-600 bg-slate-50 font-semibold';
+    if (s.includes('working')) return 'text-green-800 bg-green-50 font-semibold';
+    return 'text-slate-600 bg-slate-50';
+  };
+
+  // Helper function to get tracker count color classes
+  const getTrackerCountColorClass = (count) => {
+    if (count === null || count === undefined || count === '-' || isNaN(Number(count))) return 'text-slate-700';
+    const numCount = Number(count);
+    if (numCount >= 9) return 'text-green-800 bg-green-100 font-bold';
+    if (numCount >= 7) return 'text-yellow-700 bg-yellow-100 font-bold';
+    return 'text-red-700 bg-red-200 font-bold';
+  };
+  
   // Export the visible monthly report table (with filters applied)
   const handleExportMonthlyTable = () => {
       try {
@@ -180,7 +131,6 @@ const BillableReport = () => {
   // Export daily report for a specific month-year from /tracker/view
   const handleExportMonthDailyExcel = async (monthYear) => {
     try {
-      // Build payload directly and use the same daily report API
       const payload = {
         logged_in_user_id: user?.user_id,
         month_year: monthYear
@@ -202,9 +152,7 @@ const BillableReport = () => {
       const exportData = trackers.map(row => {
         let formattedDateTime = '';
         if (row.date_time) {
-          const d = new Date(row.date_time);
-          const pad = (n) => n.toString().padStart(2, '0');
-          formattedDateTime = `${pad(d.getUTCDate())}-${pad(d.getUTCMonth() + 1)}-${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+          formattedDateTime = formatISTDateTimeExport(row.date_time);
         }
         return {
           'Date-Time': formattedDateTime,
@@ -284,7 +232,6 @@ const BillableReport = () => {
   const [dailyData, setDailyData] = useState([]);
   const [loadingDaily, setLoadingDaily] = useState(false);
   const [errorDaily, setErrorDaily] = useState(null);
-  const [expandedCards, setExpandedCards] = useState({});
 
   // Update date range when month filter changes
   useEffect(() => {
@@ -389,64 +336,6 @@ const BillableReport = () => {
   // No need to filter here, as API returns filtered data
   const filteredDailyData = dailyData;
 
-  const mapDailyRowsForCard = (rows) =>
-    rows.map(r => {
-      let date = '-';
-      let dayName = r.day || '';
-      if (r.work_date) {
-        const d = new Date(r.work_date);
-        if (!isNaN(d.getTime())) {
-          const pad = n => String(n).padStart(2, '0');
-          const dateStr = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
-          dayName = r.day || d.toLocaleDateString('en-US', { weekday: 'long' });
-          date = `${dateStr}\n${dayName}`;
-        }
-      }
-      const worked_hours = r.total_billable_hours_day != null && !isNaN(Number(r.total_billable_hours_day))
-        ? Number(r.total_billable_hours_day).toFixed(2)
-        : '-';
-      const daily_required_hours = r.daily_required_hours != null && !isNaN(Number(r.daily_required_hours))
-        ? Number(r.daily_required_hours).toFixed(2)
-        : '-';
-      const assigned_hours = r.assigned_hours != null ? r.assigned_hours : null;
-      const qc_score = r.qc_score != null ? r.qc_score : null;
-      const trackers_count_day = r.trackers_count_day != null ? r.trackers_count_day : null;
-
-      return {
-        date,
-        date_time: date,
-        work_date: r.work_date,
-        day: dayName,
-        assigned_hours,
-        assign_hours: assigned_hours,
-        assignHours: assigned_hours,
-        worked_hours,
-        workedHours: worked_hours,
-        billable_hours: worked_hours,
-        total_billable_hours_day: r.total_billable_hours_day,
-        qc_score,
-        qcScore: qc_score,
-        trackers_count_day,
-        daily_required_hours,
-        dailyRequiredHours: daily_required_hours,
-        tenure_target: r.daily_required_hours,
-      };
-    });
-
-  const agentCardUser = dailyData[0]
-    ? {
-        user_id: dailyData[0].user_id,
-        user_name: dailyData[0].user_name || user?.user_name,
-        team_name: dailyData[0].team_name,
-      }
-    : {
-        user_id: user?.user_id,
-        user_name: user?.user_name,
-        team_name: user?.team_name,
-      };
-
-  const agentCardId = String(agentCardUser.user_id || 'agent');
-
   // Export filtered daily data to Excel with totals
   const handleExportDailyExcel = () => {
     try {
@@ -460,14 +349,11 @@ const BillableReport = () => {
         // Only show date part from work_date
         let formattedDate = '-';
         if (row.work_date) {
-          const d = new Date(row.work_date);
-          if (!isNaN(d)) {
-            const pad = n => String(n).padStart(2, '0');
-            formattedDate = `${pad(d.getUTCDate())}-${pad(d.getUTCMonth() + 1)}-${d.getUTCFullYear()}`;
-          }
+          formattedDate = formatISTDateDash(row.work_date);
         }
         return {
           'Date': formattedDate,
+          'Day Status': row.roster_status || row.day_status || '—',
           'Assign Hours': row.assigned_hours != null ? Number(row.assigned_hours).toFixed(2) : '-',
           'Worked Hours': row.total_billable_hours_day != null ? Number(row.total_billable_hours_day).toFixed(2) : '-',
           'QC Score': row.qc_score != null ? `${Number(row.qc_score).toFixed(2)}%` : '-',
@@ -490,6 +376,7 @@ const BillableReport = () => {
       // Add totals row
       exportData.push({
         'Date': 'TOTAL',
+        'Day Status': '',
         'Assign Hours': totalAssigned.toFixed(2),
         'Worked Hours': totalWorked.toFixed(2),
         'QC Score': avgQC,
@@ -506,199 +393,366 @@ const BillableReport = () => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-      <div className="space-y-6">
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-white">Billable Report</h2>
-          <p className="text-blue-100 text-sm mt-1">View daily and monthly billable hours and performance metrics</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-md border-2 border-blue-100 p-6">
-          <div className="flex items-center gap-2">
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 border-2 ${activeToggle === 'daily' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md border-blue-700' : 'text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-400'}`}
-              onClick={() => setActiveToggle('daily')}
-            >
-              Daily Report
-            </button>
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 border-2 ${activeToggle === 'monthly' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md border-blue-700' : 'text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-400'}`}
-              onClick={() => setActiveToggle('monthly')}
-            >
-              Monthly Report
-            </button>
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 border-2 ${activeToggle === 'qc' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md border-blue-700' : 'text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-400'}`}
-              onClick={() => setActiveToggle('qc')}
-            >
-              QC Report
-            </button>
-          </div>
-        </div>
-
-      {activeToggle === 'daily' && (
-        <div className="w-full max-w-7xl mx-auto mt-4">
-          <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
-            <div className="flex flex-wrap items-end gap-4">
-              <div className="relative">
-                <MonthPicker
-                  value={monthFilter}
-                  onChange={setMonthFilter}
-                />
-              </div>
-
-              <div className="relative">
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                  <CalendarIcon className="w-4 h-4 text-blue-600" />
-                  Date Range
-                </label>
-                <DateRangePicker
-                  startDate={startDate}
-                  endDate={endDate}
-                  onStartDateChange={setStartDate}
-                  onEndDateChange={setEndDate}
-                  label=""
-                  description={null}
-                  showClearButton={false}
-                  compact={true}
-                  fieldWidth="180px"
-                  noWrapper={true}
-                  disabledMonths={monthFilter ? [monthFilter] : null}
-                  showOnlySelectedMonth={true}
-                />
-              </div>
-
-              <button
-                onClick={() => {
-                  const currentMonth = getCurrentMonthRange();
-                  setStartDate(currentMonth.start);
-                  setEndDate(currentMonth.end);
-                  setMonthFilter(currentMonth.month);
-                }}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg px-6 py-2.5 transition-all shadow-sm hover:shadow-md group"
-                type="button"
-              >
-                <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
-                Reset Filters
-              </button>
-
-              <button
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-                onClick={handleExportDailyExcel}
-              >
-                <Download className="w-4 h-4" />
-                Export
-              </button>
+    <div className="max-w-7xl mx-auto py-6 px-2 sm:px-4">
+      {/* Tabs Navigation - Match QA Agent List Style */}
+      <div className="bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden">
+        <div className="flex border-b border-slate-200">
+          <button
+            onClick={() => setActiveToggle('daily')}
+            className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+              activeToggle === 'daily'
+                ? 'text-blue-600 bg-blue-50'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <FileText className="w-4 h-4" />
+              <span>Daily Report</span>
             </div>
+            {activeToggle === 'daily' && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveToggle('monthly')}
+            className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+              activeToggle === 'monthly'
+                ? 'text-blue-600 bg-blue-50'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              <span>Monthly Report</span>
+            </div>
+            {activeToggle === 'monthly' && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveToggle('qc')}
+            className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+              activeToggle === 'qc'
+                ? 'text-blue-600 bg-blue-50'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Award className="w-4 h-4" />
+              <span>QC Report</span>
+            </div>
+            {activeToggle === 'qc' && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+            )}
+          </button>
+        </div>
+      </div>
+      {/* Daily Report view (table, filter, export) */}
+      {activeToggle === 'daily' && (
+        <div className="w-full max-w-7xl mx-auto">
+          {/* Filter Section - Enhanced Design */}
+          <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
+            <div className="flex flex-col gap-4">
+              {/* Filter Row */}
+              <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+                {/* Date Range Section */}
+                <div className="flex-1">
+                  <DateRangePicker
+                    startDate={startDate}
+                    endDate={endDate}
+                    onStartDateChange={setStartDate}
+                    onEndDateChange={setEndDate}
+                    noWrapper={true}
+                    showClearButton={false}
+                    disabledMonths={monthFilter ? [monthFilter] : null}
+                    showOnlySelectedMonth={true}
+                  />
+                </div>
+                
+                {/* Month Filter */}
+                <MonthYearPicker
+                  compact
+                  label="Month"
+                  selectedMonthYear={yyyyMmToMonthYear(monthFilter)}
+                  onMonthYearChange={(my) => {
+                    const yyyyMm = monthYearToYyyyMm(my);
+                    if (yyyyMm) setMonthFilter(yyyyMm);
+                  }}
+                  showAllOption={false}
+                />
+                
+                {/* Action Buttons */}
+                <div className="flex items-end gap-3">
+                  <button
+                    className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm hover:shadow-md transition-all duration-200 group"
+                    onClick={() => {
+                      const currentMonth = getCurrentMonthRange();
+                      setStartDate(currentMonth.start);
+                      setEndDate(currentMonth.end);
+                      setMonthFilter(currentMonth.month);
+                    }}
+                    type="button"
+                  >
+                    <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
+                    Reset Filters
+                  </button>
+                  
+                  <button
+                    onClick={handleExportDailyExcel}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
+                    title="Export filtered data to CSV"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            {/* User Guidance Message */}
+            {monthFilter && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-800">
+                      📅 Date Range Filter Active
+                    </p>
+                    <p className="text-blue-700 mt-1">
+                      The calendar is now restricted to <span className="font-semibold">{(() => {
+                        const [year, month] = monthFilter.split('-');
+                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                        return `${monthNames[parseInt(month) - 1]} ${year}`;
+                      })()}</span> only. 
+                      Select a different month from the Month Filter to change the available dates.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-
-          <div className="space-y-6">
+          {/* Daily Report Table - Enhanced Design */}
+          <div className="bg-white rounded-xl shadow-md border border-blue-100 overflow-hidden">
             {loadingDaily ? (
-              <div className="py-8 text-center text-blue-700 font-semibold">Loading daily report...</div>
+              <div className="py-12 text-center">
+                <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-200 border-t-blue-600 mb-3"></div>
+                <p className="text-blue-700 font-semibold">Loading daily report...</p>
+              </div>
             ) : errorDaily ? (
               <div className="p-6">
                 <ErrorMessage message={errorDaily} />
               </div>
             ) : (
-              <UserCard
-                key={agentCardId}
-                user={agentCardUser}
-                team_name={agentCardUser.team_name}
-                showTeam={false}
-                dailyData={mapDailyRowsForCard(filteredDailyData)}
-                expanded={expandedCards[agentCardId] !== false}
-                onToggleExpand={(isExpanded) => {
-                  setExpandedCards(prev => ({ ...prev, [agentCardId]: isExpanded }));
-                }}
-                selectedMonth={monthFilter}
-                rangeStart={startDate}
-                rangeEnd={endDate}
-                formatDateTime={(dateInput) => dateInput || '-'}
-                onRefresh={() => {}}
-              />
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-blue-100">
+                  <thead className="bg-gradient-to-r from-blue-50 to-blue-100">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Day Status</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Assign Hours</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Worked Hours</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">QC Score</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Tracker Count</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Daily Required Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-blue-50">
+                    {filteredDailyData.length > 0 ? (
+                      <>
+                        {filteredDailyData.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
+                            {/* Show only date part from work_date */}
+                            <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">{
+                              formatISTDateUpper(row.work_date)
+                            }</td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`px-2 py-1 rounded-lg inline-block ${getRosterStatusClass(getRosterStatus(row))}`}>
+                                {getRosterStatus(row)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center text-gray-900 font-medium">{
+                              row.assigned_hours != null
+                                ? Number(row.assigned_hours).toFixed(2)
+                                : '-'
+                            }</td>
+                            <td className="px-6 py-4 text-center text-gray-900 font-semibold">{
+                              row.total_billable_hours_day != null
+                                ? Number(row.total_billable_hours_day).toFixed(2)
+                                : '-'
+                            }</td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`px-2 py-1 rounded-lg inline-block ${getQCScoreColorClass(row.qc_score)}`}>
+                                {row.qc_score != null ? `${Number(row.qc_score).toFixed(2)}%` : '-'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`px-2 py-1 rounded-lg inline-block ${getTrackerCountColorClass(row.trackers_count_day)}`}>
+                                {row.trackers_count_day !== null && row.trackers_count_day !== undefined ? row.trackers_count_day : '-'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center text-gray-900 font-medium">{
+                              row.daily_required_hours != null
+                                ? Number(row.daily_required_hours).toFixed(2)
+                                : '-'
+                            }</td>
+                          </tr>
+                        ))}
+                        {/* Totals Row */}
+                        <tr className="bg-gradient-to-r from-blue-100 to-blue-200 border-t-2 border-blue-300">
+                          <td className="px-6 py-4 text-gray-900 font-bold whitespace-nowrap">TOTAL</td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-bold">—</td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-bold">
+                            {filteredDailyData.reduce((sum, row) => sum + (Number(row.assigned_hours) || 0), 0).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-bold">
+                            {filteredDailyData.reduce((sum, row) => sum + (Number(row.total_billable_hours_day) || 0), 0).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-bold">
+                            {(() => {
+                              const scores = filteredDailyData.filter(row => row.qc_score != null).map(row => Number(row.qc_score));
+                              return scores.length > 0 ? `${(scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2)}%` : '-';
+                            })()}
+                          </td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-bold">
+                            {filteredDailyData.reduce((sum, row) => sum + (Number(row.trackers_count_day) || 0), 0)}
+                          </td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-bold">
+                            {filteredDailyData.reduce((sum, row) => sum + (Number(row.daily_required_hours) || 0), 0).toFixed(2)}
+                          </td>
+                        </tr>
+                      </>
+                    ) : (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-sm">
+                          <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                          <p className="font-medium">No data available</p>
+                          <p className="text-xs mt-1">Try adjusting your filters</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
       )}
 
+      {/* Monthly Report view (summary table, per-row export) */}
       {activeToggle === 'monthly' && (
-        <div className="w-full max-w-7xl mx-auto mt-4">
-          <div className="bg-gradient-to-r from-blue-50 via-white to-indigo-50 rounded-xl shadow-md border border-blue-200 p-6 mb-6">
-            <div className="flex flex-wrap items-end gap-4">
-              <div className="flex flex-col gap-2">
-                <MonthPicker
-                  value={monthlyMonth}
-                  onChange={setMonthlyMonth}
-                />
+        <div className="w-full max-w-7xl mx-auto">
+          {/* Filter Section - Enhanced Design */}
+          <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+              {/* Month Filter */}
+              <MonthYearPicker
+                compact
+                label="Month"
+                selectedMonthYear={yyyyMmToMonthYear(monthlyMonth)}
+                onMonthYearChange={(my) => {
+                  const yyyyMm = monthYearToYyyyMm(my);
+                  if (yyyyMm) setMonthlyMonth(yyyyMm);
+                }}
+                showAllOption={false}
+              />
+              
+              {/* Action Buttons */}
+              <div className="flex items-end gap-3">
+                <button
+                  className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm hover:shadow-md transition-all duration-200 group"
+                  onClick={() => setMonthlyMonth(getCurrentMonthRange().month)}
+                  type="button"
+                >
+                  <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
+                  Reset Filters
+                </button>
+                
+                <button
+                  onClick={handleExportMonthlyTable}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
               </div>
-
-              <button
-                onClick={() => setMonthlyMonth(getCurrentMonthRange().month)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-                title="Reset all filters"
-                type="button"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Reset Filters
-              </button>
             </div>
           </div>
-          {loadingMonthly ? (
-            <div className="py-8 text-center text-blue-700 font-semibold">Loading monthly report...</div>
-          ) : errorMonthly ? (
-            <div className="py-8 text-center text-red-600 font-semibold">{errorMonthly}</div>
-          ) : monthlySummaryData.length > 0 ? (
-            <div className="space-y-6">
-              {Object.entries(groupByMonthYear(monthlySummaryData)).map(([month, users]) => (
-                <MonthCard
-                  key={month}
-                  month={parseMonthYear(month)}
-                  users={users.map(u => ({
-                    ...u,
-                    user_name: u.user_name || user?.user_name,
-                    team_name: u.team_name || user?.team_name,
-                    total_billable_hours: u.total_billable_hours ?? u.total_billable_hours_month,
-                    monthly_total_target: u.monthly_total_target ?? u.monthly_goal,
-                  }))}
-                  onExport={(rowUser) => handleExportMonthDailyExcel(rowUser.month_year || month)}
-                  onExportMonth={handleExportMonthlyTable}
-                  hideTeamColumn={true}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="py-8 text-center text-gray-400">No monthly data available</div>
-          )}
+          {/* Monthly Report Table - Enhanced Design */}
+          <div className="bg-white rounded-xl shadow-md border border-blue-100 overflow-hidden">
+            {loadingMonthly ? (
+              <div className="py-12 text-center">
+                <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-blue-200 border-t-blue-600 mb-3"></div>
+                <p className="text-blue-700 font-semibold">Loading monthly report...</p>
+              </div>
+            ) : errorMonthly ? (
+              <div className="p-6">
+                <div className="py-8 text-center text-red-600 font-semibold">{errorMonthly}</div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-blue-100">
+                  <thead className="bg-gradient-to-r from-blue-50 to-blue-100">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Year & Month</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Billable Hours Delivered</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Monthly Goal</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Pending Target</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Avg. QC Score</th>
+                      {/* <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Actions</th> */}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-blue-50">
+                    {monthlySummaryData.length > 0 ? (
+                      monthlySummaryData.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
+                          <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">{row.month_year}</td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-semibold">{row.total_billable_hours ? Number(row.total_billable_hours).toFixed(2) : (row.total_billable_hours_month ? Number(row.total_billable_hours_month).toFixed(2) : '-')}</td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-medium">{row.monthly_total_target ?? row.monthly_goal}</td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-medium">{row.pending_target ? Number(row.pending_target).toFixed(2) : '-'}</td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`px-2 py-1 rounded-lg inline-block ${getQCScoreColorClass(row.avg_qc_score)}`}>
+                              {row.avg_qc_score != null && row.avg_qc_score !== '-' ? `${Number(row.avg_qc_score).toFixed(2)}%` : '-'}
+                            </span>
+                          </td>
+                          {/* <td className="px-6 py-4 text-center">
+                            <button
+                              onClick={() => handleExportMonthDailyExcel(row.month_year)}
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
+                              title={`Export daily report for ${row.month_year}`}
+                            >
+                              <Download className="w-4 h-4" />
+                              <span>Export</span>
+                            </button>
+                          </td> */}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-12 text-center text-gray-400 text-sm">
+                          <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                          <p className="font-medium">No data available</p>
+                          <p className="text-xs mt-1">Try adjusting your filters</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
+      {/* QC Report view */}
       {activeToggle === 'qc' && (
         <AgentQCReportPage />
       )}
-      </div>
     </div>
   );
 };
-
-function groupByMonthYear(data) {
-  return data.reduce((acc, item) => {
-    let key = item.month_year;
-    if (!key || typeof key !== 'string' || !/^[A-Z]+\d{4}$/.test(key)) {
-      key = (item.month && item.year) ? `${item.month.toUpperCase()}${item.year}` : 'Unknown';
-    }
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(item);
-    return acc;
-  }, {});
-}
-
-function parseMonthYear(monthYear) {
-  if (!monthYear) return { label: '-', year: '-' };
-  const match = monthYear.match(/^([A-Z]+)(\d{4})$/);
-  if (match) {
-    return { label: match[1], year: match[2] };
-  }
-  return { label: monthYear, year: '' };
-}
 
 export default BillableReport;

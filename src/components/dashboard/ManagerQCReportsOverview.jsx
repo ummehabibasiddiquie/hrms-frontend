@@ -2,8 +2,10 @@
  * File: ManagerQCReportsOverview.jsx
  * Description: Manager/Admin comprehensive view of all QC activities and reports
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import TablePaginationBar from '../common/TablePaginationBar';
 import {
   FileCheck,
   CheckCircle2,
@@ -28,6 +30,22 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 import { DateRangePicker } from '../common/CustomCalendar';
 import { exportToCSV } from '../../utils/csvExport';
+import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
+
+const formatLocalDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDefaultDateRange = () => {
+  const today = new Date();
+  return {
+    startDate: formatLocalDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+    endDate: formatLocalDate(today),
+  };
+};
 
 const ManagerQCReportsOverview = () => {
   const { user } = useAuth();
@@ -59,10 +77,15 @@ const ManagerQCReportsOverview = () => {
   const [error, setError] = useState(null);
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
   
-  // Filters
+  // Filters — default to current month (1st through today)
+  const defaultDateRange = getDefaultDateRange();
   const [searchTerm, setSearchTerm] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(defaultDateRange.startDate);
+  const [endDate, setEndDate] = useState(defaultDateRange.endDate);
+
+  const qcPagination = useClientPagination(filteredRecords, {
+    resetKeys: [searchTerm, startDate, endDate],
+  });
 
 
   // Fetch QC history data
@@ -220,32 +243,7 @@ const ManagerQCReportsOverview = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return { date: 'N/A', time: '' };
-    // Parse the date string format: "Fri, 03 Apr 2026 15:26:48 GMT"
-    // Extract date and time directly without timezone conversion
-    const match = dateString.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
-    if (match) {
-      const [, day, month, year, hours, minutes] = match;
-      const hour = parseInt(hours, 10);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const hour12 = hour % 12 || 12;
-      return {
-        date: `${parseInt(day, 10)}/${month}/${year}`,
-        time: `${hour12}:${minutes} ${ampm}`
-      };
-    }
-    // Fallback for unexpected format - use UTC to avoid timezone conversion
-    const date = new Date(dateString);
-    const day = date.getUTCDate();
-    const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-    const year = date.getUTCFullYear();
-    const hours = date.getUTCHours();
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const hour12 = hours % 12 || 12;
-    return {
-      date: `${day}/${month}/${year}`,
-      time: `${hour12}:${minutes} ${ampm}`
-    };
+    return formatISTDateTimeParts(dateString);
   };
 
   const parseErrors = (errorString) => {
@@ -280,10 +278,10 @@ const ManagerQCReportsOverview = () => {
   };
 
   const handleReset = () => {
-    setFilteredRecords(qcRecords);
+    const range = getDefaultDateRange();
     setSearchTerm('');
-    setStartDate('');
-    setEndDate('');
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
     setSelectedRecord(null);
   };
 
@@ -706,7 +704,7 @@ const ManagerQCReportsOverview = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredRecords.map((record, index) => (
+                  qcPagination.pagedItems.map((record, index) => (
                     <React.Fragment key={record.id || index}>
                     <tr className="hover:bg-slate-50 transition-colors">
                       {/* Evaluation Date - created_at */}
@@ -1002,6 +1000,7 @@ const ManagerQCReportsOverview = () => {
               </tbody>
             </table>
           </div>
+          <TablePaginationBar {...qcPagination} itemLabel="QC records" />
         </div>
       </div>
 

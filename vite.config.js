@@ -11,7 +11,7 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
-  const apiBaseURL = "http://192.168.125.209:5000";
+  const apiBaseURL = env.VITE_API_BASE_URL || "http://127.0.0.1:5000";
 
   return {
     plugins: [react(), tailwindcss()],
@@ -120,6 +120,14 @@ export default defineConfig(({ mode }) => {
         },
 
         "/qc_afd": {
+          target: apiBaseURL,
+
+          changeOrigin: true,
+
+          secure: false,
+        },
+
+        "/roster": {
           target: apiBaseURL,
 
           changeOrigin: true,

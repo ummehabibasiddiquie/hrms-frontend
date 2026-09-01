@@ -9,6 +9,7 @@ const ROLE_MAP = {
   6: "AGENT"
 };
 import { ViewState } from "../../utils/constants";
+import { ROUTES, dashboardTabUrl } from "../../routes/paths";
 import {
   LayoutDashboard,
   PenTool,
@@ -26,7 +27,8 @@ import {
   Brain,
   UserCheck,
   BarChart3,
-  CheckCircle2
+  CheckCircle2,
+  CalendarDays
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import GeminiKeyModal from "../GeminiKeyModal";
@@ -96,86 +98,71 @@ const Header = ({
   };
 
   // -----------------------------
-  // ROUTE MAP
+  // ROUTE HELPERS (see routes/paths.js for path constants)
   // -----------------------------
-     const ROUTES = {
-       DASHBOARD: "/dashboard",
-       ADMIN_PANEL: "/admin",
-       ENTRY: "/entry",
-       GUIDELINES: "/guidelines",
-       SCHEDULER: "/scheduler",
-       QUALITY: "/quality"
-     };
 
-  // Helper for Navigation with role-based routing
   const goTo = (view) => {
     const roleId = Number(currentUser.role_id);
     const role = (currentUser?.role || currentUser?.role_name || currentUser?.user_role || '').toString().toUpperCase();
     
     // Handle Analytics tab for all roles: always go to /dashboard?tab=overview
     if (view === ViewState.DASHBOARD || view === 'DASHBOARD' || view === 'Analytics') {
-      navigate('/dashboard?tab=overview');
+      navigate(dashboardTabUrl('overview'));
       setIsMobileMenuOpen(false);
       return;
     }
-    // Handle QA-specific views
     if (view === 'TRACKER_REPORT') {
-      // For Assistant Manager and QA Agent, open the tracker_report tab
-      navigate('/dashboard?tab=tracker_report');
+      navigate(dashboardTabUrl('tracker_report'));
       setIsMobileMenuOpen(false);
       return;
     }
     if (view === 'AGENT_LIST') {
-      // For Assistant Manager and QA Agent, open the agent_file_report tab
-      navigate('/dashboard?tab=agent_file_report');
+      navigate(dashboardTabUrl('agent_file_report'));
       setIsMobileMenuOpen(false);
       return;
     }
     if (view === 'QC_REPORT_OVERVIEW') {
-      // For Admin, Super Admin, PM, and Assistant Manager
-      navigate('/dashboard?tab=qc_report_overview');
+      navigate(dashboardTabUrl('qc_report_overview'));
       setIsMobileMenuOpen(false);
       return;
     }
     if (view === 'QA_AGENT_AUDIT') {
-      // For Admin, Super Admin, PM, and Assistant Manager
-      navigate('/dashboard?tab=qa_agent_audit');
+      navigate(dashboardTabUrl('qa_agent_audit'));
+      setIsMobileMenuOpen(false);
+      return;
+    }
+    if (view === 'MY_ROSTER') {
+      navigate(dashboardTabUrl('my_roster'));
       setIsMobileMenuOpen(false);
       return;
     }
     
-    // Manage now lives inside the dashboard for all supported roles.
     if (view === ViewState.ADMIN_PANEL) {
-      navigate('/dashboard?tab=manage');
+      navigate(dashboardTabUrl('manage'));
       setIsMobileMenuOpen(false);
       return;
     }
     
-    // For agents (role_id 6 or role includes 'AGENT')
     if (roleId === 6 || role.includes('AGENT')) {
       if (view === ViewState.ENTRY || view === 'ENTRY') {
-        navigate("/agent");
+        navigate(ROUTES.AGENT);
       } else if (view === ViewState.DASHBOARD || view === 'DASHBOARD') {
-        navigate("/dashboard");
+        navigate(ROUTES.DASHBOARD);
       } else if (view === 'billable_report') {
-        // Set the billable_report tab for agent
-        navigate('/dashboard?tab=billable_report');
+        navigate(dashboardTabUrl('billable_report'));
       } else if (view === 'AI_EVALUATION') {
-        navigate("/ai-evaluation");
+        navigate(ROUTES.AI_EVALUATION);
         setIsMobileMenuOpen(false);
         return;
       } else if (view === 'AGENT_PROJECTS') {
-        navigate("/agent-projects");
+        navigate(ROUTES.AGENT_PROJECTS);
         setIsMobileMenuOpen(false);
         return;
       } else {
-        const target = ROUTES[view] || "/agent";
-        navigate(target);
+        navigate(ROUTES.AGENT);
       }
     } else {
-      // For admins and other roles
-      const target = ROUTES[view] || "/dashboard";
-      navigate(target);
+      navigate(ROUTES.DASHBOARD);
     }
     setIsMobileMenuOpen(false);
   };
@@ -205,11 +192,9 @@ const Header = ({
     if (roleId === 6 || role.includes('AGENT')) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
-        // Billable Report tab removed for agents in header
+        { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: ViewState.ENTRY, label: "Tracker", icon: PenTool },
         { view: "AI_EVALUATION", label: "AI Evaluation", icon: Brain },
-        { view: "AGENT_PROJECTS", label: "Projects", icon: Database, disabled: true },
-        // Roster tab temporarily removed for agents
       ];
     }
     if (!role) {
@@ -218,6 +203,7 @@ const Header = ({
         if (roleId === 5) {
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+            { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
           ];
@@ -251,6 +237,7 @@ const Header = ({
     if (role.includes('QA')) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+        { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
       ];
@@ -291,7 +278,8 @@ const Header = ({
 
     // Check for Analytics/Dashboard
     if (view === ViewState.DASHBOARD || view === 'Analytics') {
-      return currentPath === '/dashboard' && (currentTab === 'overview' || !currentTab);
+      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report'];
+      return currentPath === '/dashboard' && (!currentTab || analyticsTabs.includes(currentTab));
     }
 
     // Check for Tracker Report
@@ -314,28 +302,28 @@ const Header = ({
       return currentPath === '/dashboard' && currentTab === 'qa_agent_audit';
     }
 
+    if (view === 'MY_ROSTER') {
+      return currentPath === '/dashboard' && currentTab === 'my_roster';
+    }
+
     // Check for Manage/Admin Panel
     if (view === ViewState.ADMIN_PANEL) {
-      return (currentPath === '/admin' || (currentPath === '/dashboard' && currentTab === 'manage'));
+      return currentPath === ROUTES.DASHBOARD && currentTab === 'manage';
     }
 
-    // Check for Entry/Tracker (Agents only)
     if (view === ViewState.ENTRY) {
-      // For agents, check if current path is /agent
       if (roleId === 6 || role.includes('AGENT')) {
-        return currentPath === '/agent';
+        return currentPath === ROUTES.AGENT;
       }
-      return false; // Non-agents don't have this in header anymore
+      return false;
     }
 
-    // Check for AI Evaluation (Agents only)
     if (view === 'AI_EVALUATION') {
-      return currentPath === '/ai-evaluation';
+      return currentPath === ROUTES.AI_EVALUATION;
     }
 
-    // Check for Agent Projects
     if (view === 'AGENT_PROJECTS') {
-      return currentPath === '/agent-projects';
+      return currentPath === ROUTES.AGENT_PROJECTS;
     }
 
     // Check for Billable Report

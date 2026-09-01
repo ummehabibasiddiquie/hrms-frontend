@@ -1,22 +1,21 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { ROUTES, getHomeRouteForUser } from "./paths";
 
-// allowedRoles: array of allowed role_ids (e.g. [1,2,3,4,5,6])
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user } = useAuth();
-  console.log('🛡️ [ProtectedRoute] user:', user?.user_id, 'role_id:', user?.role_id, 'allowedRoles:', allowedRoles);
+
   if (!user) {
-    console.log('🛡️ [ProtectedRoute] No user, redirecting to /');
-    return <Navigate to="/" />;
+    return <Navigate to={ROUTES.LOGIN} replace />;
   }
+
   if (allowedRoles) {
     const roleId = Number(user.role_id);
     if (!allowedRoles.includes(roleId)) {
-      console.log('🛡️ [ProtectedRoute] Access denied! roleId', roleId, 'not in', allowedRoles, '- redirecting to /');
-      return <Navigate to="/" />;
+      return <Navigate to={getHomeRouteForUser(user)} replace />;
     }
-    console.log('🛡️ [ProtectedRoute] Access granted! roleId', roleId, 'in', allowedRoles);
   }
+
   return children;
 };
 

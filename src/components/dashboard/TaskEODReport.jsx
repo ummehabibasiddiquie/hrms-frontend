@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Calendar, Download, FileText, Loader2, X } from 'lucide-react';
+import { Calendar, Download, FileText, Loader2, RotateCcw, X } from 'lucide-react';
 import { fetchEODReportList, fetchEODReportTrackers, generateEODReport } from '../../services/projectService';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
@@ -315,46 +315,47 @@ const TaskEODReport = () => {
               )}
             </div>
           </div>
-          <div className="flex flex-col gap-3 xl:items-end">
-            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-center gap-2 pr-1">
-                <Calendar className="w-4 h-4 text-blue-600" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Date Filter</span>
-              </div>
+          <div className="flex flex-wrap items-end gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">From</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  From
+                </label>
                 <input
                   type="date"
                   value={fromDate}
                   max={toDate || undefined}
                   onChange={handleFromDateChange}
-                  className="px-3 py-2 border border-slate-300 rounded-md bg-white text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 transition-all text-slate-700"
+                  className="w-[180px] px-4 py-2.5 text-sm border border-slate-300 rounded-lg bg-slate-50 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-slate-700 hover:border-blue-400"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">To</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  To
+                </label>
                 <input
                   type="date"
                   value={toDate}
                   min={fromDate || undefined}
                   onChange={handleToDateChange}
-                  className="px-3 py-2 border border-slate-300 rounded-md bg-white text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200 transition-all text-slate-700"
+                  className="w-[180px] px-4 py-2.5 text-sm border border-slate-300 rounded-lg bg-slate-50 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-slate-700 hover:border-blue-400"
                 />
               </div>
               <button
                 type="button"
                 onClick={handleResetFilters}
                 disabled={loading}
-                className="px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-100 transition-all shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold rounded-lg transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
+                <RotateCcw className="w-4 h-4" />
                 Reset
               </button>
-            </div>
-            {reportData && (
-              <span className="text-sm text-slate-600">
-                {reportData.total_tasks} task{reportData.total_tasks !== 1 ? 's' : ''} found
-              </span>
-            )}
+              {reportData && (
+                <span className="text-sm font-medium text-slate-600 self-center">
+                  {reportData.total_tasks} task{reportData.total_tasks !== 1 ? 's' : ''} found
+                </span>
+              )}
           </div>
         </div>
 

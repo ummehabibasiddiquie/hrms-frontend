@@ -1,12 +1,12 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Lock, FolderKanban, Plus, Search, Filter, Briefcase } from 'lucide-react';
+import React, { useEffect, useMemo, useState, useCallback, useRef, useLayoutEffect } from 'react';
+import { Lock, FolderKanban, Search, RotateCcw } from 'lucide-react';
 import { useAuth } from "../../../../context/AuthContext";
 import { useProjectManagement } from "../../../../hooks/useProjectManagement";
 
 
 import AddProjectForm from './AddProjectForm';
 import EditProjectModal from './EditProjectModal';
-import ProjectCard from './ProjectCard';
+import ProjectManagementPanel from './ProjectManagementPanel';
 import DeleteProjectModal from './DeleteProjectModal';
 import { useUserDropdowns } from "../../../../hooks/useUserDropdowns";
 import { fetchProjectsList } from '../../../../services/projectService';
@@ -108,21 +108,6 @@ const ProjectsManagement = ({
     );
   }
 
-  // Map the data for the old form compatibility
-  const potentialOwners = projectManagers.map(pm => ({
-    id: pm.id,
-    name: pm.name
-  }));
-
-  const potentialAPMs = assistantManagers.map(am => ({
-    id: am.id,
-    name: am.name
-  }));
-
-  const potentialQAs = qaManagers.map(qa => ({
-    id: qa.id,
-    name: qa.name
-  }));
 
   // Wrapper function to load dropdowns before opening edit modal
   const handleOpenEditModal = async (project) => {
@@ -225,68 +210,92 @@ const ProjectsManagement = ({
   console.log('  - teams:', normalizedTeams);
   console.log('  - projectCategories:', normalizedProjectCategories);
 
-  // Expanded state for each project card
-  const [expandedCards, setExpandedCards] = useState({});
+  const [projectNameSearch, setProjectNameSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const handleExpandCard = (projectId, value) => {
-    setExpandedCards(prev => ({ ...prev, [projectId]: value }));
+  const filteredProjects = useMemo(() => {
+    let list = [...projects];
+
+    if (projectNameSearch.trim()) {
+      const q = projectNameSearch.trim().toLowerCase();
+      list = list.filter((p) =>
+        (p.name || p.project_name || "").toLowerCase().includes(q)
+      );
+    }
+
+    if (statusFilter === "active") {
+      list = list.filter((p) => Number(p.is_active ?? 1) === 1);
+    } else if (statusFilter === "inactive") {
+      list = list.filter((p) => Number(p.is_active ?? 1) !== 1);
+    }
+
+    return list.sort((a, b) =>
+      (a.name || a.project_name || "").localeCompare(b.name || b.project_name || "", undefined, { sensitivity: "base" })
+    );
+  }, [projects, projectNameSearch, statusFilter]);
+
+  const activeCount = useMemo(
+    () => projects.filter((p) => Number(p.is_active ?? 1) === 1).length,
+    [projects]
+  );
+
+  const handleResetFilters = () => {
+    setProjectNameSearch("");
+    setStatusFilter("all");
   };
 
-  // Project Name filter state
-  const [projectNameSearch, setProjectNameSearch] = useState("");
+  const shellRef = useRef(null);
 
-  // Filtered projects by project name
-  const filteredProjects = useMemo(() => {
-    if (!projectNameSearch.trim()) return projects;
-    return projects.filter(p => (p.name || p.project_name || "").toLowerCase().includes(projectNameSearch.trim().toLowerCase()));
-  }, [projects, projectNameSearch]);
+  // Fill remaining viewport height — same approach as Billable Report (~10–15 visible rows)
+  useLayoutEffect(() => {
+    const applyHeight = () => {
+      const el = shellRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const height = Math.max(680, window.innerHeight - top - 8);
+      el.style.setProperty("height", `${height}px`, "important");
+      el.style.setProperty("min-height", `${height}px`, "important");
+      el.style.setProperty("max-height", `${height}px`, "important");
+    };
+
+    applyHeight();
+    const rafId = requestAnimationFrame(applyHeight);
+    const timeoutId = window.setTimeout(applyHeight, 150);
+    window.addEventListener("resize", applyHeight);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("resize", applyHeight);
+      const el = shellRef.current;
+      if (el) {
+        el.style.removeProperty("height");
+        el.style.removeProperty("min-height");
+        el.style.removeProperty("max-height");
+      }
+    };
+  }, [loading, filteredProjects.length]);
+
+  const filterCardClass =
+    "bg-gradient-to-r from-blue-50 via-white to-indigo-50 rounded-xl shadow-md border border-blue-200 p-6";
+
+  const resetFiltersButtonClass =
+    "flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200";
 
   return (
-    <div className="space-y-6 animate-fade-in p-4 md:p-0 w-full overflow-x-hidden">
-      {/* Modern Header with Gradient */}
-      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 rounded-xl shadow-lg p-6 text-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-3 rounded-lg backdrop-blur-sm">
-              <FolderKanban className="w-6 h-6" />
-            </div>
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+      <div className="space-y-6 animate-fade-in">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-bold">Project Management</h2>
-              <p className="text-blue-100 text-sm">Manage projects, tasks, and teams</p>
+              <h2 className="font-bold text-white text-2xl flex items-center gap-3">
+                <FolderKanban className="w-7 h-7" />
+                Project Management
+              </h2>
+              <p className="text-blue-100 text-sm mt-1">
+                Manage projects and tasks — {activeCount} active of {projects.length} total
+              </p>
             </div>
-          </div>
-          <div className="hidden md:flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm">
-            <Briefcase className="w-5 h-5" />
-            <span className="font-semibold">{filteredProjects.length} Projects</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Modern Filter Bar with Add Project */}
-      {!readOnly && !isEditMode && (
-        <div className="bg-white rounded-xl shadow-md border border-slate-200 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-2 rounded-lg">
-              <Filter className="w-5 h-5 text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-800">Search & Add Projects</h3>
-          </div>
-          
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="flex-1">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                <Search className="w-4 h-4 inline mr-1" />
-                Project Name
-              </label>
-              <input
-                type="text"
-                placeholder="Search by project name"
-                value={projectNameSearch || ""}
-                onChange={e => setProjectNameSearch(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-              />
-            </div>
-            <div className="flex items-end">
+            {!readOnly && !isEditMode && (
               <AddProjectForm
                 newProject={newProject}
                 onFieldChange={updateNewProjectField}
@@ -308,14 +317,60 @@ const ProjectsManagement = ({
                 projectNameSearch={projectNameSearch}
                 setProjectNameSearch={setProjectNameSearch}
               />
-            </div>
+            )}
           </div>
         </div>
-      )}
 
-      {showEditModal && isEditMode && newProject && (
-        <>
-          {console.log('[ProjectsManagement] Rendering EditProjectModal with newProject:', newProject)}
+        <div className={filterCardClass}>
+          <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-end gap-4">
+            <div className="flex-1 min-w-[220px]">
+              <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                <Search className="w-4 h-4 text-blue-600" />
+                Search Project
+              </label>
+              <input
+                type="text"
+                placeholder="Search by project name..."
+                value={projectNameSearch}
+                onChange={(e) => setProjectNameSearch(e.target.value)}
+                className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all hover:border-blue-400"
+              />
+            </div>
+
+            <div className="w-full sm:w-auto">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Status
+              </label>
+              <div className="flex items-center gap-2">
+                {[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setStatusFilter(value)}
+                    className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                      statusFilter === value
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "bg-white border border-slate-300 text-slate-600 hover:border-blue-400"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button type="button" onClick={handleResetFilters} className={resetFiltersButtonClass}>
+              <RotateCcw className="w-4 h-4" />
+              Reset Filters
+            </button>
+          </div>
+        </div>
+
+        {showEditModal && isEditMode && newProject && (
           <EditProjectModal
             key={`edit-${editingProjectId}-${Date.now()}`}
             project={newProject}
@@ -334,57 +389,29 @@ const ProjectsManagement = ({
             onFieldChange={updateNewProjectField}
             clearFieldError={clearFieldError}
           />
-        </>
-      )}
+        )}
 
-      {/* Projects Content Area */}
-      {loading ? (
-        <div className="bg-white rounded-xl shadow-md border border-slate-200 p-12">
-          <div className="flex flex-col items-center justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent mb-4"></div>
-            <p className="text-slate-600 font-medium">Loading projects...</p>
-          </div>
-        </div>
-      ) : filteredProjects.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-md border border-slate-200 p-12">
-          <div className="text-center">
-            <div className="bg-slate-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FolderKanban className="w-10 h-10 text-slate-400" />
+        <div ref={shellRef} className="flex flex-col min-h-0 overflow-hidden">
+          {loading ? (
+            <div className="h-full min-h-[480px] flex flex-col items-center justify-center bg-white rounded-xl shadow-md border border-blue-100">
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent mb-3" />
+              <p className="text-slate-600 text-sm font-medium">Loading projects...</p>
             </div>
-            <h3 className="text-lg font-bold text-slate-700 mb-2">No projects found</h3>
-            <p className="text-slate-500">Create your first project using the form above</p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filteredProjects.map(proj => (
-            <ProjectCard
-              key={proj.id}
-              project={proj}
+          ) : (
+            <ProjectManagementPanel
+              projects={filteredProjects}
               readOnly={readOnly || !canManageProjects}
-              potentialOwners={potentialOwners}
-              potentialAPMs={potentialAPMs}
-              potentialQAs={potentialQAs}
-              onDeleteProject={handleDeleteProject}
-              onUpdateTarget={(id, v) => handleUpdateProjectField(id, 'monthlyHoursTarget', v)}
-              onUpdateOwner={(id, v) => handleUpdateProjectField(id, 'teamOwner', v)}
-              onUpdateAPM={(id, v) => handleUpdateProjectField(id, 'apmOwner', v)}
-              onUpdateQA={(id, v) => handleUpdateProjectField(id, 'qaOwner', v)}
-              onUpdateName={(id, v) => handleUpdateProjectField(id, 'name', v)}
               onAddTask={handleAddTask}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
               openEditModal={handleOpenEditModal}
               openDeleteModal={openDeleteModal}
-              expanded={!!expandedCards[proj.id]}
-              setExpanded={value => handleExpandCard(proj.id, value)}
               onStatusChanged={() => loadProjects && loadProjects()}
             />
-          ))}
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Delete Project Modal */}
       {showDeleteModal && (
         <DeleteProjectModal
           project={deletingProject}
