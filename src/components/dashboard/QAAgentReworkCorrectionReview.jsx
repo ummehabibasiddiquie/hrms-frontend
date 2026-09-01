@@ -21,6 +21,9 @@ import {
   Loader2,
   FolderOpen
 } from 'lucide-react';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import TablePaginationBar from '../common/TablePaginationBar';
+import { formatISTDateMedium } from '../../utils/dateTimeIST';
 
 // Dummy data
 const dummyPendingReviews = [
@@ -226,6 +229,11 @@ const QAAgentReworkCorrectionReview = () => {
     return records;
   }, [selectedAgentId, typeFilter]);
 
+  const agentPagination = useClientPagination(filteredAgents, { resetKeys: [searchQuery] });
+  const recordsPagination = useClientPagination(selectedAgentRecords, {
+    resetKeys: [selectedAgentId, typeFilter],
+  });
+
   const selectedAgent = agents.find(a => a.agent_id === selectedAgentId);
 
   useEffect(() => {
@@ -251,8 +259,7 @@ const QAAgentReworkCorrectionReview = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '—';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    return formatISTDateMedium(dateString);
   };
 
   const openErrorModal = (errors, title) => {
@@ -338,7 +345,7 @@ const QAAgentReworkCorrectionReview = () => {
 
               {/* Agents List */}
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                {filteredAgents.map((agent) => {
+                {agentPagination.pagedItems.map((agent) => {
                   const isSelected = selectedAgentId === agent.agent_id;
 
                   return (
@@ -391,6 +398,7 @@ const QAAgentReworkCorrectionReview = () => {
                   );
                 })}
               </div>
+              <TablePaginationBar {...agentPagination} itemLabel="agents" className="border-t-2 border-slate-200" />
             </div>
 
             {/* Right Panel - Agent's Records */}
@@ -463,7 +471,7 @@ const QAAgentReworkCorrectionReview = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {selectedAgentRecords.map((record) => (
+                            {recordsPagination.pagedItems.map((record) => (
                               <tr key={record.id} className="hover:bg-slate-50">
                                 <td className="px-4 py-3">
                                   {record.review_type === 'rework' ? (
@@ -555,6 +563,7 @@ const QAAgentReworkCorrectionReview = () => {
                             ))}
                           </tbody>
                         </table>
+                        <TablePaginationBar {...recordsPagination} itemLabel="files" />
                       </div>
                     )}
                   </div>

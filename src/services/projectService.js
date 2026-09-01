@@ -83,7 +83,9 @@ export const deleteTask = async (projectId, taskId, qcPercentage) => {
     task_id: taskId,
   };
   if (qcPercentage) payload.qc_percentage = qcPercentage;
+  console.log('[deleteTask] Sending payload:', payload);
   const res = await api.put("/task/delete", payload);
+  console.log('[deleteTask] Response:', res);
   return res.data;
 };
 
@@ -145,6 +147,30 @@ export const updateProject = async (projectId, payload) => {
 export const deleteProject = async (projectId) => {
   const res = await api.post("/project/delete", {
     project_id: projectId
+  });
+  return res.data;
+};
+
+/**
+ * Fetch Task EOD Report List API
+ */
+export const fetchEODReportList = async (filters = {}) => {
+  const res = await api.post("/tracker/eod-report/list", filters);
+  return res.data;
+};
+
+export const fetchEODReportTrackers = async (filters = {}) => {
+  const res = await api.post("/tracker/eod-report/trackers", filters);
+  return res.data;
+};
+
+/**
+ * Generate Task EOD Report API
+ * @param {object} data - { task_id, project_id, date }
+ */
+export const generateEODReport = async (data) => {
+  const res = await api.post("/tracker/eod-report/generate", data, {
+    responseType: 'blob'
   });
   return res.data;
 };

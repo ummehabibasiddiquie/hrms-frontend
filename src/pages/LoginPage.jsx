@@ -3,6 +3,7 @@ import { User, Lock, LogIn, Loader2, Eye, EyeOff, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import { loginUser, forgotPassword } from "../services/authService";
+import { prefetchAgentGoalStatus } from "../services/agentGoalStatusService";
 import { useAuth } from "../context/AuthContext";
 import { useDeviceInfo } from "../hooks/useDeviceInfo";
 import { log, logError } from "../config/environment";
@@ -170,11 +171,14 @@ const LoginPage = () => {
         return;
       }
       
-      login(userData);
-      
-      // Get role ID from user data
       const roleId = Number(userData.role_id);
-      const role = ROLE_MAP[roleId] || "";
+
+      login(userData);
+
+      // Prefetch goal popup data while navigating (agents only)
+      if (roleId === 6) {
+        prefetchAgentGoalStatus(userData);
+      }
 
       toast.success("You are now logged in!", { duration: 4000 });
 

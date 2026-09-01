@@ -3,6 +3,8 @@
  * Description: QA Agent's view of all QC forms they've submitted with complete history
  */
 import React, { useState, useEffect } from 'react';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import TablePaginationBar from '../common/TablePaginationBar';
 import { toast } from 'react-hot-toast';
 import {
   FileCheck,
@@ -22,16 +24,23 @@ import {
 } from 'lucide-react';
 import LoadingSpinner from '../common/LoadingSpinner';
 import CustomSelect from '../common/CustomSelect';
+import { DateRangePicker } from '../common/CustomCalendar';
+import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { exportToCSV } from '../../utils/csvExport';
+import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
+
 
 const QAAgentQCFormReport = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [qcRecords, setQcRecords] = useState([]);
   const [filteredRecords, setFilteredRecords] = useState([]);
   const [expandedRow, setExpandedRow] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [qcFilter, setQcFilter] = useState('all');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
 
   // Fetch QC history from API
@@ -47,6 +56,8 @@ const QAAgentQCFormReport = () => {
           agent_name: record.agent_name,
           project_name: record.project_name,
           task_name: record.task_name,
+          qa_user_id: record.qa_user_id,
+          qc_name: record.qc_name,
           qc_score: record.qc_score,
           status: record.status,
           qc_status: record.qc_status,
@@ -77,16 +88,26 @@ const QAAgentQCFormReport = () => {
     fetchQCHistory();
   }, []);
 
-  // Apply filters when search or status changes
+  // Unique QC names for dropdown (from loaded records)
+  const qcFilterOptions = [
+    { value: 'all', label: 'All QC' },
+    ...[...new Set(qcRecords.map(r => r.qc_name).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+      .map(name => ({ value: name, label: name }))
+  ];
+
+  // Apply filters when search, status, QC, or date range changes
   useEffect(() => {
     let filtered = [...qcRecords];
 
     // Search filter
     if (searchTerm) {
+      const term = searchTerm.toLowerCase();
       filtered = filtered.filter(record =>
-        record.agent_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        record.task_name?.toLowerCase().includes(searchTerm.toLowerCase())
+        record.agent_name?.toLowerCase().includes(term) ||
+        record.project_name?.toLowerCase().includes(term) ||
+        record.task_name?.toLowerCase().includes(term) ||
+        record.qc_name?.toLowerCase().includes(term)
       );
     }
 
@@ -95,8 +116,36 @@ const QAAgentQCFormReport = () => {
       filtered = filtered.filter(record => record.status === statusFilter);
     }
 
+    // QC name filter
+    if (qcFilter !== 'all') {
+      filtered = filtered.filter(record => record.qc_name === qcFilter);
+    }
+
+    // Date range filter
+    if (dateRange.start || dateRange.end) {
+      filtered = filtered.filter(record => {
+        const submissionDate = record.date_of_file_submission ? new Date(record.date_of_file_submission) : null;
+        if (!submissionDate) return false;
+
+        const startDate = dateRange.start ? new Date(dateRange.start) : null;
+        const endDate = dateRange.end ? new Date(dateRange.end) : null;
+
+        if (startDate && submissionDate < startDate) return false;
+        if (endDate) {
+          const endDateTime = new Date(endDate);
+          endDateTime.setHours(23, 59, 59, 999);
+          if (submissionDate > endDateTime) return false;
+        }
+        return true;
+      });
+    }
+
     setFilteredRecords(filtered);
-  }, [searchTerm, statusFilter, qcRecords]);
+  }, [searchTerm, statusFilter, qcFilter, dateRange, qcRecords]);
+
+  const recordsPagination = useClientPagination(filteredRecords, {
+    resetKeys: [searchTerm, statusFilter, dateRange.start, dateRange.end],
+  });
 
   const getStatusBadge = (status) => {
     if (status === 'regular' || status === 'completed') {
@@ -152,26 +201,7 @@ const QAAgentQCFormReport = () => {
 
   const formatDateTime = (dateString) => {
     if (!dateString) return '—';
-    // Parse the date string format: "Fri, 03 Apr 2026 11:10:33 GMT"
-    // Extract date and time directly without timezone conversion
-    const match = dateString.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
-    if (match) {
-      const [, day, month, year, hours, minutes] = match;
-      const hour = parseInt(hours, 10);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const hour12 = hour % 12 || 12;
-      return `${parseInt(day, 10).toString().padStart(2, '0')} ${month} ${year}, ${hour12.toString().padStart(2, '0')}:${minutes} ${ampm.toLowerCase()}`;
-    }
-    // Fallback for unexpected format - use UTC to avoid timezone conversion
-    const date = new Date(dateString);
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-    const year = date.getUTCFullYear();
-    const hours = date.getUTCHours();
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'pm' : 'am';
-    const hour12 = hours % 12 || 12;
-    return `${day} ${month} ${year}, ${hour12.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    return formatISTDateTimeLong(dateString, dateString);
   };
 
   const getScoreClass = (score) => {
@@ -214,6 +244,7 @@ const QAAgentQCFormReport = () => {
           'Agent Name': record.agent_name || 'N/A',
           'Project Name': record.project_name || 'N/A',
           'Task Name': record.task_name || 'N/A',
+          'QC Name': record.qc_name || 'N/A',
           'QC Score': record.qc_score ? `${record.qc_score}%` : '-',
           'Status': record.status || '-',
           'QC Status': record.qc_status || '-',
@@ -246,6 +277,7 @@ const QAAgentQCFormReport = () => {
               'Agent Name': record.agent_name || 'N/A',
               'Project Name': record.project_name || 'N/A',
               'Task Name': record.task_name || 'N/A',
+              'QC Name': record.qc_name || 'N/A',
               'Count': rework.rework_count || '-',
               'Status': rework.rework_status || '-',
               'Score': rework.rework_qc_score ? `${rework.rework_qc_score}%` : '-',
@@ -265,6 +297,7 @@ const QAAgentQCFormReport = () => {
               'Agent Name': record.agent_name || 'N/A',
               'Project Name': record.project_name || 'N/A',
               'Task Name': record.task_name || 'N/A',
+              'QC Name': record.qc_name || 'N/A',
               'Count': correction.correction_count || '-',
               'Status': correction.correction_status || '-',
               'Score': '-',
@@ -290,6 +323,7 @@ const QAAgentQCFormReport = () => {
         'Agent Name': '',
         'Project Name': `Total Rework: ${totalRework}`,
         'Task Name': `Total Correction: ${totalCorrection}`,
+        'QC Name': '',
         'Count': '',
         'Status': '',
         'Score': '',
@@ -305,6 +339,113 @@ const QAAgentQCFormReport = () => {
     } catch (err) {
       console.error('History export error:', err);
       toast.error('Failed to export history data');
+    }
+  };
+
+  // Export Consolidated Report
+  const handleConsolidatedExport = async () => {
+    try {
+      if (!user?.user_id) {
+        toast.error('User not authenticated');
+        return;
+      }
+
+      // Show loading toast
+      const loadingToast = toast.loading('Generating consolidated report...');
+
+      // Prepare API payload
+      const payload = {
+        logged_in_user_id: user.user_id
+      };
+
+      // Add date range if filters are applied
+      if (dateRange.start && dateRange.end) {
+        payload.start_date = dateRange.start;
+        payload.end_date = dateRange.end;
+      }
+
+      // Call the consolidated API
+      const response = await api.post('qc_history_user/consolidated_qc_report', payload);
+
+      if (response.data?.status === 200 && response.data?.data?.records) {
+        const records = response.data.data.records;
+        
+        if (records.length === 0) {
+          toast.dismiss(loadingToast);
+          toast.error('No data found for the selected criteria');
+          return;
+        }
+
+        // Transform data for export
+        const exportData = records.map(record => {
+          // Format dates to Excel-friendly format (YYYY-MM-DD)
+          const evalDate = record.evaluation_date ? 
+            new Date(record.evaluation_date).toISOString().split('T')[0] : 'N/A';
+          const workDate = record.work_date ? 
+            new Date(record.work_date).toISOString().split('T')[0] : 'N/A';
+          
+          // Format error types
+          const errorTypes = record.error_type && record.error_type.length > 0 
+            ? record.error_type.join(', ') 
+            : '-';
+
+          return {
+            'Evaluation Date': evalDate,
+            'Work Date': workDate,
+            'Team Lead': record.team_lead || 'N/A',
+            'Agent Name': record.agent_name || 'N/A',
+            'Project Name': record.project_name || 'N/A',
+            'Task Name': record.task_name || 'N/A',
+            'Records': record.records || 0,
+            'QC Records': record.qc_records || 0,
+            'No. of Errors': record.no_of_errors || 0,
+            'Avg QC Score': record.final_qc_score ? `${record.final_qc_score}%` : '0%',
+            'Error Types': errorTypes,
+            'QA Name': record.qa_name || 'N/A'
+          };
+        });
+
+        // Add summary row at the end
+        const totalRecords = records.reduce((sum, r) => sum + (r.records || 0), 0);
+        const totalQCRecords = records.reduce((sum, r) => sum + (r.qc_records || 0), 0);
+        const totalErrors = records.reduce((sum, r) => sum + (r.no_of_errors || 0), 0);
+        const avgScore = records.length > 0 
+          ? (records.reduce((sum, r) => sum + (r.final_qc_score || 0), 0) / records.length).toFixed(2)
+          : '0.00';
+
+        exportData.push({
+          'Evaluation Date': 'SUMMARY',
+          'Work Date': '',
+          'Team Lead': '',
+          'Agent Name': `Total Records: ${totalRecords}`,
+          'Project Name': `Total QC Records: ${totalQCRecords}`,
+          'Task Name': `Total Errors: ${totalErrors}`,
+          'Records': '',
+          'QC Records': '',
+          'No. of Errors': '',
+          'Avg QC Score': `${avgScore}%`,
+          'Error Types': '',
+          'QA Name': ''
+        });
+
+        // Generate filename with date range
+        const dateRangeStr = (dateRange.start && dateRange.end) 
+          ? `_${dateRange.start}_to_${dateRange.end}` 
+          : '';
+        const filename = `Consolidated_QC_Report${dateRangeStr}_${new Date().toISOString().split('T')[0]}.csv`;
+
+        // Export to CSV
+        exportToCSV(exportData, filename);
+        
+        toast.dismiss(loadingToast);
+        toast.success(`Exported ${records.length} consolidated records!`);
+      } else {
+        toast.dismiss(loadingToast);
+        toast.error('Failed to fetch consolidated data');
+      }
+    } catch (err) {
+      console.error('Consolidated export error:', err);
+      toast.error('Failed to generate consolidated report');
     }
   };
 
@@ -356,24 +497,24 @@ const QAAgentQCFormReport = () => {
     <div className="space-y-4">
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-md p-4 border-2 border-slate-200">
-        <div className="flex flex-col lg:flex-row gap-4">
+        {/* First Row: Search, Status, and QC */}
+        <div className="flex flex-col lg:flex-row items-center gap-4 lg:gap-0 mb-4">
           {/* Search */}
-          <div className="flex-1 min-w-0">
+          <div className="w-full lg:w-1/2 lg:pr-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search by agent, project, or task..."
+                placeholder="Search by agent, project, task, or QC..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border-2 border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                className="w-full pl-10 pr-4 py-2.5 h-10 border-2 border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
               />
             </div>
           </div>
 
-          {/* Actions Row */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Status Filter */}
+          {/* Status Filter */}
+          <div className="w-full lg:w-1/4 lg:px-2 flex-shrink-0">
             <CustomSelect
               value={statusFilter}
               onChange={(value) => setStatusFilter(value)}
@@ -385,37 +526,82 @@ const QAAgentQCFormReport = () => {
               ]}
               icon={Filter}
               placeholder="Filter by status"
-              className="w-40"
+              className="w-full h-10 lg:w-full"
             />
+          </div>
+
+          {/* QC Filter */}
+          <div className="w-full lg:w-1/4 lg:pl-2 flex-shrink-0">
+            <CustomSelect
+              value={qcFilter}
+              onChange={(value) => setQcFilter(value)}
+              options={qcFilterOptions}
+              icon={User}
+              placeholder="Filter by QC"
+              className="w-full h-10 lg:w-full"
+            />
+          </div>
+        </div>
+
+        {/* Second Row: Date Filters and Buttons */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-0">
+          {/* Date Filters */}
+          <div className="w-full lg:w-auto">
+            <DateRangePicker
+              startDate={dateRange.start}
+              endDate={dateRange.end}
+              onStartDateChange={(date) => setDateRange(prev => ({ ...prev, start: date }))}
+              onEndDateChange={(date) => setDateRange(prev => ({ ...prev, end: date }))}
+              onClear={() => setDateRange({ start: '', end: '' })}
+              label=""
+              description=""
+              showClearButton={false}
+              noWrapper={true}
+              fieldWidth="300px"
+            />
+          </div>
+
+          {/* Buttons */}
+          <div className="flex flex-wrap items-center gap-2 lg:mt-6 w-full lg:w-auto lg:justify-end">
+            {/* Export Main Table */}
+            <button
+              onClick={handleExportExcel}
+              className="px-3 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+
+            {/* History Button */}
+            <button
+              onClick={handleExportHistory}
+              className="px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+            >
+              <Clock className="w-4 h-4" />
+              <span className="hidden sm:inline">History</span>
+            </button>
+
+            {/* Consolidated Export Button */}
+            <button
+              onClick={handleConsolidatedExport}
+              className="px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Consolidated Export</span>
+            </button>
 
             {/* Clear Filter Button */}
             <button
               onClick={() => {
                 setSearchTerm('');
                 setStatusFilter('all');
+                setQcFilter('all');
+                setDateRange({ start: '', end: '' });
               }}
               className="px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
             >
               <X className="w-4 h-4" />
               <span className="hidden sm:inline">Clear</span>
-            </button>
-
-            {/* Export Main Table */}
-            <button
-              onClick={handleExportExcel}
-              className="px-3 py-2.5 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export</span>
-            </button>
-
-            {/* Export History */}
-            <button
-              onClick={handleExportHistory}
-              className="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">History</span>
             </button>
           </div>
         </div>
@@ -430,6 +616,7 @@ const QAAgentQCFormReport = () => {
                 <th className="px-4 py-3 text-left font-semibold">Agent</th>
                 <th className="px-4 py-3 text-left font-semibold">Project</th>
                 <th className="px-4 py-3 text-left font-semibold">Task</th>
+                <th className="px-4 py-3 text-left font-semibold">QC</th>
                 <th className="px-4 py-3 text-center font-semibold">QC Score</th>
                 <th className="px-4 py-3 text-center font-semibold">Status</th>
                 <th className="px-4 py-3 text-center font-semibold">QC Status</th>
@@ -443,13 +630,13 @@ const QAAgentQCFormReport = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan="12" className="px-4 py-8 text-center text-slate-500">
                     <FileCheck className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                     <p className="font-medium">No QC records found</p>
                   </td>
                 </tr>
               ) : (
-                filteredRecords.map((record) => {
+                recordsPagination.pagedItems.map((record) => {
                   const isExpanded = expandedRow === record.id;
                   const historyItems = buildHistoryItems(record);
 
@@ -464,6 +651,7 @@ const QAAgentQCFormReport = () => {
                         </td>
                         <td className="px-4 py-3 font-medium text-slate-800">{record.project_name || '—'}</td>
                         <td className="px-4 py-3 text-slate-600">{record.task_name || '—'}</td>
+                        <td className="px-4 py-3 text-slate-600">{record.qc_name || '—'}</td>
                         <td className={`px-4 py-3 text-center ${getScoreClass(record.qc_score)}`}>
                           {record.qc_score !== null && record.qc_score !== undefined ? `${record.qc_score}%` : '—'}
                         </td>
@@ -524,7 +712,7 @@ const QAAgentQCFormReport = () => {
                       {/* Expanded Row - History */}
                       {isExpanded && historyItems.length > 0 && (
                         <tr>
-                          <td colSpan="11" className="p-0">
+                          <td colSpan="12" className="p-0">
                             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t-2 border-blue-200 p-4">
                               <h4 className="text-sm font-semibold text-indigo-700 mb-3 flex items-center gap-2">
                                 <Clock className="w-4 h-4" />
@@ -611,6 +799,7 @@ const QAAgentQCFormReport = () => {
             </tbody>
           </table>
         </div>
+        <TablePaginationBar {...recordsPagination} itemLabel="QC records" />
       </div>
 
       {/* Error Modal */}

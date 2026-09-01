@@ -1,58 +1,37 @@
-import { useRef } from "react";
 import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
 import { fetchDropdown } from "../../services/dropdownService";
 import { useAuth } from "../../context/AuthContext";
-import MonthCard from "./MonthCard";
-import UserCard from "./UserCard";
+import DailyReportAgentPanel from "./DailyReportAgentPanel";
+import MonthlyReportAgentPanel from "./MonthlyReportAgentPanel";
 import SearchableSelect from "./SearchableSelect";
 import { fetchMonthlyBillableReport } from "../../services/billableReportService";
 import api from "../../services/api";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
-import { Users, Calendar, Download, RotateCcw } from "lucide-react";
-import { Calendar as CalendarComponent } from "../ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { format } from "date-fns";
+import { Users, Download, RotateCcw, Calendar, FileText } from "lucide-react";
+import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
+import SubTabsBar from "./SubTabsBar";
+import {
+  DateRangePicker,
+  MonthYearPicker,
+  yyyyMmToMonthYear,
+  monthYearToYyyyMm,
+  getCurrentYyyyMm,
+} from "./CustomCalendar";
 
 const BillableReport = ({ userId }) => {
   // Device info (declare once at top)
   const { device_id, device_type } = useDeviceInfo();
 
-  // Helper to format date/time for display and export
-  // Always return raw backend string for date/time
-  function formatDateTime(dateInput) {
-    if (!dateInput) return '-';
-    return dateInput;
-  }
-
   // Search filter state (client-side filtering by agent name)
   const [searchQuery, setSearchQuery] = useState('');
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [showMonthlyMonthPicker, setShowMonthlyMonthPicker] = useState(false);
 
   // Team filter state
   const [selectedTeam, setSelectedTeam] = useState('all');
   const [teams, setTeams] = useState([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
 
-  // Refs for pickers
-  const monthPickerRef = useRef(null);
-  const monthlyMonthPickerRef = useRef(null);
-
-  // Close pickers on outside click
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (showMonthPicker && monthPickerRef.current && !monthPickerRef.current.contains(event.target)) {
-        setShowMonthPicker(false);
-      }
-      if (showMonthlyMonthPicker && monthlyMonthPickerRef.current && !monthlyMonthPickerRef.current.contains(event.target)) {
-        setShowMonthlyMonthPicker(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showMonthPicker, showMonthlyMonthPicker]);
   const { user } = useAuth();
 
   // Check if user is Assistant Manager
@@ -60,15 +39,16 @@ const BillableReport = ({ userId }) => {
     (user?.role_name || user?.role || '').toLowerCase().includes('assistant');
 
   // Check if user can view team filter (Admin, Super Admin, Project Manager)
-  const isAdmin = user?.role_id === 1;
-  const isSuperAdmin = (user?.role_name || user?.role || '').toLowerCase().includes('super');
-  const isProjectManager = user?.role_id === 3;
+  const normalizedRole = (user?.role_name || user?.role || user?.user_role || '').toLowerCase();
+  const isAdmin = user?.role_id === 1 || user?.role_id === 2 || normalizedRole === 'admin';
+  const isSuperAdmin = normalizedRole.includes('super');
+  const isProjectManager = user?.role_id === 3 || normalizedRole.includes('project manager');
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
 
   // Export all users' daily data (filtered by search query if set)
   function handleExportAllUsers() {
     try {
-      // Filter daily data by search query
+      // Filter daily data by search query and date range
       const exportRows = dailyData.filter(row => {
         // Filter by search query (agent name)
         if (searchQuery) {
@@ -76,6 +56,35 @@ const BillableReport = ({ userId }) => {
           const query = searchQuery.toLowerCase();
           if (!userName.includes(query)) return false;
         }
+        // Filter by date range
+        const rowDateStr = row.work_date || row.date_time || row.date;
+        if (!rowDateStr) return true;
+        
+        let dateStr;
+        if (rowDateStr.includes('-') && rowDateStr.split('-').length >= 3) {
+          const parts = rowDateStr.split('-');
+          if (parts[0].length === 4) {
+            // YYYY-MM-DD format
+            dateStr = rowDateStr.split('T')[0];
+          } else {
+            // DD-MM-YYYY format - convert to YYYY-MM-DD
+            dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          }
+        } else {
+          // Try parsing as date
+          const date = new Date(rowDateStr);
+          if (!isNaN(date.getTime())) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            dateStr = `${year}-${month}-${day}`;
+          } else {
+            return true; // Can't parse, include it
+          }
+        }
+        
+        if (dailyStart && dateStr && dateStr < dailyStart) return false;
+        if (dailyEnd && dateStr && dateStr > dailyEnd) return false;
         return true;
       });
 
@@ -108,6 +117,7 @@ const BillableReport = ({ userId }) => {
         };
         
         rowData['Date'] = dateDisplay;
+        rowData['Day Status'] = row.roster_status || row.day_status || '—';
         rowData['Assign Hours'] = formatNumber(row.assigned_hours);
         rowData['Worked Hours'] = formatNumber(row.total_billable_hours_day);
         rowData['QC Score'] = row.qc_score != null ? `${formatNumber(row.qc_score)}%` : '-';
@@ -134,6 +144,7 @@ const BillableReport = ({ userId }) => {
         };
         
         totalRow['Date'] = '';
+        totalRow['Day Status'] = '';
         totalRow['Assign Hours'] = totalAssigned.toFixed(2);
         totalRow['Worked Hours'] = totalWorked.toFixed(2);
         totalRow['QC Score'] = avgQC;
@@ -172,7 +183,7 @@ const BillableReport = ({ userId }) => {
         rowData['Monthly Goal'] = user.monthly_total_target ?? '-';
         rowData['Pending Target'] = user.pending_target ? Number(user.pending_target).toFixed(2) : '-';
         rowData['Avg. QC Score'] = user.avg_qc_score ? `${Number(user.avg_qc_score).toFixed(2)}%` : '-';
-        
+
         return rowData;
       });
       // Add totals row for numeric columns
@@ -211,30 +222,13 @@ const BillableReport = ({ userId }) => {
   };
 
 
-  // State for tab toggle (must be first hook)
-  const [activeToggle, setActiveToggle] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('billable_active_tab') || 'daily';
-    }
-    return 'daily';
+  // Daily / Monthly toggle — synced to ?subtab=
+  const [activeToggle, setActiveToggle] = useRoutedSubTab('daily', {
+    parentTab: 'billable_report',
   });
 
-  // Persist tab selection to sessionStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('billable_active_tab', activeToggle);
-    }
-  }, [activeToggle]);
-  // (Date range filter removed)
-  // Helper function to get current month in YYYY-MM format
-  const getCurrentMonth = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  };
-  // State for month filter (monthly) - default to current month
-  const [monthlyMonth, setMonthlyMonth] = useState(getCurrentMonth());
-  // State for month filter (daily report) - default to current month
-  const [dailyMonth, setDailyMonth] = useState(getCurrentMonth());
+  const dailyShellRef = useRef(null);
+  const monthlyShellRef = useRef(null);
 
   // Helper function to get month's first and last day
   const getMonthDateRange = (monthStr) => {
@@ -258,14 +252,17 @@ const BillableReport = ({ userId }) => {
     };
   };
 
+  // State for month filter (monthly / daily) — YYYY-MM for API
+  const [monthlyMonth, setMonthlyMonth] = useState(getCurrentYyyyMm());
+  const [dailyMonth, setDailyMonth] = useState(getCurrentYyyyMm());
+  const [dailyStart, setDailyStart] = useState(() => getMonthDateRange(getCurrentYyyyMm()).start);
+  const [dailyEnd, setDailyEnd] = useState(() => getMonthDateRange(getCurrentYyyyMm()).end);
+
   // State for API data, loading, and error
   const [dailyData, setDailyData] = useState([]);
   const [loadingDaily, setLoadingDaily] = useState(false);
   const [errorDaily, setErrorDaily] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  // State to track which user cards are expanded (persists across data refetches)
-  const [expandedCards, setExpandedCards] = useState({});
 
   // Store user information persistently (so cards remain visible even with no data)
   const [userInfoMap, setUserInfoMap] = useState({});
@@ -302,24 +299,63 @@ const BillableReport = ({ userId }) => {
     }
   }, [user?.user_id, canViewTeamFilter]);
 
-  // Reset user map when month filter changes (not for search query changes)
+  // Reset user map when date range / month filter changes
   React.useEffect(() => {
     setUserInfoMap({});
-  }, [dailyMonth]);
+  }, [dailyMonth, dailyStart, dailyEnd]);
 
   // Helper to get YYYY-MM-DD string
   const getDateString = (date) => date.toISOString().slice(0, 10);
 
+  const monthFromDate = (dateStr) => {
+    if (!dateStr || !dateStr.includes('-')) return '';
+    const [year, month] = dateStr.split('-');
+    return `${year}-${month}`;
+  };
+
+  // Month dropdown only — sets full month range
+  const handleDailyMonthChange = (my) => {
+    const yyyyMm = monthYearToYyyyMm(my);
+    if (!yyyyMm) return;
+    const range = getMonthDateRange(yyyyMm);
+    setDailyMonth(yyyyMm);
+    setDailyStart(range.start);
+    setDailyEnd(range.end);
+  };
+
+  // From date — keep exact day; update month label only
+  const handleDailyStartChange = (next) => {
+    setDailyStart(next);
+    if (dailyEnd && next > dailyEnd) setDailyEnd(next);
+    const nextMonth = monthFromDate(next);
+    if (nextMonth) setDailyMonth(nextMonth);
+  };
+
+  // To date — keep exact day; sync month label when range stays in one month
+  const handleDailyEndChange = (next) => {
+    setDailyEnd(next);
+    if (dailyStart && next < dailyStart) {
+      setDailyStart(next);
+      const nextMonth = monthFromDate(next);
+      if (nextMonth) setDailyMonth(nextMonth);
+      return;
+    }
+    const startMonth = monthFromDate(dailyStart);
+    const endMonth = monthFromDate(next);
+    if (startMonth && endMonth && startMonth === endMonth) {
+      setDailyMonth(endMonth);
+    }
+  };
+
   // Track if this is a date-only filter change (to avoid showing loading spinner)
-  const prevFiltersRef = React.useRef({ dailyMonth });
+  const prevFiltersRef = React.useRef({ dailyMonth, dailyStart, dailyEnd });
 
   React.useEffect(() => {
     const prev = prevFiltersRef.current;
-    // Check if month changed
-    if (prev.dailyMonth !== dailyMonth) {
-      prevFiltersRef.current = { dailyMonth };
+    if (prev.dailyMonth !== dailyMonth || prev.dailyStart !== dailyStart || prev.dailyEnd !== dailyEnd) {
+      prevFiltersRef.current = { dailyMonth, dailyStart, dailyEnd };
     }
-  }, [dailyMonth]);
+  }, [dailyMonth, dailyStart, dailyEnd]);
 
   // Fetch daily report data using /tracker/view_daily API
   useEffect(() => {
@@ -335,9 +371,10 @@ const BillableReport = ({ userId }) => {
         let payload = {
           logged_in_user_id: user.user_id
         };
-        // Month filter
-        if (dailyMonth) {
-          const [year, month] = dailyMonth.split('-');
+        if (dailyStart) payload.date_from = dailyStart;
+        if (dailyEnd) payload.date_to = dailyEnd;
+        if (dailyStart) {
+          const [year, month] = dailyStart.split('-');
           const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
           const monthLabel = monthNames[Number(month) - 1];
           payload.month_year = `${monthLabel}${year}`;
@@ -348,15 +385,9 @@ const BillableReport = ({ userId }) => {
         }
         // User filter (if userId is passed as prop)
         if (userId) payload.user_id = userId;
-        // Call the /tracker/view_daily API
         const res = await api.post('/tracker/view_daily', payload);
-        console.log('Daily report API response:', res.data);
-        console.log('Payload sent:', payload);
-        // Get trackers from API response
         let trackers = Array.isArray(res.data?.data?.trackers) ? res.data.data.trackers : [];
-        console.log('Trackers extracted:', trackers);
         
-        // Store user information for all users (persists across date filter changes)
         const newUserInfoMap = {};
         trackers.forEach(tracker => {
           if (tracker.user_id) {
@@ -379,7 +410,7 @@ const BillableReport = ({ userId }) => {
     };
     fetchData();
     // eslint-disable-next-line
-  }, [userId, dailyMonth, selectedTeam, refreshTrigger]);
+  }, [userId, dailyStart, dailyEnd, selectedTeam, refreshTrigger]);
 
   // Function to refresh daily data
   const handleRefreshData = () => {
@@ -427,6 +458,155 @@ const BillableReport = ({ userId }) => {
 
   // No longer need to filter dailyData by month, as API returns filtered data
   const filteredDailyData = dailyData;
+
+  const dailyGroupedEntries = useMemo(() => {
+    if (!Object.keys(userInfoMap).length) return [];
+
+    const groupedData = {};
+    filteredDailyData.forEach((row) => {
+      const key = row.user_id || "unknown";
+      if (!groupedData[key]) {
+        groupedData[key] = { user: row, rows: [] };
+      }
+      groupedData[key].rows.push(row);
+    });
+
+    Object.keys(userInfoMap).forEach((userId) => {
+      if (!groupedData[userId]) {
+        groupedData[userId] = { user: userInfoMap[userId], rows: [] };
+      }
+    });
+
+    return Object.entries(groupedData)
+      .filter(([, { user }]) => {
+        if (!searchQuery) return true;
+        const userName = (user.user_name || "").toLowerCase();
+        return userName.includes(searchQuery.toLowerCase());
+      })
+      .sort(([, a], [, b]) =>
+        (a.user?.user_name || "").localeCompare(b.user?.user_name || "", undefined, {
+          sensitivity: "base",
+        })
+      );
+  }, [filteredDailyData, userInfoMap, searchQuery]);
+
+  const filteredMonthlyUsers = useMemo(() => {
+    return monthlySummaryData
+      .filter((u) => {
+        if (searchQuery) {
+          const userName = (u.user_name || "").toLowerCase();
+          if (!userName.includes(searchQuery.toLowerCase())) return false;
+        }
+        if (canViewTeamFilter && selectedTeam && selectedTeam !== "all") {
+          const team = teams.find((t) => String(t.team_id) === String(selectedTeam));
+          if (team && String(u.team_name || "").toLowerCase() !== String(team.label || "").toLowerCase()) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) =>
+        (a.user_name || "").localeCompare(b.user_name || "", undefined, { sensitivity: "base" })
+      );
+  }, [monthlySummaryData, searchQuery, selectedTeam, teams, canViewTeamFilter]);
+
+  const monthlyDisplayMonth = useMemo(() => {
+    if (monthlySummaryData[0]?.month_year) {
+      return parseMonthYear(monthlySummaryData[0].month_year);
+    }
+    const [year, month] = monthlyMonth.split("-");
+    const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+    return { label: monthNames[Number(month) - 1] || "-", year: year || "-" };
+  }, [monthlySummaryData, monthlyMonth]);
+
+  // Fill remaining viewport height so the data table shows ~10–15 rows
+  useLayoutEffect(() => {
+    if (activeToggle !== "daily" && activeToggle !== "monthly") return;
+
+    const applyHeight = () => {
+      const el = activeToggle === "daily" ? dailyShellRef.current : monthlyShellRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const height = Math.max(680, window.innerHeight - top - 8);
+      el.style.setProperty("height", `${height}px`, "important");
+      el.style.setProperty("min-height", `${height}px`, "important");
+      el.style.setProperty("max-height", `${height}px`, "important");
+    };
+
+    applyHeight();
+    const rafId = requestAnimationFrame(applyHeight);
+    const timeoutId = window.setTimeout(applyHeight, 150);
+    window.addEventListener("resize", applyHeight);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("resize", applyHeight);
+      [dailyShellRef, monthlyShellRef].forEach((ref) => {
+        const el = ref.current;
+        if (el) {
+          el.style.removeProperty("height");
+          el.style.removeProperty("min-height");
+          el.style.removeProperty("max-height");
+        }
+      });
+    };
+  }, [
+    activeToggle,
+    loadingDaily,
+    loadingMonthly,
+    dailyGroupedEntries.length,
+    filteredMonthlyUsers.length,
+    searchQuery,
+    canViewTeamFilter,
+  ]);
+
+  const mapDailyReportRows = React.useCallback((rows) => {
+    return rows.map((r) => {
+      let date = '-';
+      if (r.work_date) {
+        const d = new Date(r.work_date);
+        if (!isNaN(d.getTime())) {
+          const pad = (n) => String(n).padStart(2, '0');
+          const dateStr = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+          const dayName = r.day || d.toLocaleDateString('en-US', { weekday: 'long' });
+          date = `${dateStr}\n${dayName}`;
+        }
+      }
+      let worked_hours = '-';
+      if (r.total_billable_hours_day !== null && r.total_billable_hours_day !== undefined && !isNaN(Number(r.total_billable_hours_day))) {
+        worked_hours = Number(r.total_billable_hours_day).toFixed(2);
+      }
+      let daily_required_hours = '-';
+      if (r.daily_required_hours !== null && r.daily_required_hours !== undefined && !isNaN(Number(r.daily_required_hours))) {
+        daily_required_hours = Number(r.daily_required_hours).toFixed(2);
+      }
+      const assigned_hours = r.assigned_hours !== null && r.assigned_hours !== undefined ? r.assigned_hours : null;
+      const qc_score = r.qc_score !== null && r.qc_score !== undefined ? r.qc_score : null;
+      const trackers_count_day = r.trackers_count_day !== null && r.trackers_count_day !== undefined ? r.trackers_count_day : null;
+
+      return {
+        date,
+        date_time: date,
+        work_date: r.work_date,
+        day: r.day,
+        roster_status: r.roster_status || '—',
+        day_type: r.day_type,
+        assigned_hours,
+        assign_hours: assigned_hours,
+        assignHours: assigned_hours,
+        worked_hours,
+        workedHours: worked_hours,
+        billable_hours: worked_hours,
+        total_billable_hours_day: r.total_billable_hours_day,
+        qc_score,
+        qcScore: qc_score,
+        trackers_count_day,
+        daily_required_hours,
+        dailyRequiredHours: daily_required_hours,
+        tenure_target: r.daily_required_hours,
+      };
+    });
+  }, []);
 
   // Export all daily data for a given user and month (from monthly report)
 
@@ -479,6 +659,7 @@ const BillableReport = ({ userId }) => {
         
         return {
           'Date-Time': row.date_time ?? row.date ?? '-',
+          'Day Status': row.roster_status || row.day_status || '—',
           'Assigned Hour': formatNum(row.assigned_hours ?? row.assign_hours),
           'Worked Hours': formatNum(row.total_billable_hours_day ?? row.billable_hours),
           'QC Score': row.qc_score != null && row.qc_score !== '' ? `${formatNum(row.qc_score)}%` : '-',
@@ -501,6 +682,7 @@ const BillableReport = ({ userId }) => {
         
         exportData.push({
           'Date-Time': 'TOTAL',
+          'Day Status': '',
           'Assigned Hour': totalAssigned.toFixed(2),
           'Worked Hours': totalWorked.toFixed(2),
           'QC Score': avgQC,
@@ -516,499 +698,237 @@ const BillableReport = ({ userId }) => {
     }
   };
 
-  // Removed unused handleExportDailyExcel and related code
+  const subTabs = [
+    { id: 'daily', label: 'Daily Report', icon: Calendar },
+    { id: 'monthly', label: 'Monthly Report', icon: FileText },
+  ];
 
-  // Month-Year Picker Component (Only Month/Year Selection - No Dates)
-  const MonthPickerComponent = ({ value, onChange, show, onClose }) => {
-    const [viewYear, setViewYear] = useState(() => {
-      if (value) {
-        const [year] = value.split('-');
-        return parseInt(year);
-      }
-      return new Date().getFullYear();
-    });
+  const resetFiltersButtonClass =
+    'flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200';
 
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth();
-
-    const handlePrevYear = () => setViewYear(viewYear - 1);
-    const handleNextYear = () => {
-      if (viewYear < currentYear) {
-        setViewYear(viewYear + 1);
-      }
-    };
-
-    const handleYearChange = (e) => {
-      setViewYear(parseInt(e.target.value));
-    };
-
-    const handleMonthSelect = (monthIndex) => {
-      // Check if selecting a future month
-      const isFutureMonth = viewYear > currentYear || (viewYear === currentYear && monthIndex > currentMonth);
-      if (isFutureMonth) return;
-      
-      const monthStr = String(monthIndex + 1).padStart(2, '0');
-      onChange(`${viewYear}-${monthStr}`);
-      onClose();
-    };
-
-    if (!show) return null;
-
-    const [selectedYear, selectedMonth] = value ? value.split('-').map(Number) : [null, null];
-
-    // Generate year options (current year - 10 to current year)
-    const yearOptions = Array.from({ length: 11 }, (_, i) => currentYear - 10 + i);
-
-    return (
-      <div className="absolute z-50 mt-1 bg-white rounded-xl shadow-2xl border-2 border-blue-300 p-3 w-64">
-        {/* Year Header with Navigation and Dropdown */}
-        <div className="flex items-center justify-between mb-3 pb-2 border-b-2 border-blue-100 gap-2">
-          <button 
-            onClick={handlePrevYear} 
-            className="p-1.5 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0"
-            title="Previous Year"
-            type="button"
-          >
-            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          
-          {/* Year Dropdown */}
-          <select
-            value={viewYear}
-            onChange={handleYearChange}
-            className="flex-1 px-2 py-1.5 text-sm font-bold text-slate-800 bg-blue-50 border-2 border-blue-300 rounded-lg hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer text-center"
-          >
-            {yearOptions.map((y) => {
-              const isYearDisabled = y > currentYear;
-              return (
-                <option key={y} value={y} disabled={isYearDisabled}>
-                  {y}
-                </option>
-              );
-            })}
-          </select>
-          
-          <button 
-            onClick={handleNextYear}
-            disabled={viewYear >= currentYear}
-            className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
-              viewYear >= currentYear 
-                ? 'opacity-50 cursor-not-allowed bg-slate-100' 
-                : 'hover:bg-blue-50'
-            }`}
-            title={viewYear >= currentYear ? "Cannot select future dates" : "Next Year"}
-            type="button"
-          >
-            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Month Grid - 3 columns */}
-        <div className="grid grid-cols-3 gap-1.5 mb-3">
-          {monthNames.map((month, index) => {
-            const isSelected = selectedYear === viewYear && selectedMonth === index + 1;
-            const isCurrent = viewYear === currentYear && index === currentMonth;
-            const isFutureMonth = viewYear > currentYear || (viewYear === currentYear && index > currentMonth);
-            
-            return (
-              <button
-                key={month}
-                type="button"
-                onClick={() => handleMonthSelect(index)}
-                disabled={isFutureMonth}
-                className={`text-xs py-2 px-1.5 rounded-lg font-bold transition-all ${
-                  isFutureMonth
-                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
-                    : isSelected 
-                      ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg scale-105' 
-                      : isCurrent
-                        ? 'bg-blue-100 text-blue-700 border-2 border-blue-400 hover:bg-blue-200 shadow-sm'
-                        : 'bg-blue-50 text-slate-700 hover:bg-blue-100 border-2 border-blue-200 hover:border-blue-400 hover:shadow-md'
-                }`}
-              >
-                {month}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Close Button */}
-        <button 
-          type="button"
-          onClick={onClose}
-          className="w-full px-3 py-2 bg-gradient-to-r from-slate-100 to-slate-200 hover:from-slate-200 hover:to-slate-300 text-slate-700 font-bold text-xs rounded-lg transition-all border-2 border-slate-300 shadow-sm hover:shadow-md"
-        >
-          Close
-        </button>
-      </div>
-    );
-  };
+  const filterCardClass =
+    'bg-gradient-to-r from-blue-50 via-white to-indigo-50 rounded-xl shadow-md border border-blue-200 p-6 mb-6';
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
       <div className="space-y-6">
-        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-white">Billable Report</h2>
-          <p className="text-blue-100 text-sm mt-1">View daily and monthly billable hours and performance metrics</p>
+          <h2 className="font-bold text-white text-2xl">Billable Report</h2>
+          <p className="text-blue-100 text-sm mt-1">
+            View daily and monthly billable hours and performance metrics
+          </p>
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-md border-2 border-blue-100 p-6">
-          <div className="flex items-center gap-2">
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 border-2 ${activeToggle === 'daily' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md border-blue-700' : 'text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-400'}`}
-              onClick={() => setActiveToggle('daily')}
-            >
-              Daily Report
-            </button>
-            <button
-              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all duration-300 border-2 ${activeToggle === 'monthly' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md border-blue-700' : 'text-blue-700 hover:bg-blue-50 border-blue-200 hover:border-blue-400'}`}
-              onClick={() => setActiveToggle('monthly')}
-            >
-              Monthly Report
-            </button>
-          </div>
-        </div>
-      {/* Daily Report view (user cards, QA agent side only) */}
-      {activeToggle === 'daily' && (
-        <div className="w-full max-w-7xl mx-auto mt-4">
-          {/* Filter Section - Enhanced Design */}
-          <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
-            <div className="flex flex-wrap items-end gap-4">
-              {/* Search Filter */}
-              <div className="relative w-96">
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-blue-600" />
-                  Search Agent
-                </label>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by agent name..."
-                  className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 transition-all hover:border-blue-400"
-                />
-              </div>
-              
-              {/* Month Filter */}
-              <div className="relative">
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-blue-600" />
-                  Month
-                </label>
-                <div className="relative" ref={monthPickerRef}>
+        <SubTabsBar
+          bordered
+          equalWidth
+          activeTab={activeToggle}
+          onChange={setActiveToggle}
+          tabs={subTabs}
+        />
+
+        {activeToggle === 'daily' ? (
+          <>
+            <div className={filterCardClass}>
+              <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-end gap-4">
+                <div className="w-full sm:w-[220px] shrink-0">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    Search Agent
+                  </label>
                   <input
                     type="text"
-                    value={dailyMonth ? (() => {
-                      const [year, month] = dailyMonth.split('-');
-                      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                      return `${monthNames[parseInt(month) - 1]} ${year}`;
-                    })() : ''}
-                    readOnly
-                    className="w-full px-4 py-2.5 pr-10 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50 transition-all min-w-[160px] cursor-pointer"
-                    placeholder="Select month"
-                    onClick={() => setShowMonthPicker(!showMonthPicker)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowMonthPicker(!showMonthPicker)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-blue-100 rounded transition-colors"
-                  >
-                    <Calendar className="w-4 h-4 text-blue-600" />
-                  </button>
-                  <MonthPickerComponent
-                    value={dailyMonth}
-                    onChange={(val) => setDailyMonth(val)}
-                    show={showMonthPicker}
-                    onClose={() => setShowMonthPicker(false)}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by agent name..."
+                    className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all hover:border-blue-400"
                   />
                 </div>
-              </div>
-              
-              {/* Team Filter (Admin, Super Admin, Project Manager only) */}
-              {canViewTeamFilter && (
-                <div className="relative w-[220px]">
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                    <Users className="w-4 h-4 text-blue-600" />
-                    Team
-                  </label>
-                  <SearchableSelect
-                    options={(() => {
-                      const opts = [
+
+                <div className="flex-1 min-w-[260px]">
+                  <DateRangePicker
+                    startDate={dailyStart}
+                    endDate={dailyEnd}
+                    onStartDateChange={handleDailyStartChange}
+                    onEndDateChange={handleDailyEndChange}
+                    noWrapper
+                    showClearButton={false}
+                    fieldWidth="155px"
+                  />
+                </div>
+
+                <MonthYearPicker
+                  compact
+                  label="Select Month"
+                  selectedMonthYear={yyyyMmToMonthYear(dailyMonth)}
+                  onMonthYearChange={handleDailyMonthChange}
+                  showAllOption={false}
+                />
+
+                {canViewTeamFilter && (
+                  <div className="w-full sm:w-[200px] shrink-0">
+                    <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-blue-600" />
+                      Team
+                    </label>
+                    <SearchableSelect
+                      options={[
                         { value: 'all', label: 'All Teams' },
-                        ...teams.map(team => ({ value: String(team.team_id), label: team.label }))
-                      ];
-                      console.log('SearchableSelect options:', opts);
-                      console.log('teams state:', teams);
-                      return opts;
-                    })()}
-                    value={selectedTeam}
-                    onChange={(val) => setSelectedTeam(val)}
-                    placeholder={loadingTeams ? "Loading teams..." : "Select team"}
-                    disabled={loadingTeams}
-                  />
-                </div>
-              )}
-              
-              {/* Reset Filters Button */}
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setDailyMonth(getCurrentMonth());
-                  setSelectedTeam('all');
-                }}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg px-6 py-2.5 transition-all shadow-sm hover:shadow-md group"
-                type="button"
-              >
-                <RotateCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" />
-                Reset Filters
-              </button>
-              
-              {/* Export All Button */}
-              <button
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-                onClick={handleExportAllUsers}
-              >
-                <Download className="w-4 h-4" />
-                Export All
-              </button>
-            </div>
-            
-            {/* User Guidance Message */}
-            {dailyMonth && (
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
+                        ...teams.map((team) => ({ value: String(team.team_id), label: team.label })),
+                      ]}
+                      value={selectedTeam}
+                      onChange={(val) => setSelectedTeam(val)}
+                      placeholder={loadingTeams ? 'Loading teams...' : 'Select team'}
+                      disabled={loadingTeams}
+                    />
                   </div>
-                  <div className="text-sm">
-                    <p className="font-medium text-blue-800">
-                      📅 Date Range Filter Active
-                    </p>
-                    <p className="text-blue-700 mt-1">
-                      The date range calendars in user cards are now restricted to <span className="font-semibold">{(() => {
-                        const [year, month] = dailyMonth.split('-');
-                        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                        return `${monthNames[parseInt(month) - 1]} ${year}`;
-                      })()}</span> only. 
-                      Select a different month from the Month Filter to change the available dates.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-          {/* User Cards for QA agent daily data, each with its own date range and export */}
-          <div className="space-y-6">
-            {loadingDaily ? (
-              <div className="py-8 text-center text-blue-700 font-semibold">Loading daily report...</div>
-            ) : errorDaily ? (
-              <div className="py-8 text-center text-red-600 font-semibold">{errorDaily}</div>
-            ) : Object.keys(userInfoMap).length > 0 ? (
-              // Show cards for all users that have ever appeared
-              (() => {
-                // First, group current data by user_id
-                const groupedData = {};
-                
-                filteredDailyData.forEach(row => {
-                  const key = row.user_id || 'unknown';
-                  if (!groupedData[key]) {
-                    groupedData[key] = { user: row, rows: [] };
-                  }
-                  groupedData[key].rows.push(row);
-                });
+                )}
 
-                // Then, ensure ALL stored users have an entry (even if no data for current date range)
-                Object.keys(userInfoMap).forEach(userId => {
-                  const userInfo = userInfoMap[userId];
-                  
-                  if (!groupedData[userId]) {
-                    // User has no data for current date range, but keep card visible
-                    groupedData[userId] = { user: userInfo, rows: [] };
-                  }
-                });
-
-                // Apply client-side search filter by agent name
-                const filteredGroupedData = Object.entries(groupedData).filter(([userId, { user }]) => {
-                  if (!searchQuery) return true; // No search query, show all
-                  const userName = (user.user_name || '').toLowerCase();
-                  const query = searchQuery.toLowerCase();
-                  return userName.includes(query);
-                });
-
-                return filteredGroupedData.map(([userId, { user, rows }]) => (
-                <UserCard
-                  key={userId}
-                  user={user}
-                  team_name={user.team_name}
-                  showTeam={canViewTeamFilter}
-                  dailyData={(() => {
-                    const mappedData = rows.map(r => {
-                      // Format date as DD-MM-YYYY, never show time
-                      let date = '-';
-                      if (r.work_date) {
-                        const d = new Date(r.work_date);
-                        if (!isNaN(d.getTime())) {
-                          const pad = n => String(n).padStart(2, '0');
-                          date = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
-                        }
-                      }
-                      // Map response fields to display format
-                      let worked_hours = '-';
-                      if (r.total_billable_hours_day !== null && r.total_billable_hours_day !== undefined && !isNaN(Number(r.total_billable_hours_day))) {
-                        worked_hours = Number(r.total_billable_hours_day).toFixed(2);
-                      }
-                      let daily_required_hours = '-';
-                      if (r.daily_required_hours !== null && r.daily_required_hours !== undefined && !isNaN(Number(r.daily_required_hours))) {
-                        daily_required_hours = Number(r.daily_required_hours).toFixed(2);
-                      }
-                      // Get assigned_hours from API response
-                      let assigned_hours = r.assigned_hours !== null && r.assigned_hours !== undefined ? r.assigned_hours : null;
-                      // Get qc_score from API response
-                      let qc_score = r.qc_score !== null && r.qc_score !== undefined ? r.qc_score : null;
-                      // Get trackers_count_day from API response
-                      let trackers_count_day = r.trackers_count_day !== null && r.trackers_count_day !== undefined ? r.trackers_count_day : null;
-                      
-                      return {
-                        date,
-                        date_time: date, // Also set date_time for compatibility
-                        work_date: r.work_date, // Keep original work_date for filtering
-                        assigned_hours, // Use actual value from API
-                        assign_hours: assigned_hours, // Alternative field name
-                        assignHours: assigned_hours, // Alternative field name
-                        worked_hours,
-                        workedHours: worked_hours, // Alternative field name
-                        billable_hours: worked_hours, // Alternative field name
-                        total_billable_hours_day: r.total_billable_hours_day, // Keep original field
-                        qc_score, // Use actual value from API
-                        qcScore: qc_score, // Alternative field name
-                        trackers_count_day, // Tracker count from API
-                        daily_required_hours,
-                        dailyRequiredHours: daily_required_hours, // Alternative field name
-                        tenure_target: r.daily_required_hours, // Alternative field name
-                      };
-                    });
-                    console.log('Mapped data for UserCard:', mappedData);
-                    return mappedData;
-                  })()}
-                  expanded={expandedCards[userId] === true}
-                  onToggleExpand={(isExpanded) => {
-                    setExpandedCards(prev => ({ ...prev, [userId]: isExpanded }));
-                  }}
-                  selectedMonth={dailyMonth}
-                  formatDateTime={formatDateTime}
-                  onRefresh={handleRefreshData}
-                  showOnlySelectedMonth={true}
-                />
-                ));
-              })()
-            ) : (
-              <div className="py-8 text-center text-gray-400">No data available</div>
-            )}
-          </div>
-        </div>
-      )}
-
-
-
-
-      {/* Monthly Report view (month cards with user-wise table) */}
-      {activeToggle === 'monthly' && (
-        <div className="w-full max-w-7xl mx-auto mt-4">
-          {/* Month/Year Filter Section */}
-          <div className="bg-gradient-to-r from-blue-50 via-white to-indigo-50 rounded-xl shadow-md border border-blue-200 p-6 mb-6">
-            <div className="flex flex-wrap items-end gap-4">
-              {/* Month Filter */}
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-blue-700 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  Select Month
-                </label>
-                <div className="relative" ref={monthlyMonthPickerRef}>
+                <div className="flex items-end gap-2 shrink-0 ml-auto">
                   <button
-                    onClick={() => setShowMonthlyMonthPicker(!showMonthlyMonthPicker)}
-                    className="w-48 px-4 py-2.5 bg-white border-2 border-blue-300 rounded-lg text-sm font-semibold text-slate-700 hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all shadow-sm flex items-center justify-between"
+                    onClick={() => {
+                      const current = getCurrentYyyyMm();
+                      const range = getMonthDateRange(current);
+                      setSearchQuery('');
+                      setDailyMonth(current);
+                      setDailyStart(range.start);
+                      setDailyEnd(range.end);
+                      setSelectedTeam('all');
+                    }}
+                    className={resetFiltersButtonClass}
+                    type="button"
+                    title="Reset all filters"
                   >
-                    <span>{monthlyMonth ? (() => {
-                      const [year, month] = monthlyMonth.split('-');
-                      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                      return `${monthNames[parseInt(month) - 1]} ${year}`;
-                    })() : 'All Months'}</span>
-                    <Calendar className="w-4 h-4" />
+                    <RotateCcw className="w-4 h-4" />
+                    Reset Filters
                   </button>
-                  <MonthPickerComponent
-                    value={monthlyMonth}
-                    onChange={(val) => setMonthlyMonth(val)}
-                    show={showMonthlyMonthPicker}
-                    onClose={() => setShowMonthlyMonthPicker(false)}
-                  />
+                  <button
+                    className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 transition-all duration-200 shadow-sm"
+                    onClick={handleExportAllUsers}
+                    type="button"
+                    title="Export all agents"
+                    aria-label="Export all agents"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
+            </div>
 
-              {/* Reset Filters Button */}
-              <button
-                onClick={() => {
-                  setMonthlyMonth(getCurrentMonth());
-                  setShowMonthlyMonthPicker(false);
-                }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200"
-                title="Reset all filters"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Reset Filters
-              </button>
-            </div>
-          </div>
-          {loadingMonthly ? (
-            <div className="py-8 text-center text-blue-700 font-semibold">Loading monthly report...</div>
-          ) : errorMonthly ? (
-            <div className="py-8 text-center text-red-600 font-semibold">{errorMonthly}</div>
-          ) : monthlySummaryData.length > 0 ? (
-            <div className="space-y-6">
-              {Object.entries(groupByMonthYear(monthlySummaryData)).map(([month, users]) => (
-                <MonthCard
-                  key={month}
-                  month={parseMonthYear(month)}
-                  users={users}
-                  onExport={(user) => handleExportMonthDailyData(user, parseMonthYear(month))}
-                  onExportMonth={handleExportMonthTable}
-                  hideTeamColumn={isAssistantManager}
-                  teamOptions={teams}
+            <div ref={dailyShellRef} className="flex flex-col min-h-0 overflow-hidden">
+              {loadingDaily ? (
+                <div className="py-8 text-center text-blue-700 font-semibold">Loading daily report...</div>
+              ) : errorDaily ? (
+                <div className="py-8 text-center text-red-600 font-semibold">{errorDaily}</div>
+              ) : dailyGroupedEntries.length > 0 ? (
+                <DailyReportAgentPanel
+                  agents={dailyGroupedEntries}
+                  canViewTeamFilter={canViewTeamFilter}
+                  selectedMonth={dailyMonth}
+                  rangeStart={dailyStart}
+                  rangeEnd={dailyEnd}
+                  onRefresh={handleRefreshData}
+                  mapRows={mapDailyReportRows}
                 />
-              ))}
+              ) : (
+                <div className="py-8 text-center text-gray-400">No data available</div>
+              )}
             </div>
-          ) : (
-            <div className="py-8 text-center text-gray-400">No monthly data available</div>
-          )}
-        </div>
-      )}
+          </>
+        ) : (
+          <>
+            <div className={filterCardClass}>
+              <div className="flex flex-col lg:flex-row lg:flex-wrap lg:items-end gap-4">
+                <MonthYearPicker
+                  compact
+                  label="Select Month"
+                  selectedMonthYear={yyyyMmToMonthYear(monthlyMonth)}
+                  onMonthYearChange={(my) => {
+                    const yyyyMm = monthYearToYyyyMm(my);
+                    if (yyyyMm) setMonthlyMonth(yyyyMm);
+                  }}
+                  showAllOption={false}
+                />
+
+                <div className="w-full sm:w-[220px] shrink-0">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    Search Agent
+                  </label>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search by agent name..."
+                    className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all hover:border-blue-400"
+                  />
+                </div>
+
+                {canViewTeamFilter && (
+                  <div className="w-full sm:w-[200px] shrink-0">
+                    <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-blue-600" />
+                      Team
+                    </label>
+                    <SearchableSelect
+                      options={[
+                        { value: "all", label: "All Teams" },
+                        ...teams.map((team) => ({ value: String(team.team_id), label: team.label })),
+                      ]}
+                      value={selectedTeam}
+                      onChange={(val) => setSelectedTeam(val)}
+                      placeholder={loadingTeams ? "Loading teams..." : "Select team"}
+                      disabled={loadingTeams}
+                    />
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    setMonthlyMonth(getCurrentYyyyMm());
+                    setSearchQuery("");
+                    setSelectedTeam("all");
+                  }}
+                  className={resetFiltersButtonClass}
+                  title="Reset all filters"
+                  type="button"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Reset Filters
+                </button>
+
+                <button
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all duration-200 whitespace-nowrap"
+                  onClick={() => handleExportMonthTable(monthlyDisplayMonth, filteredMonthlyUsers)}
+                  type="button"
+                >
+                  <Download className="w-4 h-4" />
+                  Export Month
+                </button>
+              </div>
+            </div>
+
+            <div ref={monthlyShellRef} className="flex flex-col min-h-0 overflow-hidden">
+              {loadingMonthly ? (
+                <div className="py-8 text-center text-blue-700 font-semibold">Loading monthly report...</div>
+              ) : errorMonthly ? (
+                <div className="py-8 text-center text-red-600 font-semibold">{errorMonthly}</div>
+              ) : filteredMonthlyUsers.length > 0 ? (
+                <MonthlyReportAgentPanel
+                  users={filteredMonthlyUsers}
+                  month={monthlyDisplayMonth}
+                  hideTeamColumn={isAssistantManager}
+                />
+              ) : (
+                <div className="py-8 text-center text-gray-400">No monthly data available</div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 }
-
-// Helper to group data by month_year (robust, with fallback)
-function groupByMonthYear(data) {
-  return data.reduce((acc, item) => {
-    let key = item.month_year;
-    if (!key || typeof key !== 'string' || !/^[A-Z]+\d{4}$/.test(key)) {
-      // fallback: try to build from item.month and item.year, or use 'Unknown'
-      key = (item.month && item.year) ? `${item.month.toUpperCase()}${item.year}` : 'Unknown';
-    }
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(item);
-    return acc;
-  }, {});
-}
-
 
 // Helper to parse month label and year from month_year string (e.g., JAN2026)
 function parseMonthYear(monthYear) {

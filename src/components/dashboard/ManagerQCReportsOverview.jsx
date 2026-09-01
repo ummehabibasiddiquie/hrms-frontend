@@ -2,8 +2,10 @@
  * File: ManagerQCReportsOverview.jsx
  * Description: Manager/Admin comprehensive view of all QC activities and reports
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useClientPagination } from '../../hooks/useClientPagination';
+import TablePaginationBar from '../common/TablePaginationBar';
 import {
   FileCheck,
   CheckCircle2,
@@ -28,6 +30,22 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 import { DateRangePicker } from '../common/CustomCalendar';
 import { exportToCSV } from '../../utils/csvExport';
+import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
+
+const formatLocalDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDefaultDateRange = () => {
+  const today = new Date();
+  return {
+    startDate: formatLocalDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+    endDate: formatLocalDate(today),
+  };
+};
 
 const ManagerQCReportsOverview = () => {
   const { user } = useAuth();
@@ -59,10 +77,15 @@ const ManagerQCReportsOverview = () => {
   const [error, setError] = useState(null);
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
   
-  // Filters
+  // Filters — default to current month (1st through today)
+  const defaultDateRange = getDefaultDateRange();
   const [searchTerm, setSearchTerm] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(defaultDateRange.startDate);
+  const [endDate, setEndDate] = useState(defaultDateRange.endDate);
+
+  const qcPagination = useClientPagination(filteredRecords, {
+    resetKeys: [searchTerm, startDate, endDate],
+  });
 
 
   // Fetch QC history data
@@ -220,32 +243,7 @@ const ManagerQCReportsOverview = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return { date: 'N/A', time: '' };
-    // Parse the date string format: "Fri, 03 Apr 2026 15:26:48 GMT"
-    // Extract date and time directly without timezone conversion
-    const match = dateString.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
-    if (match) {
-      const [, day, month, year, hours, minutes] = match;
-      const hour = parseInt(hours, 10);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const hour12 = hour % 12 || 12;
-      return {
-        date: `${parseInt(day, 10)}/${month}/${year}`,
-        time: `${hour12}:${minutes} ${ampm}`
-      };
-    }
-    // Fallback for unexpected format - use UTC to avoid timezone conversion
-    const date = new Date(dateString);
-    const day = date.getUTCDate();
-    const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-    const year = date.getUTCFullYear();
-    const hours = date.getUTCHours();
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const hour12 = hours % 12 || 12;
-    return {
-      date: `${day}/${month}/${year}`,
-      time: `${hour12}:${minutes} ${ampm}`
-    };
+    return formatISTDateTimeParts(dateString);
   };
 
   const parseErrors = (errorString) => {
@@ -280,10 +278,10 @@ const ManagerQCReportsOverview = () => {
   };
 
   const handleReset = () => {
-    setFilteredRecords(qcRecords);
+    const range = getDefaultDateRange();
     setSearchTerm('');
-    setStartDate('');
-    setEndDate('');
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
     setSelectedRecord(null);
   };
 
@@ -450,6 +448,101 @@ const ManagerQCReportsOverview = () => {
     }
   };
 
+  // Export Consolidated Report
+  const handleConsolidatedExport = async () => {
+    try {
+      if (!user?.user_id) {
+        toast.error('User not authenticated');
+        return;
+      }
+
+      const loadingToast = toast.loading('Generating consolidated report...');
+
+      const payload = {
+        logged_in_user_id: user.user_id
+      };
+
+      if (startDate && endDate) {
+        payload.start_date = startDate;
+        payload.end_date = endDate;
+      }
+
+      const response = await api.post('qc_history_user/consolidated_qc_report', payload);
+
+      if (response.data?.status === 200 && response.data?.data?.records) {
+        const records = response.data.data.records;
+        
+        if (records.length === 0) {
+          toast.dismiss(loadingToast);
+          toast.error('No data found for the selected criteria');
+          return;
+        }
+
+        const exportData = records.map(record => {
+          const evalDate = record.evaluation_date ? 
+            new Date(record.evaluation_date).toISOString().split('T')[0] : 'N/A';
+          const workDate = record.work_date ? 
+            new Date(record.work_date).toISOString().split('T')[0] : 'N/A';
+          const errorTypes = record.error_type && record.error_type.length > 0 
+            ? record.error_type.join(', ') : '-';
+
+          return {
+            'Evaluation Date': evalDate,
+            'Work Date': workDate,
+            'Team Lead': record.team_lead || 'N/A',
+            'Agent Name': record.agent_name || 'N/A',
+            'Project Name': record.project_name || 'N/A',
+            'Task Name': record.task_name || 'N/A',
+            'Records': record.records || 0,
+            'QC Records': record.qc_records || 0,
+            'No. of Errors': record.no_of_errors || 0,
+            'Avg QC Score': record.final_qc_score ? `${record.final_qc_score}%` : '0%',
+            'Error Types': errorTypes,
+            'QA Name': record.qa_name || 'N/A'
+          };
+        });
+
+        const totalRecords = records.reduce((sum, r) => sum + (r.records || 0), 0);
+        const totalQCRecords = records.reduce((sum, r) => sum + (r.qc_records || 0), 0);
+        const totalErrors = records.reduce((sum, r) => sum + (r.no_of_errors || 0), 0);
+        const avgScore = records.length > 0 
+          ? (records.reduce((sum, r) => sum + (r.final_qc_score || 0), 0) / records.length).toFixed(2)
+          : '0.00';
+
+        exportData.push({
+          'Evaluation Date': 'SUMMARY',
+          'Work Date': '',
+          'Team Lead': '',
+          'Agent Name': `Total Records: ${totalRecords}`,
+          'Project Name': `Total QC Records: ${totalQCRecords}`,
+          'Task Name': `Total Errors: ${totalErrors}`,
+          'Records': '',
+          'QC Records': '',
+          'No. of Errors': '',
+          'Avg QC Score': `${avgScore}%`,
+          'Error Types': '',
+          'QA Name': ''
+        });
+
+        const dateRangeStr = (startDate && endDate) 
+          ? `_${startDate}_to_${endDate}` 
+          : '';
+        const filename = `Consolidated_QC_Report${dateRangeStr}_${new Date().toISOString().split('T')[0]}.csv`;
+
+        exportToCSV(exportData, filename);
+        
+        toast.dismiss(loadingToast);
+        toast.success(`Exported ${records.length} consolidated records!`);
+      } else {
+        toast.dismiss(loadingToast);
+        toast.error('Failed to fetch consolidated data');
+      }
+    } catch (err) {
+      console.error('Consolidated export error:', err);
+      toast.error('Failed to generate consolidated report');
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -494,6 +587,13 @@ const ManagerQCReportsOverview = () => {
             >
               <Download className="w-4 h-4" />
               Export History
+            </button>
+            <button
+              onClick={handleConsolidatedExport}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md"
+            >
+              <Download className="w-4 h-4" />
+              Consolidated Export
             </button>
             <button
               onClick={handleReset}
@@ -604,7 +704,7 @@ const ManagerQCReportsOverview = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredRecords.map((record, index) => (
+                  qcPagination.pagedItems.map((record, index) => (
                     <React.Fragment key={record.id || index}>
                     <tr className="hover:bg-slate-50 transition-colors">
                       {/* Evaluation Date - created_at */}
@@ -900,6 +1000,7 @@ const ManagerQCReportsOverview = () => {
               </tbody>
             </table>
           </div>
+          <TablePaginationBar {...qcPagination} itemLabel="QC records" />
         </div>
       </div>
 

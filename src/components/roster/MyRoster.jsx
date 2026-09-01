@@ -1,0 +1,137 @@
+import React, { useCallback, useEffect, useState } from "react";
+import { CalendarDays } from "lucide-react";
+import { toast } from "react-hot-toast";
+import { listChangeRequests, listRosters } from "../../services/rosterService";
+import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import {
+  formatMonthYearLabel,
+  getCurrentMonthYear,
+  parseMonthYear,
+} from "../../utils/rosterUtils";
+import LoadingSpinner from "../common/LoadingSpinner";
+import RosterCalendar from "./RosterCalendar";
+import RosterSummaryCards from "./RosterSummaryCards";
+import RosterSubmissionTracker from "./RosterSubmissionTracker";
+import { MonthYearPicker } from "../common/CustomCalendar";
+
+
+
+const MyRoster = () => {
+  const [monthYear, setMonthYear] = useState(getCurrentMonthYear());
+  const [roster, setRoster] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState([]);
+
+  const loadPendingOverlay = useCallback(async () => {
+    try {
+      const res = await listChangeRequests({
+        month_year: monthYear,
+        status: "Pending",
+      });
+      const rows = Array.isArray(res.data) ? res.data : [];
+      const rosterMonthId = roster?.roster_month_id;
+      const scoped = rows.filter((r) => {
+        if ((r.status || "") !== "Pending") return false;
+        if (!r.batch_id) return false;
+        if (rosterMonthId) return String(r.roster_month_id) === String(rosterMonthId);
+        return true;
+      });
+      setPendingRequests(scoped);
+    } catch {
+      setPendingRequests([]);
+    }
+  }, [monthYear, roster?.roster_month_id]);
+
+  const loadRoster = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await listRosters({
+        month_year: monthYear,
+        include_days: true,
+      });
+      const rosters = res.data?.rosters || [];
+      setRoster(rosters[0] || null);
+    } catch (err) {
+      toast.error(getFriendlyErrorMessage(err));
+      setRoster(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [monthYear]);
+
+  useEffect(() => {
+    loadRoster();
+  }, [loadRoster]);
+
+  useEffect(() => {
+    if (roster?.roster_month_id) {
+      loadPendingOverlay();
+    } else {
+      setPendingRequests([]);
+    }
+  }, [loadPendingOverlay, roster?.roster_month_id]);
+
+  const hasPendingOverlay = pendingRequests.length > 0;
+
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-white/20 rounded-xl">
+            <CalendarDays className="w-7 h-7" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">My Roster</h1>
+            <p className="text-blue-100 text-sm mt-1">
+              View-only calendar and request status. Roster changes are made by your manager via
+              Excel upload.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+        <MonthYearPicker
+          selectedMonthYear={monthYear}
+          onMonthYearChange={setMonthYear}
+          label="Select Month"
+          showAllOption={false}
+          allowFutureMonths
+        />
+      </div>
+
+      {loading ? (
+        <LoadingSpinner />
+      ) : !roster ? (
+        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center text-slate-500">
+          No roster found for {formatMonthYearLabel(monthYear)}.
+        </div>
+      ) : (
+        <>
+          <RosterSummaryCards roster={roster} />
+          {hasPendingOverlay && (
+            <div className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-4 py-2">
+              Blue dashed days show changes your manager submitted that are still awaiting admin approval.
+            </div>
+          )}
+          <RosterCalendar
+            monthYear={monthYear}
+            days={roster.days}
+            rosterMonthId={roster.roster_month_id}
+            rosterStartDate={roster.roster_start_date}
+            pendingRequests={pendingRequests}
+            readOnly
+          />
+        </>
+      )}
+
+      <RosterSubmissionTracker
+        variant="employee"
+        monthYear={monthYear}
+        onMonthYearChange={setMonthYear}
+      />
+    </div>
+  );
+};
+
+export default MyRoster;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Edit2, Save, X, ChevronUp, ChevronDown, Search, Download, Users, FileX } from 'lucide-react';
+import { Edit2, Trash2, Save, X, ChevronUp, ChevronDown, Search, Download, Users, FileX } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -8,26 +8,42 @@ import ErrorMessage from '../common/ErrorMessage';
 import { exportToCSV } from '../../utils/csvExport';
 import { MonthYearPicker } from '../common/CustomCalendar';
 import SearchableSelect from '../common/SearchableSelect';
+import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
+import { getCurrentMonthYear, getDefaultRecentMonthYears } from '../../utils/rosterUtils';
 
-// Helper to get current month in format JAN2026
-const getCurrentMonthYear = () => {
-  const date = new Date();
-  const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
-  const year = date.getFullYear();
-  return `${month}${year}`;
+const sortTeamWise = (a, b) => {
+  const teamA = (a.team_name || "").trim();
+  const teamB = (b.team_name || "").trim();
+  if (!teamA && teamB) return 1;
+  if (teamA && !teamB) return -1;
+  const teamCmp = teamA.localeCompare(teamB, undefined, { sensitivity: "base" });
+  if (teamCmp !== 0) return teamCmp;
+  const aAgent = (a.user_name || "").trim().toLowerCase() === teamA.toLowerCase() ? 0 : 1;
+  const bAgent = (b.user_name || "").trim().toLowerCase() === teamB.toLowerCase() ? 0 : 1;
+  if (aAgent !== bAgent) return aAgent - bAgent;
+  return (a.user_name || "").localeCompare(b.user_name || "", undefined, { sensitivity: "base" });
 };
 
 const UserMonthlyReport = () => {
   const { user } = useAuth();
   
-  // Role checking
-  const roleId = user?.role_id;
-  const role = user?.role || user?.role_name || '';
-  const isAdmin = roleId === 1 || String(role).toLowerCase() === 'admin';
-  const isSuperAdmin = String(role).toLowerCase().includes('super');
-  const isProjectManager = roleId === 3 || String(role).toLowerCase().includes('project manager');
+  // Role checking — coerce role_id (API may return string) and check designation fallbacks
+  const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
+  const role = user?.role || user?.role_name || user?.user_role || '';
+  const designation = String(user?.designation || user?.user_designation || '').toLowerCase();
+  const normalizedRole = String(role).toLowerCase();
+  const isSuperAdmin = roleId === 1 || normalizedRole.includes('super') || designation.includes('super');
+  const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === 'admin' || designation.includes('admin'));
+  const isProjectManager =
+    roleId === 3 || normalizedRole.includes('project manager') || designation.includes('project manager');
+  const isAssistantManager =
+    roleId === 4 || normalizedRole.includes('assistant') || designation.includes('assistant');
+  const canManageAssignedHours = isAssistantManager || isProjectManager || isAdmin || isSuperAdmin;
+  const canEditMonthlyBaseline = false;
+  const canEditExtraHours = canManageAssignedHours;
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
-  const canViewTeamColumn = isAdmin || isSuperAdmin || isProjectManager; // Show team column for these roles, hide for assistant manager (role_id 4)
+  const canViewTeamColumn = isAdmin || isSuperAdmin || isProjectManager;
+  const assistantManagerTeamId = isAssistantManager ? user?.team_id : null;
   
   // State for users list
   const [users, setUsers] = useState([]);
@@ -38,9 +54,13 @@ const UserMonthlyReport = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Edit state - only for extra_assign_hours
+  // Edit state
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
+  
+  // Bulk input state - for adding multiple records at once
+  const [formData, setFormData] = useState({}); // { monthYear: { userId: { monthly_target, extra_assign_hours, working_days } } }
+  const [submitting, setSubmitting] = useState(false);
   
   // State for expanded/collapsed cards
   const [expandedMonths, setExpandedMonths] = useState({});
@@ -55,29 +75,43 @@ const UserMonthlyReport = () => {
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState('all');
   const [loadingTeams, setLoadingTeams] = useState(false);
+  
+  // State for delete confirmation modal
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch users on mount
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoadingUsers(true);
-        const response = await api.post('/user/list', {
-          user_id: String(user?.user_id),
-          device_id: user?.device_id || 'web',
-          device_type: user?.device_type || 'Laptop'
-        });
+        const requestBody = {
+          logged_in_user_id: user?.user_id
+        };
+        
+        // Add month_year filter if a specific month is selected
+        if (selectedMonthFilter && selectedMonthFilter !== 'all') {
+          requestBody.month_year = selectedMonthFilter;
+        }
+        
+        // Assistant Manager: only their own team (no team dropdown shown)
+        if (assistantManagerTeamId) {
+          requestBody.team_id = assistantManagerTeamId;
+        } else if (selectedTeam && selectedTeam !== 'all') {
+          requestBody.team_id = selectedTeam;
+        }
+
+        const response = await api.post('/user_monthly_report/list_users', requestBody);
         
         if (response.data?.data) {
-          // Map user data to expected format and filter for agents only (role_id = 6)
-          const usersList = response.data.data
-            .filter(u => u.role_id === 6 || String(u.role || u.role_name || '').toUpperCase() === 'AGENT')
-            .map(u => ({
-              user_id: u.user_id,
-              user_name: u.user_name,
-              role_id: u.role_id,
-              team_name: u.team_name
-            }));
-          setUsers(usersList);
+          // Map user data to expected format
+          const usersList = response.data.data.map(u => ({
+            user_id: u.user_id,
+            user_name: u.user_name,
+            team_name: u.team_name
+          }));
+          setUsers([...usersList].sort(sortTeamWise));
         } else {
           setUsers([]);
         }
@@ -93,7 +127,7 @@ const UserMonthlyReport = () => {
     if (user?.user_id) {
       fetchUsers();
     }
-  }, [user?.user_id, user?.device_id, user?.device_type]);
+  }, [user?.user_id, selectedMonthFilter, selectedTeam, assistantManagerTeamId]);
 
   // Fetch teams dropdown data
   useEffect(() => {
@@ -121,13 +155,14 @@ const UserMonthlyReport = () => {
   }, [canViewTeamFilter, user?.user_id]);
 
   // Fetch report data function
-  const fetchReportData = useCallback(async () => {
+  const fetchReportData = async () => {
     try {
       setLoading(true);
       setError(null);
       
       const requestBody = {
-        logged_in_user_id: user?.user_id
+        logged_in_user_id: user?.user_id,
+        is_active: 1
       };
       
       // Add month_year filter if a specific month is selected
@@ -135,8 +170,9 @@ const UserMonthlyReport = () => {
         requestBody.month_year = selectedMonthFilter;
       }
       
-      // Add team_id filter if a specific team is selected
-      if (selectedTeam && selectedTeam !== 'all') {
+      if (assistantManagerTeamId) {
+        requestBody.team_id = assistantManagerTeamId;
+      } else if (selectedTeam && selectedTeam !== 'all') {
         requestBody.team_id = selectedTeam;
       }
       
@@ -159,7 +195,7 @@ const UserMonthlyReport = () => {
             submitted: true
           }));
         
-        setReportData(mappedData);
+        setReportData([...mappedData].sort(sortTeamWise));
       } else {
         setReportData([]);
       }
@@ -171,31 +207,24 @@ const UserMonthlyReport = () => {
       setError('Failed to fetch report data');
       setLoading(false);
     }
-  }, [user?.user_id, selectedMonthFilter, selectedTeam]);
+  };
 
-  // Fetch report data on mount
+  // Fetch report data on mount and when filters change
   useEffect(() => {
     fetchReportData();
-  }, [fetchReportData]);
+  }, [user?.user_id, selectedMonthFilter, selectedTeam, assistantManagerTeamId]);
 
-  // Auto-expand current month on initial load
+  // Auto-expand newest default month (or the selected month)
   useEffect(() => {
     const currentMonth = getCurrentMonthYear();
+    const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
+    const newest = selectedMonthFilter !== 'all' ? selectedMonthFilter : defaultMonths[0];
     setExpandedMonths(prev => ({
       ...prev,
-      [currentMonth]: true
+      [newest]: true,
+      ...(selectedMonthFilter === 'all' ? { [currentMonth]: true } : {})
     }));
-  }, [users, reportData]);
-
-  // Auto-expand when a specific month is selected in filter
-  useEffect(() => {
-    if (selectedMonthFilter !== 'all') {
-      setExpandedMonths(prev => ({
-        ...prev,
-        [selectedMonthFilter]: true
-      }));
-    }
-  }, [selectedMonthFilter]);
+  }, [users, reportData, selectedMonthFilter]);
 
   // Handle month/year change from picker
   const handleMonthYearChange = (value) => {
@@ -215,6 +244,10 @@ const UserMonthlyReport = () => {
 
   // Handle edit click
   const handleEditClick = (record) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to edit assigned hours');
+      return;
+    }
     setEditingId(record.id);
     setEditData({
       user_id: record.user_id,
@@ -225,19 +258,23 @@ const UserMonthlyReport = () => {
     });
   };
 
-  // Handle edit save - only update extra_assigned_hours
+  // Handle edit save
   const handleEditSave = async (id) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to update assigned hours');
+      return;
+    }
     try {
       const payload = {
-        user_id: editData.user_id,
+        user_monthly_tracker_id: id,
         month_year: editData.month_year,
-        extra_assigned_hours: parseFloat(editData.extra_assign_hours)
+        extra_assigned_hours: parseFloat(editData.extra_assign_hours),
       };
 
       const response = await api.post('/user_monthly_tracker/update', payload);
       
       if (response.data?.status === 200) {
-        toast.success(response.data.message || 'Extra assign hours updated successfully');
+        toast.success(response.data.message || 'Record updated successfully');
         
         // Refresh data from server
         await fetchReportData();
@@ -247,7 +284,7 @@ const UserMonthlyReport = () => {
       }
     } catch (err) {
       console.error('Error updating record:', err);
-      toast.error(err.response?.data?.message || 'Failed to update extra assign hours');
+      toast.error(err.response?.data?.message || 'Failed to update record');
     }
   };
 
@@ -257,19 +294,228 @@ const UserMonthlyReport = () => {
     setEditData({});
   };
 
+  // Handle delete
+  const handleDeleteClick = (record) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to delete assigned hours');
+      return;
+    }
+    setRecordToDelete(record);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!recordToDelete) return;
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to delete assigned hours');
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await api.post('/user_monthly_tracker/delete', {
+        user_monthly_tracker_id: recordToDelete.id
+      });
+      
+      if (response.data?.status === 200) {
+        toast.success(response.data.message || 'Record deleted successfully');
+        
+        // Refresh data from server
+        await fetchReportData();
+        
+        // Close modal and reset state
+        setDeleteModalOpen(false);
+        setRecordToDelete(null);
+      }
+    } catch (err) {
+      console.error('Error deleting record:', err);
+      toast.error(err.response?.data?.message || 'Failed to delete record');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModalOpen(false);
+    setRecordToDelete(null);
+  };
+
   // Handle edit data change
   const handleEditDataChange = (e) => {
     const { name, value } = e.target;
     setEditData(prev => ({ ...prev, [name]: value }));
   };
 
+  // Handle form data change for bulk input
+  const handleFormDataChange = (monthYear, userId, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [monthYear]: {
+        ...prev[monthYear],
+        [userId]: {
+          ...prev[monthYear]?.[userId],
+          [field]: value
+        }
+      }
+    }));
+  };
+
+  // Handle Apply All - copy first user's data to all users in the same month
+  const handleApplyAll = (monthYear) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to add assigned hours');
+      return;
+    }
+    const monthData = groupedData[monthYear];
+    if (!monthData || monthData.length === 0) return;
+
+    // Find first user with form data or first placeholder
+    const firstUserData = formData[monthYear]?.[monthData[0].user_id];
+    
+    if (!firstUserData?.extra_assign_hours) {
+      toast.error('Please enter extra hours for the first user first');
+      return;
+    }
+
+    // Apply first user's extra hours to all users without submitted data
+    const newFormData = { ...formData };
+    if (!newFormData[monthYear]) {
+      newFormData[monthYear] = {};
+    }
+
+    monthData.forEach(record => {
+      if (!record.id || !record.submitted) {
+        newFormData[monthYear][record.user_id] = {
+          extra_assign_hours: firstUserData.extra_assign_hours || '',
+        };
+      }
+    });
+
+    setFormData(newFormData);
+    toast.success('Data applied to all users!');
+  };
+
+  // Handle Submit All - submit all unsaved records with data
+  const handleSubmitAll = async (monthYear) => {
+    if (!canManageAssignedHours) {
+      toast.error('You do not have permission to add assigned hours');
+      return;
+    }
+    const monthFormData = formData[monthYear];
+    if (!monthFormData) {
+      toast.error('No data to submit');
+      return;
+    }
+
+    // Filter records that have at least one field filled
+    const recordsToSubmit = Object.entries(monthFormData).filter(([, data]) => data.extra_assign_hours);
+
+    if (recordsToSubmit.length === 0) {
+      toast.error('No extra hours to submit');
+      return;
+    }
+
+    setSubmitting(true);
+    let successCount = 0;
+    let errorCount = 0;
+    let skippedCount = 0;
+
+    try {
+      for (const [userId, data] of recordsToSubmit) {
+        try {
+          const existingRecord = reportData.find(
+            r => r.user_id === parseInt(userId) && r.month_year === monthYear && r.id && r.submitted
+          );
+          
+          if (!existingRecord) {
+            skippedCount++;
+            continue;
+          }
+
+          const payload = {
+            user_monthly_tracker_id: existingRecord.id,
+            month_year: monthYear,
+            extra_assigned_hours: parseFloat(data.extra_assign_hours || existingRecord.extra_assign_hours || 0),
+          };
+          const response = await api.post('/user_monthly_tracker/update', payload);
+          if (response.data?.status === 200) successCount++;
+          else errorCount++;
+        } catch (err) {
+          console.error(`Error submitting for user ${userId}:`, err);
+          if (err.response?.status === 409) {
+            skippedCount++;
+          } else {
+            errorCount++;
+          }
+        }
+      }
+
+      // Show summary
+      if (successCount > 0) {
+        toast.success(`Successfully submitted ${successCount} record(s)`);
+      }
+      if (skippedCount > 0) {
+        toast.info(`${skippedCount} record(s) already exist, skipped`);
+      }
+      if (errorCount > 0) {
+        toast.error(`Failed to submit ${errorCount} record(s)`);
+      }
+
+      // Clear form data for this month and refresh
+      if (successCount > 0 || skippedCount > 0) {
+        setFormData(prev => {
+          const newData = { ...prev };
+          delete newData[monthYear];
+          return newData;
+        });
+        await fetchReportData();
+      }
+    } catch (err) {
+      console.error('Error in Submit All:', err);
+      toast.error('Failed to submit records');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loadingUsers) {
     return <LoadingSpinner />;
   }
 
-  // Return report data from API
+  // Build table rows: tracker data + empty rows for users missing a record in each visible month
   const getTableData = () => {
-    return [...reportData];
+    const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
+    const visibleMonths = selectedMonthFilter !== 'all'
+      ? [selectedMonthFilter]
+      : defaultMonths;
+
+    const allData = reportData.filter((r) => visibleMonths.includes(r.month_year));
+    const monthsNeedingPlaceholders = new Set(visibleMonths);
+
+    monthsNeedingPlaceholders.forEach((monthKey) => {
+      const monthUserIds = new Set(
+        reportData.filter((r) => r.month_year === monthKey).map((r) => r.user_id)
+      );
+
+      users.forEach((u) => {
+        if (monthUserIds.has(u.user_id)) return;
+
+        if (selectedTeam !== 'all' && !assistantManagerTeamId) {
+          const selectedTeamData = teams.find((t) => String(t.team_id) === String(selectedTeam));
+          const selectedTeamLabel = selectedTeamData?.label;
+          if (u.team_name !== selectedTeamLabel) return;
+        }
+
+        allData.push({
+          user_id: u.user_id,
+          user_name: u.user_name,
+          team_name: u.team_name,
+          month_year: monthKey,
+        });
+      });
+    });
+
+    return allData;
   };
 
   // Group data by month_year
@@ -281,6 +527,9 @@ const UserMonthlyReport = () => {
         grouped[month] = [];
       }
       grouped[month].push(record);
+    });
+    Object.keys(grouped).forEach((month) => {
+      grouped[month].sort(sortTeamWise);
     });
     return grouped;
   };
@@ -328,8 +577,8 @@ const UserMonthlyReport = () => {
         }
         data['Month/Year'] = record.month_year || '-';
         data['Monthly Target'] = record.monthly_target || 0;
-        data['Working Days'] = record.working_days || 0;
         data['Extra Assign Hours'] = record.extra_assign_hours || 0;
+        data['Working Days'] = record.working_days || 0;
         return data;
       });
 
@@ -342,8 +591,8 @@ const UserMonthlyReport = () => {
       }
       totals['Month/Year'] = '';
       totals['Monthly Target'] = submittedRecords.reduce((sum, r) => sum + (Number(r.monthly_target) || 0), 0);
-      totals['Working Days'] = submittedRecords.reduce((sum, r) => sum + (Number(r.working_days) || 0), 0);
       totals['Extra Assign Hours'] = submittedRecords.reduce((sum, r) => sum + (Number(r.extra_assign_hours) || 0), 0);
+      totals['Working Days'] = submittedRecords.reduce((sum, r) => sum + (Number(r.working_days) || 0), 0);
 
       // Add totals row to export data
       exportData.push(totals);
@@ -363,42 +612,22 @@ const UserMonthlyReport = () => {
 
   const tableData = getTableData();
   const groupedData = groupByMonth(tableData);
-  
-  // Sort months in reverse chronological order (most recent first)
-  const allMonthYears = Object.keys(groupedData).sort((a, b) => {
-    // Parse month and year from format like "FEB2026"
-    const parseMonthYear = (str) => {
-      const monthMap = {
-        'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
-        'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
-      };
-      const month = str.substring(0, 3);
-      const year = parseInt(str.substring(3));
-      return { year, month: monthMap[month] };
-    };
-    
-    const dateA = parseMonthYear(a);
-    const dateB = parseMonthYear(b);
-    
-    // Sort by year descending, then by month descending
-    if (dateB.year !== dateA.year) {
-      return dateB.year - dateA.year;
-    }
-    return dateB.month - dateA.month;
-  });
-  
-  // Filter months based on selected filter
-  const monthYears = selectedMonthFilter === 'all' 
-    ? allMonthYears 
-    : allMonthYears.filter(month => month === selectedMonthFilter);
+  const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
+
+  const monthYears = selectedMonthFilter === 'all'
+    ? defaultMonths
+    : [selectedMonthFilter];
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
         <h2 className="text-2xl font-bold text-white">User Monthly Goal</h2>
-        <p className="text-blue-100 text-sm mt-1">Manage monthly targets for users</p>
+        <p className="text-blue-100 text-sm mt-1">
+          Monthly target and working days are read-only. Edit extra assigned hours here for employees who already have a monthly baseline.
+        </p>
       </div>
+
 
       {/* Month/Year Filter */}
       <MonthYearPicker
@@ -447,7 +676,7 @@ const UserMonthlyReport = () => {
         <div className="space-y-4">
           {monthYears.map((monthYear) => {
             const isExpanded = expandedMonths[monthYear];
-            const monthData = groupedData[monthYear];
+            const monthData = groupedData[monthYear] || [];
             const filteredMonthData = monthData.filter(record => 
               record.user_name.toLowerCase().includes(searchTerm.toLowerCase())
             );
@@ -541,8 +770,8 @@ const UserMonthlyReport = () => {
                               <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider border border-blue-500">Team</th>
                             )}
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Monthly Target</th>
-                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Working Days</th>
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Extra Assign Hours</th>
+                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Working Days</th>
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Actions</th>
                           </tr>
                         </thead>
@@ -552,6 +781,7 @@ const UserMonthlyReport = () => {
                             {filteredMonthData.map((record) => {
                               // Check if this record is being edited
                               const isEditing = editingId === record.id;
+                              const hasData = record.id && record.submitted;
                               
                               if (isEditing) {
                                 // Edit Mode - Show inline edit fields
@@ -561,21 +791,29 @@ const UserMonthlyReport = () => {
                                     {canViewTeamColumn && (
                                       <td className="px-6 py-4 text-slate-600 border border-slate-300">{record.team_name || '-'}</td>
                                     )}
-                                    <td className="px-6 py-4 text-center text-slate-800 font-semibold border border-slate-300">
-                                      {editData.monthly_target}
-                                    </td>
-                                    <td className="px-6 py-4 text-center text-slate-800 font-semibold border border-slate-300">
-                                      {editData.working_days}
+                                    <td className="px-6 py-4 border border-slate-300">
+                                      <span className="block text-center text-slate-600 font-semibold">
+                                        {editData.monthly_target ?? record.monthly_target ?? '—'}
+                                      </span>
                                     </td>
                                     <td className="px-6 py-4 border border-slate-300">
-                                      <input
-                                        type="text"
-                                        name="extra_assign_hours"
-                                        value={editData.extra_assign_hours}
-                                        onChange={handleEditDataChange}
-                                        placeholder="Enter hours"
-                                        className="w-full bg-white border-2 border-indigo-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                                      />
+                                      {canEditExtraHours ? (
+                                        <input
+                                          type="text"
+                                          name="extra_assign_hours"
+                                          value={editData.extra_assign_hours}
+                                          onChange={handleEditDataChange}
+                                          placeholder="Enter hours"
+                                          className="w-full bg-white border-2 border-indigo-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                                        />
+                                      ) : (
+                                        <span className="block text-center text-slate-600">{editData.extra_assign_hours ?? '—'}</span>
+                                      )}
+                                    </td>
+                                    <td className="px-6 py-4 border border-slate-300">
+                                      <span className="block text-center text-slate-600 font-semibold">
+                                        {editData.working_days ?? record.working_days ?? '—'}
+                                      </span>
                                     </td>
                                     <td className="px-6 py-4 border border-slate-300">
                                       <div className="flex items-center justify-center gap-2">
@@ -597,6 +835,23 @@ const UserMonthlyReport = () => {
                                     </td>
                                   </tr>
                                 );
+                              } else if (!hasData) {
+                                return (
+                                  <tr key={`view-empty-${record.user_id}`} className="transition-all duration-200 border-b border-slate-300 bg-white">
+                                    <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300">{record.user_name}</td>
+                                    {canViewTeamColumn && (
+                                      <td className="px-6 py-4 text-slate-600 border border-slate-300">{record.team_name || '-'}</td>
+                                    )}
+                                    <td className="px-6 py-4 text-center text-slate-400 font-medium border border-slate-300">—</td>
+                                    <td className="px-6 py-4 text-center text-slate-400 font-medium border border-slate-300">—</td>
+                                    <td className="px-6 py-4 text-center text-slate-400 font-medium border border-slate-300">—</td>
+                                    <td className="px-6 py-4 border border-slate-300">
+                                      <div className="flex items-center justify-center">
+                                        <span className="text-xs text-slate-400 italic font-semibold">Baseline not set</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
                               } else {
                                 // View Mode - Show data with Edit/Delete buttons
                                 return (
@@ -609,21 +864,27 @@ const UserMonthlyReport = () => {
                                       {record.monthly_target}
                                     </td>
                                     <td className="px-6 py-4 text-center text-slate-700 font-semibold border border-slate-300">
-                                      {record.working_days}
-                                    </td>
-                                    <td className="px-6 py-4 text-center text-slate-700 font-semibold border border-slate-300">
                                       {record.extra_assign_hours}
                                     </td>
+                                    <td className="px-6 py-4 text-center text-slate-700 font-semibold border border-slate-300">
+                                      {record.working_days}
+                                    </td>
                                     <td className="px-6 py-4 border border-slate-300">
-                                      <div className="flex items-center justify-center">
-                                        <button
-                                          onClick={() => handleEditClick(record)}
-                                          className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all hover:shadow-md"
-                                          title="Edit Extra Assign Hours"
-                                        >
-                                          <Edit2 className="w-4 h-4" />
-                                        </button>
-                                      </div>
+                                      {canManageAssignedHours ? (
+                                        <div className="flex items-center justify-center gap-2">
+                                          <button
+                                            onClick={() => handleEditClick(record)}
+                                            className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all hover:shadow-md"
+                                            title="Edit extra hours"
+                                          >
+                                            <Edit2 className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center justify-center">
+                                          <span className="text-xs text-slate-400 italic font-semibold">View only</span>
+                                        </div>
+                                      )}
                                     </td>
                                   </tr>
                                 );
@@ -643,13 +904,13 @@ const UserMonthlyReport = () => {
                               <td className="px-6 py-4 text-center text-blue-700 font-bold border border-slate-300">
                                 {filteredMonthData
                                   .filter(r => r.id && r.submitted)
-                                  .reduce((sum, r) => sum + (Number(r.working_days) || 0), 0)
+                                  .reduce((sum, r) => sum + (Number(r.extra_assign_hours) || 0), 0)
                                   .toFixed(2)}
                               </td>
                               <td className="px-6 py-4 text-center text-blue-700 font-bold border border-slate-300">
                                 {filteredMonthData
                                   .filter(r => r.id && r.submitted)
-                                  .reduce((sum, r) => sum + (Number(r.extra_assign_hours) || 0), 0)
+                                  .reduce((sum, r) => sum + (Number(r.working_days) || 0), 0)
                                   .toFixed(2)}
                               </td>
                               <td className="px-6 py-4 border border-slate-300"></td>
@@ -698,7 +959,17 @@ const UserMonthlyReport = () => {
         </div>
       )}
 
-          </div>
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete User Monthly Record"
+        entityName={recordToDelete ? recordToDelete.user_name : ""}
+        entityType="user monthly record"
+        isDeleting={isDeleting}
+      />
+    </div>
   );
 };
 

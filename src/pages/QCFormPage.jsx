@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import {
   ArrowLeft,
@@ -33,6 +34,7 @@ import ErrorMessage from '../components/common/ErrorMessage';
 import MultiSelectWithCheckbox from '../components/common/MultiSelectWithCheckbox';
 import SearchableSelect from '../components/common/SearchableSelect';
 import QCConfirmationModal from '../components/common/QCConfirmationModal';
+import { formatISTDateTime, getISTParts } from "../utils/dateTimeIST";
 import {
   Pagination,
   PaginationContent,
@@ -75,6 +77,9 @@ const QCFormPage = () => {
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
   const [sampleSize, setSampleSize] = useState(0); // Sample size from API
   const [sampleFilePath, setSampleFilePath] = useState(''); // Sample file path from API
+  const [samplingPercentage, setSamplingPercentage] = useState(
+    Number(trackerData?.qc_percentage) || 10
+  );
   
   // Use ref as backup for file path to avoid React state timing issues
   const sampleFilePathRef = useRef('');
@@ -100,7 +105,6 @@ const QCFormPage = () => {
   // Calculate error metrics
   const errorMetrics = useMemo(() => {
     const recordCount = formRows.length;
-    const samplingPercentage = trackerData?.qc_percentage || 10;
     const sampleCount = Math.ceil(recordCount * (samplingPercentage / 100));
     
     // Count total errors marked
@@ -141,7 +145,7 @@ const QCFormPage = () => {
       errorList,
       status
     };
-  }, [formRows, afdData, qcScore, trackerData?.qc_percentage]);
+  }, [formRows, afdData, qcScore, samplingPercentage]);
 
   // Lazy loading - calculate visible rows and pagination
   const visibleFormRows = formRows.slice(0, displayedRows);
@@ -210,7 +214,7 @@ const QCFormPage = () => {
           const sampleResponse = await generateQCSample(
             trackerData.tracker_id,
             user.user_id,
-            trackerData.qc_percentage || 10
+            Number(trackerData.qc_percentage) || undefined
           );
           
           // Log full response structure to debug - IMMEDIATELY after receiving
@@ -239,6 +243,7 @@ const QCFormPage = () => {
             // Extract total_records, sample_size, and file_path from API response
             const apiTotalRecords = sampleResponse.data.total_records || 0;
             const apiSampleSize = sampleResponse.data.sample_size || 0;
+            const apiSamplingPercentage = Number(sampleResponse.data.sampling_percentage);
             
             // Try multiple possible locations for the file path
             let apiFilePath = sampleResponse.data.file_path 
@@ -255,12 +260,17 @@ const QCFormPage = () => {
             // If no file path from API, construct download URL as fallback
             if (!apiFilePath && trackerData?.tracker_id) {
               const backendUrl = config.apiNodeBaseUrl || 'http://localhost:8000/api/v1';
-              apiFilePath = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?logged_in_user_id=${user?.user_id}`;
+              const params = new URLSearchParams({
+                logged_in_user_id: String(user?.user_id || ''),
+                sampling_percentage: String(apiSamplingPercentage || Number(trackerData?.qc_percentage) || 10)
+              });
+              apiFilePath = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?${params.toString()}`;
               console.log('[QCFormPage] No file path in API response, using download URL as fallback:', apiFilePath);
             }
             
             setTotalRecords(apiTotalRecords);
             setSampleSize(apiSampleSize);
+            setSamplingPercentage(apiSamplingPercentage || Number(trackerData?.qc_percentage) || 10);
             setSampleFilePath(apiFilePath);
             sampleFilePathRef.current = apiFilePath; // Also store in ref
             
@@ -547,56 +557,18 @@ const QCFormPage = () => {
       const dateSource = possibleDates.find(date => date && date.trim() !== '');
 
       if (dateSource) {
-        let cleanDate = dateSource.trim();
-
-        // Handle formats like "Wed, 05 Mar 2026 14:30:23 GMT"
-        if (cleanDate.includes(',')) {
-          const parts = cleanDate.split(',')[1].trim(); // Get "05 Mar 2026 14:30:23 GMT"
-          const dateParts = parts.split(' '); // ["05", "Mar", "2026", "14:30:23", "GMT"]
-
-          if (dateParts.length >= 3) {
-            const day = dateParts[0];
-            const month = dateParts[1];
-            const year = dateParts[2];
-            const time = dateParts[3] || '00:00:00';
-
-            // Convert month name to number
-            const monthMap = {
-              'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
-              'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
-              'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-            };
-
-            const monthNum = monthMap[month] || '01';
-            formattedDate = `${year}-${monthNum}-${day.padStart(2, '0')} ${time}`;
-          }
-        }
-        // Handle ISO format "2026-03-05T14:30:23Z" or "2026-03-05T14:30:23.000Z"
-        else if (cleanDate.includes('T')) {
-          const [datePart, timePart] = cleanDate.split('T');
-          const time = timePart ? timePart.replace('Z', '').split('.')[0] : '00:00:00';
-          formattedDate = `${datePart} ${time}`;
-        }
-        // Handle format "2026-03-05 14:30:23"
-        else if (cleanDate.includes(' ')) {
-          formattedDate = cleanDate;
-        }
-        // Handle format "2026-03-05" (date only, append default time)
-        else if (cleanDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          formattedDate = `${cleanDate} 00:00:00`;
+        const parts = getISTParts(dateSource);
+        if (parts) {
+          const pad = (n) => String(n).padStart(2, '0');
+          formattedDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)} ${pad(parts.hours)}:${pad(parts.minutes)}:${pad(parts.seconds)}`;
         }
       }
 
-      // If still no valid date, use today's date and time
+      // If still no valid date, use today's date and time in IST
       if (!formattedDate || formattedDate === '') {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        const hours = String(today.getHours()).padStart(2, '0');
-        const minutes = String(today.getMinutes()).padStart(2, '0');
-        const seconds = String(today.getSeconds()).padStart(2, '0');
-        formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        const parts = getISTParts(new Date());
+        const pad = (n) => String(n).padStart(2, '0');
+        formattedDate = `${parts.year}-${pad(parts.month)}-${pad(parts.day)} ${pad(parts.hours)}:${pad(parts.minutes)}:${pad(parts.seconds)}`;
       }
 
       console.log('[QCFormPage] Date extraction:', {
@@ -673,7 +645,7 @@ const QCFormPage = () => {
         qc_file_records: formData, 
         error_list: errorList, 
         comments: comments || '',
-        sampling_percentage: trackerData.qc_percentage || 10
+        sampling_percentage: samplingPercentage
       };
 
       console.log('[QCFormPage] Tracker Data:', trackerData);
@@ -777,18 +749,60 @@ const QCFormPage = () => {
 
   // Handle file download
   const handleDownload = () => {
-    if (trackerData?.tracker_id) {
-      const backendUrl = config.apiNodeBaseUrl || 'http://localhost:8000/api/v1';
-      // Strip /v1 if present to form route, though typically routes start without /v1 here if backend is set up directly. 
-      // Checking the qcService.js, it uses nodeApi.post("/qc-records/generate-sample").
-      // nodeApi probably configures baseURL as VITE_API_NODE_BASE_URL.
-      // So this URL is correct:
-      const fileUrl = `${backendUrl}/qc-records/download-sample/${trackerData.tracker_id}?logged_in_user_id=${user?.user_id}`;
-      // Open the streaming API endpoint directly to trigger browser download
-      window.open(fileUrl, '_blank');
-      toast.success(`Downloading ${trackerData.qc_percentage || 10}% sample file...`);
-    } else {
+    if (!trackerData?.tracker_id) {
       toast.error('No file available for download');
+      return;
+    }
+
+    if (!Array.isArray(formData) || formData.length === 0) {
+      toast.error('No generated sample data available for download');
+      return;
+    }
+
+    try {
+      const worksheet = XLSX.utils.json_to_sheet(formData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, `QC Sample ${samplingPercentage}%`);
+
+      const taskName = String(trackerData?.task_name || 'QC_Sample')
+        .replace(/[\\/:*?"<>|]+/g, '_')
+        .replace(/\s+/g, '_');
+      const userName = String(trackerData?.user_name || 'User')
+        .replace(/[\\/:*?"<>|]+/g, '_')
+        .replace(/\s+/g, '_');
+      
+      // Use tracker submission time instead of current time
+      const trackerDateTime = trackerData?.date_time || trackerData?.date_of_file_submission || trackerData?.tracker_date;
+      let timestamp;
+      if (trackerDateTime) {
+        const parts = getISTParts(trackerDateTime);
+        if (parts) {
+          const ampm = parts.hours >= 12 ? 'PM' : 'AM';
+          const hours12 = parts.hours % 12 || 12;
+          const month = String(parts.month).padStart(2, '0');
+          const day = String(parts.day).padStart(2, '0');
+          const minutes = String(parts.minutes).padStart(2, '0');
+          timestamp = `${parts.year}-${month}-${day}-${hours12}-${minutes}-${ampm}`;
+        } else {
+          timestamp = String(trackerDateTime);
+        }
+      } else {
+        const parts = getISTParts(new Date());
+        const ampm = parts.hours >= 12 ? 'PM' : 'AM';
+        const hours12 = parts.hours % 12 || 12;
+        const month = String(parts.month).padStart(2, '0');
+        const day = String(parts.day).padStart(2, '0');
+        const minutes = String(parts.minutes).padStart(2, '0');
+        timestamp = `${parts.year}-${month}-${day}-${hours12}-${minutes}-${ampm}`;
+      }
+      
+      const fileName = `${userName}_${taskName}_${timestamp}_${samplingPercentage}_percent_sample.xlsx`;
+
+      XLSX.writeFile(workbook, fileName);
+      toast.success(`Downloading ${samplingPercentage}% sample file...`);
+    } catch (error) {
+      console.error('[QCFormPage] Error downloading sample file:', error);
+      toast.error('Failed to download sample file');
     }
   };
 
@@ -942,29 +956,15 @@ const QCFormPage = () => {
               <p className="text-sm text-slate-600 font-medium">Submission Date & Time</p>
               <p className="text-lg font-bold text-slate-800">
                 {trackerData.date_of_file_submission
-                  ? new Date(trackerData.date_of_file_submission).toLocaleString('en-GB', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true
-                    })
+                  ? formatISTDateTime(trackerData.date_of_file_submission, 'N/A')
                   : trackerData.updated_at
-                  ? new Date(trackerData.updated_at).toLocaleString('en-GB', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true
-                    })
-                  : trackerData.date_time 
-                  ? trackerData.date_time.replace(/:\d{2}\s*GMT.*$/, '').trim()
-                  : trackerData.tracker_date 
-                  ? trackerData.tracker_date.replace(/:\d{2}\s*GMT.*$/, '').trim()
-                  : trackerData.created_at 
-                  ? trackerData.created_at.replace(/:\d{2}\s*GMT.*$/, '').trim()
+                  ? formatISTDateTime(trackerData.updated_at, 'N/A')
+                  : trackerData.date_time
+                  ? formatISTDateTime(trackerData.date_time, 'N/A')
+                  : trackerData.tracker_date
+                  ? formatISTDateTime(trackerData.tracker_date, 'N/A')
+                  : trackerData.created_at
+                  ? formatISTDateTime(trackerData.created_at, 'N/A')
                   : 'N/A'}
               </p>
             </div>
@@ -1092,15 +1092,26 @@ const QCFormPage = () => {
                           showSelectAll={true}
                           icon={AlertCircle}
                         />
+                        {console.log('[QCFormPage] Dropdown disabled check - row.id:', row.id, 'pendingSelections[row.id]:', pendingSelections[row.id], 'disabled:', !pendingSelections[row.id]?.category)}
 
                         <button
                           onClick={() => {
                             const pending = pendingSelections[row.id];
+                            console.log('[QCFormPage] Before adding errors - pending:', pending);
                             if (pending?.category && pending?.subcategories?.length > 0) {
                               pending.subcategories.forEach(subcategoryId => {
                                 handleAddError(actualRowIndex, parseInt(pending.category), subcategoryId);
                               });
-                              clearPendingSelection(row.id);
+                              // Keep category selected, only clear subcategories
+                              setPendingSelections(prev => {
+                                console.log('[QCFormPage] Before state update - prev:', prev);
+                                const newState = {
+                                  ...prev,
+                                  [row.id]: { category: pending.category, subcategories: [] }
+                                };
+                                console.log('[QCFormPage] After state update - newState:', newState);
+                                return newState;
+                              });
                             }
                           }}
                           disabled={!pendingSelections[row.id]?.category || !pendingSelections[row.id]?.subcategories?.length}
@@ -1355,7 +1366,7 @@ const QCFormPage = () => {
               <div>
                 <p className="text-sm text-slate-600 font-medium">Data Generated for QC</p>
                 <p className="text-2xl font-bold text-slate-800">
-                  {sampleSize || errorMetrics.tenPercentCount}
+                  {sampleSize || errorMetrics.sampleCount}
                 </p>
               </div>
             </div>

@@ -8,13 +8,18 @@ import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 dayjs.extend(customParseFormat);
 import { fetchDailyBillableReport, fetchMonthlyBillableReport } from "../../services/billableReportService";
-import axios from "axios";
+import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import { Download, Calendar as CalendarIcon, FileSpreadsheet, X, RotateCcw, ChevronDown, FileText, BarChart3, Award } from "lucide-react";
-import { DateRangePicker } from '../common/CustomCalendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { Download, RotateCcw, FileText, BarChart3, Award, FileSpreadsheet } from "lucide-react";
+import {
+  DateRangePicker,
+  MonthYearPicker,
+  yyyyMmToMonthYear,
+  monthYearToYyyyMm,
+} from '../common/CustomCalendar';
 import AgentQCReportPage from '../../pages/AgentQCReportPage';
+import { formatISTDateTimeExport, formatISTDateDash, formatISTDateUpper } from "../../utils/dateTimeIST";
+
 
 
 
@@ -31,6 +36,20 @@ const BillableReport = () => {
     return 'text-red-700 bg-red-200 font-bold';
   };
 
+  const getRosterStatus = (row) => row?.roster_status || row?.day_status || '—';
+
+  const getRosterStatusClass = (status) => {
+    const s = String(status || '').toLowerCase();
+    if (s.includes('week off')) return 'text-slate-700 bg-slate-100 font-semibold';
+    if (s.includes('holiday')) return 'text-purple-800 bg-purple-100 font-semibold';
+    if (s.includes('half day leave')) return 'text-amber-800 bg-amber-100 font-semibold';
+    if (s.includes('leave')) return 'text-orange-800 bg-orange-100 font-semibold';
+    if (s.includes('half day')) return 'text-amber-800 bg-amber-50 font-semibold';
+    if (s.includes('pre join')) return 'text-slate-600 bg-slate-50 font-semibold';
+    if (s.includes('working')) return 'text-green-800 bg-green-50 font-semibold';
+    return 'text-slate-600 bg-slate-50';
+  };
+
   // Helper function to get tracker count color classes
   const getTrackerCountColorClass = (count) => {
     if (count === null || count === undefined || count === '-' || isNaN(Number(count))) return 'text-slate-700';
@@ -40,94 +59,6 @@ const BillableReport = () => {
     return 'text-red-700 bg-red-200 font-bold';
   };
   
-  // Simple MonthPicker component for selecting month/year in YYYY-MM format
-  const MonthPicker = ({ value, onChange }) => {
-    const [showPicker, setShowPicker] = useState(false);
-    const [viewYear, setViewYear] = useState(() => {
-      if (value) {
-        const [year] = value.split('-');
-        return parseInt(year);
-      }
-      return new Date().getFullYear();
-    });
-
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    const handleMonthSelect = (monthIndex) => {
-      const monthStr = String(monthIndex + 1).padStart(2, '0');
-      const dateStr = `${viewYear}-${monthStr}`;
-      onChange(dateStr);
-      setShowPicker(false);
-    };
-
-    const selectedMonth = value ? parseInt(value.split('-')[1]) - 1 : -1;
-    const selectedYear = value ? parseInt(value.split('-')[0]) : -1;
-
-    const displayValue = value ? (() => {
-      const [year, month] = value.split('-');
-      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      return `${monthNames[parseInt(month) - 1]} ${year}`;
-    })() : 'Select Month';
-
-    return (
-      <div>
-        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-2">
-          <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />
-          Month
-        </label>
-        <Popover open={showPicker} onOpenChange={setShowPicker}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="w-full bg-slate-50 border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-800 hover:bg-blue-50 hover:border-blue-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-left flex items-center justify-between"
-            >
-              <span>{displayValue}</span>
-              <ChevronDown className="w-4 h-4 text-blue-600" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[280px] border-2 border-blue-200 bg-white p-4" align="start">
-            <div className="flex items-center justify-between mb-4">
-              <button
-                type="button"
-                onClick={() => setViewYear(y => y - 1)}
-                className="p-1.5 hover:bg-slate-100 rounded transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              </button>
-              <span className="font-bold text-sm text-slate-800">{viewYear}</span>
-              <button
-                type="button"
-                onClick={() => setViewYear(y => y + 1)}
-                className="p-1.5 hover:bg-slate-100 rounded transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {monthNames.map((month, index) => {
-                const isSelected = selectedYear === viewYear && selectedMonth === index;
-                return (
-                  <button
-                    key={month}
-                    type="button"
-                    onClick={() => handleMonthSelect(index)}
-                    className={cn(
-                      "text-sm p-2.5 rounded-lg transition-colors font-medium",
-                      isSelected
-                        ? "bg-blue-600 text-white font-bold"
-                        : "text-slate-700 hover:bg-blue-100"
-                    )}
-                  >
-                    {month}
-                  </button>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>
-    );
-  };
   // Export the visible monthly report table (with filters applied)
   const handleExportMonthlyTable = () => {
       try {
@@ -200,12 +131,11 @@ const BillableReport = () => {
   // Export daily report for a specific month-year from /tracker/view
   const handleExportMonthDailyExcel = async (monthYear) => {
     try {
-      // Build payload directly and use axios to match the daily report fetch pattern
       const payload = {
         logged_in_user_id: user?.user_id,
         month_year: monthYear
       };
-      const res = await axios.post("/python/tracker/view_daily", payload);
+      const res = await api.post("/tracker/view_daily", payload);
       console.log('Export month daily API response:', res.data);
       
       // Access trackers the same way as daily report fetch
@@ -222,9 +152,7 @@ const BillableReport = () => {
       const exportData = trackers.map(row => {
         let formattedDateTime = '';
         if (row.date_time) {
-          const d = new Date(row.date_time);
-          const pad = (n) => n.toString().padStart(2, '0');
-          formattedDateTime = `${pad(d.getUTCDate())}-${pad(d.getUTCMonth() + 1)}-${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+          formattedDateTime = formatISTDateTimeExport(row.date_time);
         }
         return {
           'Date-Time': formattedDateTime,
@@ -352,7 +280,7 @@ const BillableReport = () => {
           ...(endDate && { date_to: endDate }),
         };
         // Call the correct API endpoint
-        const res = await axios.post("/python/tracker/view_daily", payload);
+        const res = await api.post("/tracker/view_daily", payload);
         console.log('Daily report API response:', res.data);
         // Fix: Use trackers array from response
         let data = res.data?.data?.trackers;
@@ -421,14 +349,11 @@ const BillableReport = () => {
         // Only show date part from work_date
         let formattedDate = '-';
         if (row.work_date) {
-          const d = new Date(row.work_date);
-          if (!isNaN(d)) {
-            const pad = n => String(n).padStart(2, '0');
-            formattedDate = `${pad(d.getUTCDate())}-${pad(d.getUTCMonth() + 1)}-${d.getUTCFullYear()}`;
-          }
+          formattedDate = formatISTDateDash(row.work_date);
         }
         return {
           'Date': formattedDate,
+          'Day Status': row.roster_status || row.day_status || '—',
           'Assign Hours': row.assigned_hours != null ? Number(row.assigned_hours).toFixed(2) : '-',
           'Worked Hours': row.total_billable_hours_day != null ? Number(row.total_billable_hours_day).toFixed(2) : '-',
           'QC Score': row.qc_score != null ? `${Number(row.qc_score).toFixed(2)}%` : '-',
@@ -451,6 +376,7 @@ const BillableReport = () => {
       // Add totals row
       exportData.push({
         'Date': 'TOTAL',
+        'Day Status': '',
         'Assign Hours': totalAssigned.toFixed(2),
         'Worked Hours': totalWorked.toFixed(2),
         'QC Score': avgQC,
@@ -481,7 +407,7 @@ const BillableReport = () => {
           >
             <div className="flex items-center justify-center gap-2">
               <FileText className="w-4 h-4" />
-              <span>Daily Billable Report</span>
+              <span>Daily Report</span>
             </div>
             {activeToggle === 'daily' && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
@@ -497,7 +423,7 @@ const BillableReport = () => {
           >
             <div className="flex items-center justify-center gap-2">
               <BarChart3 className="w-4 h-4" />
-              <span>Monthly Billable Report</span>
+              <span>Monthly Report</span>
             </div>
             {activeToggle === 'monthly' && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
@@ -544,12 +470,16 @@ const BillableReport = () => {
                 </div>
                 
                 {/* Month Filter */}
-                <div className="flex-1 lg:flex-none lg:w-48">
-                  <MonthPicker
-                    value={monthFilter}
-                    onChange={setMonthFilter}
-                  />
-                </div>
+                <MonthYearPicker
+                  compact
+                  label="Month"
+                  selectedMonthYear={yyyyMmToMonthYear(monthFilter)}
+                  onMonthYearChange={(my) => {
+                    const yyyyMm = monthYearToYyyyMm(my);
+                    if (yyyyMm) setMonthFilter(yyyyMm);
+                  }}
+                  showAllOption={false}
+                />
                 
                 {/* Action Buttons */}
                 <div className="flex items-end gap-3">
@@ -622,6 +552,7 @@ const BillableReport = () => {
                   <thead className="bg-gradient-to-r from-blue-50 to-blue-100">
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Day Status</th>
                       <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Assign Hours</th>
                       <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">Worked Hours</th>
                       <th className="px-6 py-4 text-center text-xs font-bold text-blue-700 uppercase tracking-wider">QC Score</th>
@@ -636,20 +567,13 @@ const BillableReport = () => {
                           <tr key={idx} className="hover:bg-blue-50/50 transition-colors duration-150">
                             {/* Show only date part from work_date */}
                             <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">{
-                              (() => {
-                                if (row.work_date) {
-                                  const d = new Date(row.work_date);
-                                  if (!isNaN(d)) {
-                                    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-                                    const day = d.getUTCDate();
-                                    const month = monthNames[d.getUTCMonth()];
-                                    const year = d.getUTCFullYear();
-                                    return `${day}/${month}/${year}`;
-                                  }
-                                }
-                                return '-';
-                              })()
+                              formatISTDateUpper(row.work_date)
                             }</td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`px-2 py-1 rounded-lg inline-block ${getRosterStatusClass(getRosterStatus(row))}`}>
+                                {getRosterStatus(row)}
+                              </span>
+                            </td>
                             <td className="px-6 py-4 text-center text-gray-900 font-medium">{
                               row.assigned_hours != null
                                 ? Number(row.assigned_hours).toFixed(2)
@@ -680,6 +604,7 @@ const BillableReport = () => {
                         {/* Totals Row */}
                         <tr className="bg-gradient-to-r from-blue-100 to-blue-200 border-t-2 border-blue-300">
                           <td className="px-6 py-4 text-gray-900 font-bold whitespace-nowrap">TOTAL</td>
+                          <td className="px-6 py-4 text-center text-gray-900 font-bold">—</td>
                           <td className="px-6 py-4 text-center text-gray-900 font-bold">
                             {filteredDailyData.reduce((sum, row) => sum + (Number(row.assigned_hours) || 0), 0).toFixed(2)}
                           </td>
@@ -724,12 +649,16 @@ const BillableReport = () => {
           <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6 mb-6">
             <div className="flex flex-col sm:flex-row sm:items-end gap-4">
               {/* Month Filter */}
-              <div className="flex-1 sm:flex-none sm:w-64">
-                <MonthPicker
-                  value={monthlyMonth}
-                  onChange={setMonthlyMonth}
-                />
-              </div>
+              <MonthYearPicker
+                compact
+                label="Month"
+                selectedMonthYear={yyyyMmToMonthYear(monthlyMonth)}
+                onMonthYearChange={(my) => {
+                  const yyyyMm = monthYearToYyyyMm(my);
+                  if (yyyyMm) setMonthlyMonth(yyyyMm);
+                }}
+                showAllOption={false}
+              />
               
               {/* Action Buttons */}
               <div className="flex items-end gap-3">

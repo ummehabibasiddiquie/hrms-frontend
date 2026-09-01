@@ -14,6 +14,7 @@
  */
 
 import { createContext, useState, useContext, useMemo, useEffect } from "react";
+import { ROUTES } from "../routes/paths";
 
 // Create Auth Context
 const AuthContext = createContext();
@@ -74,7 +75,7 @@ export const AuthProvider = ({ children }) => {
               : 'You have been logged out because a new login was detected in another tab.';
             
             alert(message);
-            window.location.href = '/login';
+            window.location.href = ROUTES.LOGIN;
           }
         } catch (error) {
           console.error('[Auth] Error handling new login trigger:', error);
@@ -88,7 +89,7 @@ export const AuthProvider = ({ children }) => {
         sessionStorage.removeItem("user");
         sessionStorage.removeItem("session_id");
         sessionStorage.removeItem("token");
-        window.location.href = '/login';
+        window.location.href = ROUTES.LOGIN;
       }
     };
 
@@ -182,9 +183,10 @@ export const AuthProvider = ({ children }) => {
 
     // Check if user is Admin, Project Manager, or Assistant Manager
     // PRIORITY: roleId check first (most reliable), then fallback to name checks
-    const isAdmin = 
-      roleId === 1 || 
-      roleName === 'admin' || 
+    const isAdmin =
+      roleId === 1 ||
+      roleId === 2 ||
+      roleName === 'admin' ||
       designation === 'admin';
     
     const isProjectManager = 

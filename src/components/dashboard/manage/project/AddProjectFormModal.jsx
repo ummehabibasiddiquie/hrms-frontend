@@ -381,19 +381,16 @@ const AddProjectFormModal = ({
                               {/* Project Manager */}
                               <div>
                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                        Project Manager <span className="text-red-600">*</span>
+                                        Project Manager
                                    </label>
                                    <SearchableSelect
                                         value={newProject.projectManagerId ? String(newProject.projectManagerId) : ""}
                                         onChange={(val) => {
                                              onFieldChange("projectManagerId", val);
-                                             clearFieldError?.("projectManagerId");
                                         }}
                                         options={projectManagerOptions}
                                         icon={User}
                                         placeholder="Select Project Manager"
-                                        error={!!formErrors.projectManagerId}
-                                        errorMessage={formErrors.projectManagerId}
                                    />
                               </div>
 

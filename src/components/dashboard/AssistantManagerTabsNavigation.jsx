@@ -1,31 +1,27 @@
 import React from 'react';
 import UserMonthlyReport from './UserMonthlyReport';
 import ProjectMonthlyReport from './ProjectMonthlyReport';
-import ManagerRosterRequests from '../../pages/ManagerRosterRequests';
-import QABillableReport from './QABillableReport';
 import {
   LayoutGrid,
   Briefcase,
   Users,
   FolderKanban,
-  FileText,
-  FileCheck
+  DollarSign
 } from 'lucide-react';
 
-const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab, isSuperAdmin = false }) => {
+const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab, compact = false }) => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
     { id: 'user_monthly_report', label: 'User Monthly Goal', icon: Users },
     { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
-    { id: 'roster_report', label: 'Roster Report', icon: FileText },
-    ...(isSuperAdmin ? [{ id: 'qa_billable_report', label: 'QA Billable Report', icon: FileCheck }] : [])
+  
   ];
 
   return (
     <div className="max-w-7xl mx-auto mt-2">
       {/* Navigation Tab Card */}
-      <div className="bg-white rounded-2xl shadow-lg mb-6 border border-slate-200 overflow-hidden">
+      <div className={`bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden ${compact ? 'mb-1.5' : 'mb-3'}`}>
         <div className="flex border-b border-slate-200">
           {tabs.map(tab => {
             const Icon = tab.icon;
@@ -35,7 +31,7 @@ const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab, isSuperAdmin 
                 key={tab.id}
                 onClick={() => !tab.disabled && setActiveTab(tab.id)}
                 disabled={tab.disabled}
-                className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
+                className={`flex-1 px-6 ${compact ? 'py-2.5' : 'py-4'} text-sm font-bold transition-all relative ${
                   isActive
                     ? 'text-blue-600 bg-blue-50'
                     : tab.disabled
@@ -69,18 +65,6 @@ const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab, isSuperAdmin 
       {activeTab === 'project_monthly_report' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <ProjectMonthlyReport />
-        </div>
-      )}
-      {/* Roster Report Tab */}
-      {activeTab === 'roster_report' && (
-        <div className="mt-6">
-          <ManagerRosterRequests />
-        </div>
-      )}
-      {/* QA Billable Report Tab */}
-      {activeTab === 'qa_billable_report' && (
-        <div className="mt-6">
-          <QABillableReport />
         </div>
       )}
     </div>

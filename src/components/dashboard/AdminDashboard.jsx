@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import AssistantManagerTabsNavigation from "./AssistantManagerTabsNavigation";
+import AdminTabsNavigation from "./AdminTabsNavigation";
 import { format } from "date-fns";
 import { FileText, Users, Clock, TrendingUp, Download, Filter, CheckCircle2, Calendar, RotateCcw, Funnel } from "lucide-react";
 
@@ -13,10 +13,12 @@ import QATrackerReport from './QATrackerReport';
 import QAAgentList from './QAAgentList';
 import QAAgentAudit from './QAAgentAudit';
 import { DateRangePicker } from '../common/CustomCalendar';
+import { useRoutedDashboardTab } from '../../hooks/useRoutedDashboardTab';
+import { formatISTDateTimeParts } from '../../utils/dateTimeIST';
 
 const AdminDashboard = () => {
   // StatCard component for dashboard stats
-  const StatCard = ({ title, value, subtext, icon: Icon, trend = 'neutral', alert, className = '' }) => (
+  const StatCard = ({ title, value, subtext, icon: Icon, trend = 'neutral', alert, className = '', valueClassName = '' }) => (
     <div
       className={`relative overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 min-w-0 group/card transform hover:-translate-y-1 ${className} 
         ${alert ? 'bg-white border-2 border-red-300' : 'bg-white border-2 border-slate-200 hover:border-blue-300'}`}
@@ -35,7 +37,7 @@ const AdminDashboard = () => {
           </div>
 
           {/* Value */}
-          <h3 className={`text-2xl sm:text-3xl font-extrabold truncate ${alert ? 'text-red-700' : 'text-slate-900'}`}>
+          <h3 className={`text-xl sm:text-2xl font-extrabold truncate ${alert ? 'text-red-700' : 'text-slate-900'} ${valueClassName}`}>
             {value}
           </h3>
 
@@ -61,8 +63,8 @@ const AdminDashboard = () => {
     </div>
   );
 
-  // Tab state for navigation
-  const [activeTab, setActiveTab] = useState('overview');
+  // Tab state synced to ?tab= (same pattern as Manage → adminTab)
+  const [activeTab, setActiveTab] = useRoutedDashboardTab('overview');
   const { user } = useAuth();
   // Project/task name mapping state
   const [projectNameMap, setProjectNameMap] = useState({});
@@ -108,6 +110,7 @@ const AdminDashboard = () => {
     totalProjects: 0,
     qcPending: 0,
     billableHours: 0,
+    assignedHours: 0,
     avgQcScore: 0,
     latestQc: [],
   });
@@ -164,6 +167,7 @@ const AdminDashboard = () => {
             totalProjects: uniqueProjects.size,
             qcPending: (data.tracker || []).filter(row => row.tracker_file && row.qc_status === 'pending').length,
             billableHours: (data.summary?.total_billable_hours || 0).toFixed(2),
+            assignedHours: (data.summary?.total_assigned_hours || 0).toFixed(2),
             avgQcScore: '-', // Not provided in response
             latestQc,
           });
@@ -195,12 +199,9 @@ const AdminDashboard = () => {
   const handleEndDateChange = (value) => handleDateRangeChange('end', value);
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-10">
-      {/* Debug: Log current state */}
-      {console.log('[AdminDashboard] Rendering with state:', { activeTab, loading, error, stats })}
-      
+    <div className={`max-w-7xl mx-auto ${activeTab === 'billable_report' ? 'pb-2' : 'space-y-4 pb-10'}`}>
       {/* Navigation Tabs */}
-      <AssistantManagerTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} isSuperAdmin={true} />
+      <AdminTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} compact={activeTab === 'billable_report'} />
       
       {/* Overview Tab Content */}
       {activeTab === 'overview' && (
@@ -242,8 +243,8 @@ const AdminDashboard = () => {
               <StatCard
                 icon={Clock}
                 title="Total Billable Hours"
-                value={loading ? "..." : Number(stats.billableHours).toFixed(2)}
-                subtext="Billable hours"
+                value={loading ? "..." : `${Number(stats.billableHours).toFixed(2)} / ${Number(stats.assignedHours).toFixed(2)}`}
+                subtext="Billable / Assigned hours"
                 trend="up"
                 className="h-32 flex flex-col justify-center"
               />
@@ -326,19 +327,11 @@ const AdminDashboard = () => {
                             </p>
                             <div className="text-sm font-bold text-slate-800">
                               {file.date_time ? (() => {
-                                const date = new Date(file.date_time);
-                                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                                const day = date.getUTCDate();
-                                const month = monthNames[date.getUTCMonth()];
-                                const year = date.getUTCFullYear();
-                                let hours = date.getUTCHours();
-                                const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                                const ampm = hours >= 12 ? 'PM' : 'AM';
-                                hours = hours % 12 || 12;
+                                const { date, time } = formatISTDateTimeParts(file.date_time);
                                 return (
                                   <>
-                                    <div>{day}/{month}/{year}</div>
-                                    <div className="text-xs text-slate-600">{hours}:{minutes} {ampm}</div>
+                                    <div>{date}</div>
+                                    <div className="text-xs text-slate-600">{time}</div>
                                   </>
                                 );
                               })() : "-"}
@@ -391,11 +384,7 @@ const AdminDashboard = () => {
       )}
       
       {/* Billable Report Tab */}
-      {activeTab === 'billable_report' && (
-        <div className="max-w-7xl mx-auto mt-6">
-          <BillableReport />
-        </div>
-      )}
+      {activeTab === 'billable_report' && <BillableReport />}
       {activeTab === 'tracker_report' && (
         <div className="max-w-7xl mx-auto mt-6">
           <QATrackerReport />

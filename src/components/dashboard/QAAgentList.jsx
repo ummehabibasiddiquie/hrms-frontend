@@ -4,7 +4,7 @@
  * Description: QA Agent List - Shows assigned agents with their tracker data (files only)
  */
 import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2, RefreshCw, AlertTriangle, XCircle, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -18,6 +18,12 @@ import { log, logError } from "../../config/environment";
 import QAAgentQCFormReport from "./QAAgentQCFormReport";
 import QAAgentReworkCorrectionReview from "./QAAgentReworkCorrectionReview";
 import { DateRangePicker } from '../common/CustomCalendar';
+import { useClientPagination } from "../../hooks/useClientPagination";
+import TablePaginationBar from "../common/TablePaginationBar";
+import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
+import SubTabsBar from "../common/SubTabsBar";
+import { formatISTDateTimeLong, formatISTDateTimeParts } from "../../utils/dateTimeIST";
+
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -28,30 +34,12 @@ const getTodayDate = () => {
 // Pending QC Files Table Component
 const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedAgentId, getTodayDate, fetchReworkTrackers }) => {
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
+  const trackerPagination = useClientPagination(trackers, { resetKeys: [selectedAgentId, trackers.length] });
 
 
   const formatDateTime = (dateString) => {
     if (!dateString) return '—';
-    // Parse the date string format: "Fri, 03 Apr 2026 11:10:33 GMT"
-    // Extract date and time directly without timezone conversion
-    const match = dateString.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
-    if (match) {
-      const [, day, month, year, hours, minutes] = match;
-      const hour = parseInt(hours, 10);
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const hour12 = hour % 12 || 12;
-      return `${parseInt(day, 10).toString().padStart(2, '0')} ${month} ${year}, ${hour12.toString().padStart(2, '0')}:${minutes} ${ampm.toLowerCase()}`;
-    }
-    // Fallback for unexpected format - use UTC to avoid timezone conversion
-    const date = new Date(dateString);
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    const month = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-    const year = date.getUTCFullYear();
-    const hours = date.getUTCHours();
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'pm' : 'am';
-    const hour12 = hours % 12 || 12;
-    return `${day} ${month} ${year}, ${hour12.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    return formatISTDateTimeLong(dateString, dateString);
   };
 
   const getScoreClass = (score) => {
@@ -107,7 +95,7 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {trackers.map((tracker, index) => {
+            {trackerPagination.pagedItems.map((tracker, index) => {
               const errors = parseErrors(tracker.previous_error_list);
               const trackerId = tracker.qc_record_id || tracker.id || `tracker-${index}`;
               return (
@@ -228,6 +216,7 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
             })}
           </tbody>
         </table>
+        <TablePaginationBar {...trackerPagination} itemLabel="files" />
       </div>
 
       {/* Error Modal */}
@@ -288,7 +277,10 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
 const QAAgentList = () => {
   const { user } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
-  const [searchParams] = useSearchParams();
+  const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
+  const roleText = String(user?.role_name || user?.role || user?.user_role || '').trim().toLowerCase();
+  const designationText = String(user?.designation || user?.user_designation || '').trim().toLowerCase();
+  const isQA = roleId === 5 || designationText === 'qa' || roleText.includes('qa');
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
@@ -296,14 +288,16 @@ const QAAgentList = () => {
   const [agentTrackers, setAgentTrackers] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   
-  // Tab state - read from URL parameter if available
-  const subtabParam = searchParams.get('subtab');
-  const [activeTab, setActiveTab] = useState(
-    subtabParam === 'qc_report' ? 'qc_report' :
-    subtabParam === 'rework_review' ? 'rework_review' :
-    'agent_files'
-  );
-  
+  // Tab state - synced to ?subtab= (e.g. /dashboard?tab=agent_file_report&subtab=rework_review)
+  const [activeTab, setActiveTab] = useRoutedSubTab('agent_files', {
+    parentTab: 'agent_file_report',
+  });
+
+  useEffect(() => {
+    if (!isQA && activeTab === 'qc_report') {
+      setActiveTab('agent_files');
+    }
+  }, [activeTab, isQA, setActiveTab]);  
   // Selected agent for split view
   const [selectedAgentId, setSelectedAgentId] = useState(null);
   
@@ -696,6 +690,18 @@ const QAAgentList = () => {
     });
   }, [agents, searchQuery]);
 
+  const selectedAgentTrackers = useMemo(() => {
+    if (!selectedAgentId) return [];
+    return agentTrackers[selectedAgentId] || [];
+  }, [selectedAgentId, agentTrackers]);
+
+  const agentListPagination = useClientPagination(filteredAndSortedAgents, {
+    resetKeys: [searchQuery, activeTab],
+  });
+  const trackerPagination = useClientPagination(selectedAgentTrackers, {
+    resetKeys: [selectedAgentId, globalDateFilter.startDate, globalDateFilter.endDate],
+  });
+
   // Clear search
   const handleClearSearch = () => {
     setSearchQuery("");
@@ -997,80 +1003,47 @@ const QAAgentList = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 py-6 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Header Section with Tabs */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 border border-slate-200">
-          <div className="flex flex-col gap-5">
-            {/* Top Row - Title and Tabs */}
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              {/* Left - Title */}
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <UsersIcon className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-800 tracking-tight cursor-default">Agent Files & QC Report</h2>
-                  <p className="text-slate-600 text-sm font-medium mt-1 cursor-default">View and manage agent files with QC forms</p>
-                </div>
+        <div className="bg-white rounded-2xl shadow-xl mb-6 border border-slate-200 overflow-hidden">
+          <div className="p-6 pb-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <UsersIcon className="w-6 h-6 text-blue-600" />
               </div>
-
-              {/* Right - Tabs Navigation */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setActiveTab('agent_files')}
-                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
-                    activeTab === 'agent_files'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>Agent's Tracker File</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('rework_review')}
-                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
-                    activeTab === 'rework_review'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Agent's Rework & Correction File</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('qc_report')}
-                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${
-                    activeTab === 'qc_report'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <FileCheck className="w-4 h-4" />
-                  <span>QC Report</span>
-                </button>
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800 tracking-tight cursor-default">Agent Files & QC Report</h2>
+                <p className="text-slate-600 text-sm font-medium mt-1 cursor-default">View and manage agent files with QC forms</p>
               </div>
             </div>
-              {/* Bottom Row - Global Date Filter */}
-            {(activeTab === 'agent_files' || activeTab === 'rework_review') && (
-              <div className="flex items-center justify-end gap-4 pt-2 border-t border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center">
-                    <DateRangePicker
-                      startDate={globalDateFilter.startDate}
-                      endDate={globalDateFilter.endDate}
-                      onStartDateChange={handleGlobalStartDateChange}
-                      onEndDateChange={handleGlobalEndDateChange}
-                      onClear={handleResetGlobalFilters}
-                      label=""
-                      description=""
-                      showClearButton={true}
-                      noWrapper={true}
-                      fieldWidth="140px"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
+
+          <SubTabsBar
+            equalWidth
+            bordered={false}
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            tabs={[
+              { id: 'agent_files', label: "Agent's Tracker File", icon: FileText },
+              { id: 'rework_review', label: "Agent's Rework & Correction File", icon: RefreshCw },
+              { id: 'qc_report', label: 'QC Report', icon: FileCheck, hidden: !isQA },
+            ]}
+          />
+
+          {(activeTab === 'agent_files' || activeTab === 'rework_review') && (
+            <div className="flex items-center justify-end gap-4 px-6 py-3 border-t border-slate-100">
+              <DateRangePicker
+                startDate={globalDateFilter.startDate}
+                endDate={globalDateFilter.endDate}
+                onStartDateChange={handleGlobalStartDateChange}
+                onEndDateChange={handleGlobalEndDateChange}
+                onClear={handleResetGlobalFilters}
+                label=""
+                description=""
+                showClearButton={true}
+                noWrapper={true}
+                fieldWidth="140px"
+              />
+            </div>
+          )}
         </div>
 
         {/* Split View Layout - Agent Files */}
@@ -1170,7 +1143,6 @@ const QAAgentList = () => {
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          // Call appropriate API based on active tab with global date filter
                           if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
                             fetchReworkTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
                           } else {
@@ -1184,7 +1156,6 @@ const QAAgentList = () => {
                             : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md'
                         } ${agentLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
-                        {/* Left accent border for selected */}
                         {isSelected && (
                           <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 to-indigo-600"></div>
                         )}
@@ -1229,7 +1200,7 @@ const QAAgentList = () => {
                   </div>
                 ) : selectedAgentId ? (() => {
                   const selectedAgent = agents.find(a => a.user_id === selectedAgentId);
-                  const trackers = agentTrackers[selectedAgentId] || [];
+                  const trackers = selectedAgentTrackers;
                   
                   return (
                     <>
@@ -1276,35 +1247,10 @@ const QAAgentList = () => {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
-                                {trackers.map((tracker, index) => {
+                                {trackerPagination.pagedItems.map((tracker, index) => {
                                   const formatDateTime = (dateTimeStr) => {
                                     if (!dateTimeStr) return { date: '—', time: '' };
-                                    // Parse the date string format: "Fri, 03 Apr 2026 11:10:33 GMT"
-                                    // Extract date and time directly without timezone conversion
-                                    const match = dateTimeStr.match(/(\d{2})\s+(\w{3})\s+(\d{4})\s+(\d{2}):(\d{2})/);
-                                    if (match) {
-                                      const [, day, month, year, hours, minutes] = match;
-                                      const hour = parseInt(hours, 10);
-                                      const ampm = hour >= 12 ? 'PM' : 'AM';
-                                      const hour12 = hour % 12 || 12;
-                                      return {
-                                        date: `${parseInt(day, 10)}/${month}/${year}`,
-                                        time: `${hour12.toString().padStart(2, '0')}:${minutes} ${ampm}`
-                                      };
-                                    }
-                                    // Fallback for unexpected format
-                                    const dateObj = new Date(dateTimeStr);
-                                    const day = dateObj.getUTCDate();
-                                    const month = dateObj.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-                                    const year = dateObj.getUTCFullYear();
-                                    const hours = dateObj.getUTCHours();
-                                    const minutes = dateObj.getUTCMinutes().toString().padStart(2, '0');
-                                    const ampm = hours >= 12 ? 'PM' : 'AM';
-                                    const hour12 = hours % 12 || 12;
-                                    return {
-                                      date: `${day}/${month}/${year}`,
-                                      time: `${hour12.toString().padStart(2, '0')}:${minutes} ${ampm}`
-                                    };
+                                    return formatISTDateTimeParts(dateTimeStr);
                                   };
 
                                   const dateTime = formatDateTime(tracker.date_time || tracker.tracker_datetime);
@@ -1365,6 +1311,7 @@ const QAAgentList = () => {
                                 })}
                               </tbody>
                             </table>
+                            <TablePaginationBar {...trackerPagination} itemLabel="files" />
                           </div>
                         ) : (
                           <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">
@@ -1496,7 +1443,6 @@ const QAAgentList = () => {
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          // Fetch pending QC files for rework/correction using global date filter
                           fetchReworkTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
                         }}
                         disabled={agentLoading}
@@ -1506,7 +1452,6 @@ const QAAgentList = () => {
                             : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md'
                         } ${agentLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
-                        {/* Left accent border for selected */}
                         {isSelected && (
                           <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 to-indigo-600"></div>
                         )}
@@ -1551,7 +1496,7 @@ const QAAgentList = () => {
                   </div>
                 ) : selectedAgentId ? (() => {
                   const selectedAgent = agents.find(a => a.user_id === selectedAgentId);
-                  const trackers = agentTrackers[selectedAgentId] || [];
+                  const trackers = selectedAgentTrackers;
                   
                   return (
                     <>

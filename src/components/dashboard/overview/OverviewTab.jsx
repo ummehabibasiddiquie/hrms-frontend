@@ -1,4 +1,4 @@
-import React, { useEffect, useState, lazy, Suspense } from 'react';
+import React, { useEffect, useState, lazy, Suspense, useMemo } from 'react';
 import AgentFilterBar from './AgentFilterBar';
 import dayjs from 'dayjs';
 import StatCard from './StatCard';
@@ -9,6 +9,9 @@ import { useDeviceInfo } from '../../../hooks/useDeviceInfo';
 import AgentBillableReport from '../../AgentDashboard/AgentBillableReport';
 import AgentTabsNavigation from '../../AgentDashboard/AgentTabsNavigation';
 import { DateRangePicker } from '../../common/CustomCalendar';
+import { useClientPagination } from '../../../hooks/useClientPagination';
+import TablePaginationBar from '../../common/TablePaginationBar';
+import { useRoutedDashboardTab } from '../../../hooks/useRoutedDashboardTab';
 
 // Clear dashboard data when date range changes to force UI refresh
 // (must be inside the component, not before imports)
@@ -21,7 +24,11 @@ const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: ext
   const { device_id, device_type } = useDeviceInfo();
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useRoutedDashboardTab('overview');
+
+  const handleAgentTabChange = (tab) => {
+    setActiveTab(tab);
+  };
   
   // Helper to get today's date in YYYY-MM-DD format
   const getTodayDateString = () => {
@@ -146,6 +153,13 @@ const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: ext
   // Show all projects the agent worked on (remove the billable hours filter)
   const agentProjects = dashboardData?.projects || [];
 
+  const qaTrackerPagination = useClientPagination(qaTrackers, {
+    resetKeys: [qaStartDate, qaEndDate],
+  });
+  const agentProjectPagination = useClientPagination(agentProjects, {
+    resetKeys: [agentFilter.start, agentFilter.end],
+  });
+
   // Log detailed summary data for debugging
   if (dashboardData) {
     console.log('═══════════════════════════════════════════════');
@@ -195,7 +209,7 @@ const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: ext
         {/* Agent tab navigation above all content */}
         {isAgent && (
           <div className="max-w-7xl mx-auto w-full">
-            <AgentTabsNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+            <AgentTabsNavigation activeTab={activeTab} setActiveTab={handleAgentTabChange} />
           </div>
         )}
 
@@ -231,6 +245,7 @@ const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: ext
               ) : qaTrackers.length === 0 ? (
                 <div className="py-8 text-center text-gray-500">No tracker data found for this range.</div>
               ) : (
+                <>
                 <table className="min-w-full divide-y divide-blue-100 text-sm">
                   <thead>
                     <tr className="bg-blue-50">
@@ -242,7 +257,7 @@ const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: ext
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-blue-50">
-                    {qaTrackers.map((row, idx) => (
+                    {qaTrackerPagination.pagedItems.map((row, idx) => (
                       <tr key={row.tracker_id || idx} className="hover:bg-blue-50 transition group">
                         <td className="px-6 py-3 text-black font-medium whitespace-nowrap">{row.date_time ? row.date_time : '-'}</td>
                         <td className="px-6 py-3 text-black">{row.user_name || '-'}</td>
@@ -253,6 +268,8 @@ const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: ext
                     ))}
                   </tbody>
                 </table>
+                <TablePaginationBar {...qaTrackerPagination} itemLabel="trackers" />
+                </>
               )}
             </div>
           </div>
@@ -334,8 +351,9 @@ const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: ext
                       <p className="text-slate-500 font-medium">No project data available for this date range</p>
                     </div>
                   ) : (
+                    <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {agentProjects.map((project, idx) => (
+                      {agentProjectPagination.pagedItems.map((project, idx) => (
                         <div 
                           key={project.project_id || idx} 
                           className="relative overflow-hidden bg-white rounded-xl shadow-md hover:shadow-lg border-2 border-slate-200 hover:border-blue-300 transition-all duration-300 transform hover:-translate-y-1"
@@ -376,6 +394,8 @@ const OverviewTab = ({ analytics, hourlyChartData, isAgent, isQA, dateRange: ext
                         </div>
                       ))}
                     </div>
+                    <TablePaginationBar {...agentProjectPagination} itemLabel="projects" className="mt-4 rounded-b-xl" />
+                    </>
                   )}
                 </div>
               </div>

@@ -4,8 +4,7 @@
  * Description: QA Tracker Report - Shows tracker entries for assigned agents with filters
  */
 import React, { useEffect, useState, useMemo } from "react";
-import { format } from "date-fns";
-import { Download, Filter, FileDown, Users as UsersIcon, Calendar, RotateCcw, RefreshCw, Edit, Trash2, X, ChevronDown, Briefcase, ListTodo, Info, Plus, ListChecks, Clock, TrendingUp, Target } from "lucide-react";
+import { Download, Filter, FileDown, Users as UsersIcon, Calendar, RotateCcw, RefreshCw, Edit, Trash2, X, ChevronDown, Briefcase, ListTodo, Info, Plus, ListChecks, Clock, TrendingUp, Target, FileText } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { downloadCSV, jsonToCSV } from "../../utils/csvExport";
 import api from "../../services/api";
@@ -15,6 +14,25 @@ import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { DateRangePicker } from "../common/CustomCalendar";
 import MultiSelectWithCheckbox from "../common/MultiSelectWithCheckbox";
 import SearchableSelect from "../common/SearchableSelect";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "../ui/pagination";
+import TaskEODReport from "./TaskEODReport";
+import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
+import SubTabsBar from "../common/SubTabsBar";
+import { formatISTDateTimeParts, getISTParts } from "../../utils/dateTimeIST";
+
+
+// Project 12: all current and future tasks can enter production above 2x base target
+const UNLIMITED_PRODUCTION_PROJECT_IDS = new Set(['12']);
+const allowsUnlimitedProduction = (projectId) =>
+  UNLIMITED_PRODUCTION_PROJECT_IDS.has(String(projectId ?? '').trim());
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -22,31 +40,17 @@ const getTodayDate = () => {
   return today.toISOString().split('T')[0];
 };
 
-// Tasks allowed to enter production above 2x base target
-const UNLIMITED_PRODUCTION_TASK_IDS = new Set(['42', '49']);
-const allowsUnlimitedProduction = (taskId) => {
-  if (taskId === null || taskId === undefined || taskId === '') return false;
-  return UNLIMITED_PRODUCTION_TASK_IDS.has(String(taskId).trim());
-};
-
-const getProductionLimitError = (productionValue, baseTarget, taskId) => {
-  const production = Number(productionValue);
-  const target = Number(baseTarget);
-  if (productionValue === '' || productionValue === null || productionValue === undefined) {
-    return 'Production is required';
-  }
-  if (isNaN(production) || production <= 0) {
-    return 'Enter valid production';
-  }
-  if (target && production > target * 2 && !allowsUnlimitedProduction(taskId)) {
-    return `Production cannot exceed ${(target * 2).toFixed(2)} (double of base target)`;
-  }
-  return '';
-};
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 const QATrackerReport = () => {
   const { user } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
+  
+  // Sub-tab state synced to ?subtab= (e.g. /dashboard?tab=tracker_report&subtab=task_eod_report)
+  const [activeSubTab, setActiveSubTab] = useRoutedSubTab('tracker_report', {
+    parentTab: 'tracker_report',
+  });
   
   // Check if user is QA agent (QA agents should not see edit/delete actions)
   const roleId = user?.role_id;
@@ -55,17 +59,35 @@ const QATrackerReport = () => {
   const isQAAgent = roleId === 5 || 
                     String(designation).toLowerCase() === 'qa' || 
                     String(role).toLowerCase().includes('qa');
+  const isAssistantManager =
+    roleId === 4 ||
+    String(designation).toLowerCase() === 'assistant manager' ||
+    String(role).toLowerCase().includes('assistant');
   
   // Check if user is PM, Admin, or Super Admin (for team filter visibility)
   const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
-  const isAdmin = roleId === 1 || String(role).toLowerCase() === 'admin' || String(designation).toLowerCase() === 'admin';
+  const isAdmin = roleId === 1 || roleId === 2 || String(role).toLowerCase() === 'admin' || String(designation).toLowerCase() === 'admin';
   const isSuperAdmin = String(role).toLowerCase().includes('super') || String(designation).toLowerCase().includes('super');
   const canViewTeamFilter = isProjectManager || isAdmin || isSuperAdmin;
+  const isAgent =
+    String(role).toLowerCase() === 'agent' ||
+    String(designation).toLowerCase() === 'agent';
+  const canAccessTaskEODReport = !isAgent;
   
   const [trackers, setTrackers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, _setError] = useState("");
   const [apiTotals, setApiTotals] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_PAGE_SIZE);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    pageSize: DEFAULT_PAGE_SIZE,
+    totalRecords: 0,
+    totalPages: 1,
+    hasPrevious: false,
+    hasNext: false,
+  });
 
   // Filter states
   const [selectedAgents, setSelectedAgents] = useState([]);
@@ -74,14 +96,20 @@ const QATrackerReport = () => {
   const [selectedTask, setSelectedTask] = useState('');
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getTodayDate());
-  const [summary, setSummary] = useState([]);
+  const [_summary, setSummary] = useState([]);
+
+  useEffect(() => {
+    if (activeSubTab === 'task_eod_report' && !canAccessTaskEODReport) {
+      setActiveSubTab('tracker_report');
+    }
+  }, [activeSubTab, canAccessTaskEODReport, setActiveSubTab]);
   
   // Edit modal dropdown states
   const [showEditProjectDropdown, setShowEditProjectDropdown] = useState(false);
   const [showEditTaskDropdown, setShowEditTaskDropdown] = useState(false);
 
   // Store per-hour targets from dropdown API
-  const [dropdownTaskMap, setDropdownTaskMap] = useState({});
+  const [dropdownTaskMap, _setDropdownTaskMap] = useState({});
 
   // Edit modal states
   const [showEditModal, setShowEditModal] = useState(false);
@@ -99,7 +127,7 @@ const QATrackerReport = () => {
     tracker_file: null,
   });
   const [editFilePreview, setEditFilePreview] = useState(null);
-  const [editFileBase64, setEditFileBase64] = useState(null);
+  const [_editFileBase64, setEditFileBase64] = useState(null);
   const [editFileError, setEditFileError] = useState("");
   const [loadingEditData, setLoadingEditData] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
@@ -128,13 +156,13 @@ const QATrackerReport = () => {
   const [addFileError, setAddFileError] = useState("");
   const [loadingAddData, setLoadingAddData] = useState(false);
   const [submittingAdd, setSubmittingAdd] = useState(false);
-  const [addProductionError, setAddProductionError] = useState("");
+  const [_addProductionError, setAddProductionError] = useState("");
   const [addTouched, setAddTouched] = useState({});
   const [addErrors, setAddErrors] = useState({});
 
   // Users list for agent dropdown filter
   const [usersList, setUsersList] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [_loadingUsers, setLoadingUsers] = useState(false);
 
   // Teams list for team dropdown filter
   const [teamsList, setTeamsList] = useState([]);
@@ -284,49 +312,92 @@ const QATrackerReport = () => {
     }
   };
 
+  const buildTrackerPayload = ({ includePagination = true, page = currentPage, pageSize = itemsPerPage } = {}) => {
+    const payload = {
+      logged_in_user_id: user?.user_id,
+      device_id: device_id,
+      device_type: device_type
+    };
+
+    if (startDate) payload.date_from = startDate;
+    if (endDate) payload.date_to = endDate;
+    if (!startDate && !endDate) {
+      const today = getTodayDate();
+      payload.date_from = today;
+      payload.date_to = today;
+    }
+
+    if (selectedAgents.length > 0) {
+      payload.user_id = selectedAgents.map(id => Number(id));
+    }
+
+    if (selectedTeams) {
+      payload.team_id = Number(selectedTeams);
+    }
+
+    if (selectedProject) {
+      payload.project_id = Number(selectedProject);
+    }
+
+    if (selectedTask) {
+      payload.task_id = Number(selectedTask);
+    }
+
+    if (includePagination) {
+      payload.paginate = true;
+      payload.page = page;
+      payload.page_size = pageSize;
+    }
+
+    return payload;
+  };
+
+  const getPaginationState = (paginationData, fallbackPage = currentPage, fallbackPageSize = itemsPerPage, trackerCount = 0) => {
+    if (!paginationData) {
+      const totalPages = trackerCount > 0 ? Math.ceil(trackerCount / fallbackPageSize) : 1;
+      return {
+        currentPage: fallbackPage,
+        pageSize: fallbackPageSize,
+        totalRecords: trackerCount,
+        totalPages,
+        hasPrevious: fallbackPage > 1,
+        hasNext: fallbackPage < totalPages,
+      };
+    }
+
+    return {
+      currentPage: paginationData.current_page || fallbackPage,
+      pageSize: paginationData.page_size || fallbackPageSize,
+      totalRecords: paginationData.total_records || 0,
+      totalPages: paginationData.total_pages || 1,
+      hasPrevious: Boolean(paginationData.has_previous),
+      hasNext: Boolean(paginationData.has_next),
+    };
+  };
+
   // Fetch trackers and summary from tracker/view API with filters
-  const fetchData = async () => {
+  const fetchData = async ({ page = currentPage, pageSize = itemsPerPage, includePagination = true } = {}) => {
     try {
       setLoading(true);
-      let payload = {
-        logged_in_user_id: user?.user_id,
-        device_id: device_id,
-        device_type: device_type
-      };
-      
-      if (startDate) payload.date_from = startDate;
-      if (endDate) payload.date_to = endDate;
-      if (!startDate && !endDate) {
-        const today = getTodayDate();
-        payload.date_from = today;
-        payload.date_to = today;
-      }
-      
-      if (selectedAgents.length > 0) {
-        payload.user_id = selectedAgents.map(id => Number(id));
-      }
-      
-      if (selectedTeams) {
-        payload.team_id = Number(selectedTeams);
-      }
-      
-      if (selectedProject) {
-        payload.project_id = Number(selectedProject);
-      }
-      
-      if (selectedTask) {
-        payload.task_id = Number(selectedTask);
-      }
-      
+      let payload = buildTrackerPayload({ includePagination, page, pageSize });
+
       log('[QATrackerReport] Fetching tracker data with payload:', payload);
       const res = await api.post("/tracker/view", payload);
       const data = res.data?.data || {};
       const fetchedTrackers = Array.isArray(data.trackers) ? data.trackers : [];
       setTrackers(fetchedTrackers);
       setSummary(Array.isArray(data.month_summary) ? data.month_summary : []);
-      if (data.totals) {
-        setApiTotals(data.totals);
+      setApiTotals(data.totals || null);
+
+      if (includePagination) {
+        const nextPagination = getPaginationState(data.pagination, page, pageSize, fetchedTrackers.length);
+        setPagination(nextPagination);
+
+        if (nextPagination.currentPage !== currentPage) {
+          setCurrentPage(nextPagination.currentPage);
+        }
       }
+
       log('[QATrackerReport] Fetched trackers:', fetchedTrackers.length, 'totals:', data.totals);
     } catch (err) {
       logError('[QATrackerReport] Error fetching tracker/view:', err);
@@ -334,6 +405,13 @@ const QATrackerReport = () => {
       setTrackers([]);
       setSummary([]);
       setApiTotals(null);
+      setPagination(prev => ({
+        ...prev,
+        totalRecords: 0,
+        totalPages: 1,
+        hasPrevious: false,
+        hasNext: false,
+      }));
     } finally {
       setLoading(false);
     }
@@ -356,6 +434,7 @@ const QATrackerReport = () => {
     if (!user?.user_id) return;
     
     console.log('[QATrackerReport] Team selection changed:', selectedTeams);
+    setCurrentPage(1);
     
     if (selectedTeams) {
       console.log('[QATrackerReport] Fetching agents for team_id:', selectedTeams);
@@ -374,14 +453,7 @@ const QATrackerReport = () => {
       fetchData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTask]);
-
-  // Clear selected task when project changes
-  useEffect(() => {
-    if (selectedProject) {
-      setSelectedTask('');
-    }
-  }, [selectedProject]);
+  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTask, currentPage, itemsPerPage]);
 
   // Filter tasks based on selected project for cascading dropdown
   const filteredTasksList = useMemo(() => {
@@ -391,31 +463,8 @@ const QATrackerReport = () => {
     return tasksList.filter(task => String(task.project_id) === String(selectedProject));
   }, [tasksList, selectedProject]);
 
-  // Format date and time to display format
-  const formatDateTime = (dateTimeStr) => {
-    if (!dateTimeStr) return { date: '-', time: '-' };
-    
-    try {
-      const dt = new Date(dateTimeStr);
-      if (isNaN(dt.getTime())) return { date: '-', time: '-' };
-      
-      const day = dt.getUTCDate();
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const month = monthNames[dt.getUTCMonth()];
-      const year = dt.getUTCFullYear();
-      const date = `${day}/${month}/${year}`;
-      
-      let hours = dt.getUTCHours();
-      const minutes = String(dt.getUTCMinutes()).padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12 || 12;
-      const time = `${hours}:${minutes} ${ampm}`;
-      
-      return { date, time };
-    } catch (error) {
-      return { date: '-', time: '-' };
-    }
-  };
+  // Format date and time in IST (Asia/Kolkata)
+  const formatDateTime = (dateTimeStr) => formatISTDateTimeParts(dateTimeStr);
 
   // Format number to 2 decimal places
   const formatDecimal = (value) => {
@@ -494,7 +543,95 @@ const QATrackerReport = () => {
     setSelectedTask('');
     setStartDate(today);
     setEndDate(today);
+    setCurrentPage(1);
   };
+
+  const handleStartDateChange = (value) => {
+    setCurrentPage(1);
+    setStartDate(value);
+  };
+
+  const handleEndDateChange = (value) => {
+    setCurrentPage(1);
+    setEndDate(value);
+  };
+
+  const handleAgentsChange = (value) => {
+    setCurrentPage(1);
+    setSelectedAgents(value);
+  };
+
+  const handleTeamChange = (value) => {
+    setCurrentPage(1);
+    setSelectedTeams(value);
+  };
+
+  const handleProjectChange = (value) => {
+    setCurrentPage(1);
+    setSelectedProject(value);
+    setSelectedTask('');
+  };
+
+  const handleTaskChange = (value) => {
+    setCurrentPage(1);
+    setSelectedTask(value);
+  };
+
+  const handlePageChange = (page) => {
+    if (page < 1 || page > pagination.totalPages || page === currentPage) {
+      return;
+    }
+
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (value) => {
+    const nextPageSize = Number(value);
+    setItemsPerPage(nextPageSize);
+    setCurrentPage(1);
+  };
+
+  const pageNumbers = useMemo(() => {
+    const totalPages = pagination.totalPages;
+    const pages = [];
+
+    if (totalPages <= 7) {
+      for (let page = 1; page <= totalPages; page += 1) {
+        pages.push(page);
+      }
+      return pages;
+    }
+
+    pages.push(1);
+
+    if (currentPage > 3) {
+      pages.push('ellipsis-start');
+    }
+
+    const middleStart = Math.max(2, currentPage - 1);
+    const middleEnd = Math.min(totalPages - 1, currentPage + 1);
+
+    for (let page = middleStart; page <= middleEnd; page += 1) {
+      if (!pages.includes(page)) {
+        pages.push(page);
+      }
+    }
+
+    if (currentPage < totalPages - 2) {
+      pages.push('ellipsis-end');
+    }
+
+    if (!pages.includes(totalPages)) {
+      pages.push(totalPages);
+    }
+
+    return pages;
+  }, [currentPage, pagination.totalPages]);
+
+  const pageStartRecord = pagination.totalRecords === 0
+    ? 0
+    : ((pagination.currentPage - 1) * pagination.pageSize) + 1;
+  const pageEndRecord = Math.min(pagination.currentPage * pagination.pageSize, pagination.totalRecords);
 
   // Handle open add tracker modal
   const handleOpenAddModal = async () => {
@@ -533,88 +670,63 @@ const QATrackerReport = () => {
 
   // Handle add form field changes
   const handleAddFieldChange = (field, value) => {
-    setAddFormData(prev => ({ ...prev, [field]: value }));
+    setAddFormData(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'project_id') {
+        next.task_id = "";
+        next.base_target = "";
+      }
+      return next;
+    });
     setAddTouched(prev => ({ ...prev, [field]: true }));
-    
+
     if (field === 'production') {
       setAddProductionError("");
     }
-    
-    if (field === 'agent_id' && value) {
-      log('[QATrackerReport] Looking for agent_id:', value, 'in usersList of', usersList.length, 'agents');
-      log('[QATrackerReport] First agent in usersList:', usersList[0]);
-      const selectedAgent = usersList.find(u => String(u.user_id) === String(value));
-      log('[QATrackerReport] Found agent:', selectedAgent);
-      log('[QATrackerReport] Agent has user_tenure:', selectedAgent?.user_tenure);
-      if (selectedAgent && addFormData.task_id) {
-        const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
-        const task = project?.tasks?.find(t => String(t.task_id) === String(addFormData.task_id));
-        log('[QATrackerReport] Task for recalc:', task);
-        // user_tenure comes as string from API, convert to number
-        const userTenure = Number(selectedAgent.user_tenure) || Number(selectedAgent.tenure) || 1;
-        log('[QATrackerReport] User tenure:', userTenure, 'raw:', selectedAgent.user_tenure);
-        if (task && userTenure) {
-          const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
-          const calculated = Number(perHourTarget) * Number(userTenure);
-          log('[QATrackerReport] Recalculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
-          setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
-        }
-      }
-    }
-    
+
     if (field === 'project_id') {
       const project = addProjects.find(p => String(p.project_id) === String(value));
       setAddTasks(project?.tasks || []);
-      setAddFormData(prev => ({ ...prev, task_id: "", base_target: "" }));
     }
-    
-    if (field === 'task_id' && value) {
-      const project = addProjects.find(p => String(p.project_id) === String(addFormData.project_id));
-      const task = project?.tasks?.find(t => String(t.task_id) === String(value));
-      log('[QATrackerReport] Task changed in add modal:', value);
-      log('[QATrackerReport] Project:', addFormData.project_id, 'Found project:', project);
-      log('[QATrackerReport] Task details:', { 
-        task_id: task?.task_id, 
-        task_name: task?.task_name,
-        task_target: task?.task_target,
-        per_hour_target: task?.per_hour_target,
-        target: task?.target,
-        label_value: task?.label_value,
-        all_task_keys: task ? Object.keys(task) : null
-      });
-      const selectedAgent = usersList.find(u => String(u.user_id) === String(addFormData.agent_id));
-      log('[QATrackerReport] Selected agent for calc:', selectedAgent);
-      log('[QATrackerReport] Agent ID being searched:', addFormData.agent_id, 'type:', typeof addFormData.agent_id);
-      log('[QATrackerReport] usersList count:', usersList.length);
-      // user_tenure comes as string from API, convert to number
-      const userTenure = Number(selectedAgent?.user_tenure) || Number(selectedAgent?.tenure) || 1;
-      log('[QATrackerReport] User tenure from agent:', userTenure, 'agent_tenure_sources:', {
-        user_tenure: selectedAgent?.user_tenure,
-        tenure: selectedAgent?.tenure,
-        raw_agent: selectedAgent
-      });
-      if (task) {
-        const perHourTarget = task.task_target || task.per_hour_target || task.target || task.label_value || 0;
-        const calculated = Number(perHourTarget) * Number(userTenure);
-        log('[QATrackerReport] Calculated base target:', calculated, 'per hour:', perHourTarget, 'tenure:', userTenure);
-        setAddFormData(prev => ({ ...prev, base_target: calculated.toFixed(2) }));
-        // Re-validate production against new task (allows 42/49 above double)
-        if (addFormData.production) {
-          const productionError = getProductionLimitError(addFormData.production, calculated.toFixed(2), value);
-          setAddErrors(prev => {
-            const next = { ...prev };
-            if (productionError) next.production = productionError;
-            else delete next.production;
-            return next;
-          });
-        }
-      } else {
-        log('[QATrackerReport] Could not calculate - task not found');
-      }
-    }
-    
+
     validateAddField(field, value);
   };
+
+  // Base Target = task_target × tenure (if tenure < 1 → use 1)
+  useEffect(() => {
+    if (!showAddModal) return;
+
+    const agent = usersList.find((u) => String(u.user_id) === String(addFormData.agent_id));
+    const project = addProjects.find((p) => String(p.project_id) === String(addFormData.project_id));
+    const task =
+      project?.tasks?.find((t) => String(t.task_id) === String(addFormData.task_id)) ||
+      addTasks.find((t) => String(t.task_id) === String(addFormData.task_id));
+
+    if (!agent || !task) {
+      setAddFormData((prev) => (prev.base_target === "" ? prev : { ...prev, base_target: "" }));
+      return;
+    }
+
+    let tenure = Number(agent.user_tenure ?? agent.tenure) || 1;
+    if (tenure < 1) tenure = 1;
+    const perHourTarget = Number(
+      task.task_target ?? task.per_hour_target ?? task.target ?? task.label_value ?? 0
+    ) || 0;
+    const calculated = (perHourTarget * tenure).toFixed(2);
+
+    setAddFormData((prev) =>
+      prev.base_target === calculated ? prev : { ...prev, base_target: calculated }
+    );
+  }, [
+    showAddModal,
+    addFormData.agent_id,
+    addFormData.project_id,
+    addFormData.task_id,
+    usersList,
+    addProjects,
+    addTasks,
+  ]);
+
 
   // Validate add form field
   const validateAddField = (field, value) => {
@@ -650,11 +762,12 @@ const QATrackerReport = () => {
         else delete newErrors.shift_type;
         break;
       case 'production':
-        {
-          const productionError = getProductionLimitError(value, addFormData.base_target, addFormData.task_id);
-          if (productionError) newErrors.production = productionError;
-          else delete newErrors.production;
+        if (!value) newErrors.production = 'Production is required';
+        // else if (isNaN(value) || Number(value) <= 0) newErrors.production = 'Enter valid production';
+        else if (addFormData.base_target && Number(value) > (Number(addFormData.base_target) * 2) && !allowsUnlimitedProduction(addFormData.project_id) && !['160', '161'].includes(String(addFormData.agent_id))) {
+          newErrors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
         }
+        else delete newErrors.production;
         break;
       default:
         break;
@@ -710,13 +823,11 @@ const QATrackerReport = () => {
     if (!addFormData.task_id) errors.task_id = 'Task is required';
     if (!addFormData.shift_type) errors.shift_type = 'Shift is required';
     if (!addFormData.production) errors.production = 'Production is required';
-    else {
-      const productionError = getProductionLimitError(
-        addFormData.production,
-        addFormData.base_target,
-        addFormData.task_id
-      );
-      if (productionError) errors.production = productionError;
+    // else if (isNaN(addFormData.production) || Number(addFormData.production) <= 0) {
+    //   errors.production = 'Enter valid production';
+    // } 
+    else if (addFormData.base_target && Number(addFormData.production) > (Number(addFormData.base_target) * 2) && !allowsUnlimitedProduction(addFormData.project_id) && !['160', '161'].includes(String(addFormData.agent_id))) {
+      errors.production = `Production cannot exceed ${(Number(addFormData.base_target) * 2).toFixed(2)} (double of base target)`;
     }
     
     setAddErrors(errors);
@@ -732,15 +843,25 @@ const QATrackerReport = () => {
       const dateTimeValue = addFormData.tracker_datetime;
       const formattedDateTime = dateTimeValue.replace('T', ' ') + ':00';
       
-      const formData = new FormData();
+      const formData = new FormData();  
       formData.append('user_id', Number(addFormData.agent_id));
       formData.append('date', formattedDateTime);
       formData.append('project_id', Number(addFormData.project_id));
       formData.append('task_id', Number(addFormData.task_id));
       formData.append('shift', addFormData.shift_type);
       formData.append('production', Number(addFormData.production));
-      formData.append('tenure_target', Number(addFormData.base_target));
-      
+      {
+        const agent = usersList.find((u) => String(u.user_id) === String(addFormData.agent_id));
+        const project = addProjects.find((p) => String(p.project_id) === String(addFormData.project_id));
+        const task =
+          project?.tasks?.find((t) => String(t.task_id) === String(addFormData.task_id)) ||
+          addTasks.find((t) => String(t.task_id) === String(addFormData.task_id));
+        const perHour =
+          Number(task?.task_target ?? task?.per_hour_target ?? task?.target ?? 0) || 0;
+        let tenure = Number(agent?.user_tenure ?? agent?.tenure) || 1;
+        if (tenure < 1) tenure = 1;
+        formData.append('tenure_target', perHour * tenure);
+      }      
       if (addFormData.tracker_note && addFormData.tracker_note.trim()) {
         formData.append('tracker_note', addFormData.tracker_note.trim());
       }
@@ -815,14 +936,11 @@ const QATrackerReport = () => {
       let formattedDateTime = '';
       if (tracker.date_time) {
         try {
-          const dateObj = new Date(tracker.date_time);
-          const year = dateObj.getUTCFullYear();
-          const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-          const day = String(dateObj.getUTCDate()).padStart(2, '0');
-          const hours = String(dateObj.getUTCHours()).padStart(2, '0');
-          const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
-          formattedDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-          log('[QATrackerReport] Formatted date_time (UTC):', formattedDateTime, 'from:', tracker.date_time);
+          const parts = getISTParts(tracker.date_time);
+          if (parts) {
+            formattedDateTime = `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}T${String(parts.hours).padStart(2, '0')}:${String(parts.minutes).padStart(2, '0')}`;
+          }
+          log('[QATrackerReport] Formatted date_time (IST):', formattedDateTime, 'from:', tracker.date_time);
         } catch (err) {
           logError('[QATrackerReport] Error formatting date_time:', err);
         }
@@ -833,7 +951,7 @@ const QATrackerReport = () => {
         project_id: tracker.project_id || "",
         task_id: tracker.task_id || "",
         shift_type: normalizedShift,
-        production: tracker.production || "",
+        production: tracker.production != null ? String(tracker.production) : "",
         base_target: tracker.tenure_target || tracker.actual_target || "",
         tracker_note: tracker.tracker_note || tracker.notes || "",
         tracker_file: null,
@@ -879,11 +997,20 @@ const QATrackerReport = () => {
     setSubmittingDelete(true);
     try {
       await api.post("/tracker/delete", { tracker_id: deletingTracker.tracker_id });
-      setTrackers(trackers.filter(t => t.tracker_id !== deletingTracker.tracker_id));
       toast.success("Tracker deleted successfully!");
       log('[QATrackerReport] Tracker deleted:', deletingTracker.tracker_id);
       setShowDeleteModal(false);
       setDeletingTracker(null);
+
+      const nextTotalRecords = Math.max((pagination.totalRecords || trackers.length) - 1, 0);
+      const nextTotalPages = Math.max(Math.ceil(nextTotalRecords / itemsPerPage), 1);
+      const nextPage = Math.min(currentPage, nextTotalPages);
+
+      if (nextPage !== currentPage) {
+        setCurrentPage(nextPage);
+      } else {
+        fetchData({ page: nextPage });
+      }
     } catch (error) {
       logError('[QATrackerReport] Delete error:', error);
       toast.error("Failed to delete tracker.");
@@ -901,60 +1028,54 @@ const QATrackerReport = () => {
 
   // Handle edit form field changes
   const handleEditFieldChange = (field, value) => {
-    const prev = editFormData;
-    const updated = { ...prev, [field]: value };
+    setEditFormData(prev => {
+      const updated = { ...prev, [field]: value };
 
-    if (field === 'project_id') {
-      const project = editProjects.find(p => String(p.project_id) === String(value));
-      log('[QATrackerReport] Project changed:', value, 'Found project:', project);
-      setEditTasks(project?.tasks || []);
+      if (field === 'project_id') {
+        const project = editProjects.find(p => String(p.project_id) === String(value));
+        log('[QATrackerReport] Project changed:', value, 'Found project:', project);
+        setEditTasks(project?.tasks || []);
+        
+        if (!project?.tasks?.find(t => String(t.task_id) === String(prev.task_id))) {
+          updated.task_id = "";
+          updated.base_target = "";
+        } else {
+          const task = project?.tasks?.find(t => String(t.task_id) === String(prev.task_id));
+          // Use user_tenure from the tracker's API data
+          const userTenure = editingTracker?.user_tenure || editingTracker?.tenure || 1;
+          if (task) {
+            const perHourTarget = task.task_target || task.per_hour_target || task.target || 0;
+            updated.base_target = (Number(perHourTarget) * Number(userTenure)).toFixed(2);
+          }
+        }
+      }
 
-      if (!project?.tasks?.find(t => String(t.task_id) === String(prev.task_id))) {
-        updated.task_id = "";
-        updated.base_target = "";
-      } else {
-        const task = project?.tasks?.find(t => String(t.task_id) === String(prev.task_id));
+      if (field === 'task_id' && value) {
+        const project = editProjects.find(p => String(p.project_id) === String(updated.project_id));
+        const task = project?.tasks?.find(t => String(t.task_id) === String(value));
+        // Use user_tenure from the tracker's API data (from /tracker/view response)
         const userTenure = editingTracker?.user_tenure || editingTracker?.tenure || 1;
         if (task) {
           const perHourTarget = task.task_target || task.per_hour_target || task.target || 0;
-          updated.base_target = (Number(perHourTarget) * Number(userTenure)).toFixed(2);
+          const calculatedTarget = Number(perHourTarget) * Number(userTenure);
+          updated.base_target = calculatedTarget.toFixed(2);
+          log('[QATrackerReport] Base target calculated:', calculatedTarget, 'task_target:', perHourTarget, 'userTenure:', userTenure);
         }
       }
-    }
 
-    if (field === 'task_id' && value) {
-      const project = editProjects.find(p => String(p.project_id) === String(updated.project_id));
-      const task = project?.tasks?.find(t => String(t.task_id) === String(value));
-      const userTenure = editingTracker?.user_tenure || editingTracker?.tenure || 1;
-      if (task) {
-        const perHourTarget = task.task_target || task.per_hour_target || task.target || 0;
-        const calculatedTarget = Number(perHourTarget) * Number(userTenure);
-        updated.base_target = calculatedTarget.toFixed(2);
-        log('[QATrackerReport] Base target calculated:', calculatedTarget, 'task_target:', perHourTarget, 'userTenure:', userTenure);
-      }
-    }
-
-    setEditFormData(updated);
-
-    // Re-check production limit using latest task/base (covers edit for tasks 42 & 49)
-    if (field === 'production' || field === 'task_id' || field === 'project_id') {
-      const taskIdForCheck = updated.task_id || editingTracker?.task_id;
-      const productionForCheck = updated.production;
-
-      if (productionForCheck !== '' && productionForCheck !== null && productionForCheck !== undefined) {
-        const productionValue = Number(productionForCheck);
-        if (isNaN(productionValue)) {
-          setEditProductionError('Please enter a valid number');
-        } else if (productionValue < 0) {
-          setEditProductionError('Production cannot be negative');
-        } else {
-          const limitError = getProductionLimitError(
-            productionForCheck,
-            updated.base_target,
-            taskIdForCheck
-          );
-          setEditProductionError(limitError.includes('cannot exceed') ? limitError : '');
-        }
+      return updated;
+    });
+    
+    if (field === 'production') {
+      const productionValue = Number(value);
+      const baseTarget = Number(editFormData.base_target);
+      
+      if (isNaN(productionValue)) {
+        setEditProductionError('Please enter a valid number');
+      } else if (productionValue < 0) {
+        setEditProductionError('Production cannot be negative');
+      } else if (baseTarget && productionValue > (baseTarget * 2) && !allowsUnlimitedProduction(editFormData.project_id) && !['160', '161'].includes(String(editingTracker?.user_id))) {
+        setEditProductionError(`Production cannot exceed ${(baseTarget * 2).toFixed(2)} (double of base target)`);
       } else {
         setEditProductionError('');
       }
@@ -1010,20 +1131,7 @@ const QATrackerReport = () => {
       return;
     }
 
-    const editTaskId = editFormData.task_id || editingTracker?.task_id;
-    const submitLimitError = getProductionLimitError(
-      editFormData.production,
-      editFormData.base_target,
-      editTaskId
-    );
-    if (submitLimitError && submitLimitError.includes('cannot exceed')) {
-      setEditProductionError(submitLimitError);
-      toast.error(submitLimitError);
-      return;
-    }
-
-    // Ignore stale double-limit errors when task 42/49 is selected
-    if (editProductionError && !(allowsUnlimitedProduction(editTaskId) && String(editProductionError).includes('cannot exceed'))) {
+    if (editProductionError) {
       toast.error(editProductionError);
       return;
     }
@@ -1052,11 +1160,9 @@ const QATrackerReport = () => {
       formData.append('production', Number(editFormData.production));
       formData.append('base_target', Number(editFormData.base_target));
 
-      // Always send note on update — empty string clears a previously saved note
-      formData.append(
-        'tracker_note',
-        editFormData.tracker_note != null ? String(editFormData.tracker_note).trim() : ''
-      );
+      if (editFormData.tracker_note && editFormData.tracker_note.trim()) {
+        formData.append('tracker_note', editFormData.tracker_note.trim());
+      }
 
       if (editFormData.newFile) {
         formData.append('tracker_file', editFormData.newFile);
@@ -1149,7 +1255,7 @@ const QATrackerReport = () => {
   }, [trackers, apiTotals]);
 
   // Calculate monthly summary from filtered trackers
-  const monthlySummary = useMemo(() => {
+  const _monthlySummary = useMemo(() => {
     const monthlyData = {};
     
     trackers.forEach(tracker => {
@@ -1183,18 +1289,33 @@ const QATrackerReport = () => {
   }, [trackers]);
 
   // Export to Excel function
-  const handleExportToExcel = () => {
+  const handleExportToExcel = async () => {
     console.log('[QATrackerReport] Export function called');
     console.log('[QATrackerReport] Trackers length:', trackers.length);
     console.log('[QATrackerReport] Totals:', totals);
     
-    if (trackers.length === 0) {
+    if (pagination.totalRecords === 0) {
       toast.error("No data to export");
       return;
     }
 
     try {
-      const exportData = trackers.map((tracker) => {
+      const exportPayload = buildTrackerPayload({ includePagination: false });
+      const exportResponse = await api.post("/tracker/view", exportPayload);
+      const exportRows = Array.isArray(exportResponse.data?.data?.trackers) ? exportResponse.data.data.trackers : [];
+      const exportTotals = exportResponse.data?.data?.totals
+        ? {
+            production: Number(exportResponse.data.data.totals.total_production || 0),
+            billableHours: Number(exportResponse.data.data.totals.total_billable_hours || 0),
+          }
+        : totals;
+
+      if (exportRows.length === 0) {
+        toast.error("No data to export");
+        return;
+      }
+
+      const exportData = exportRows.map((tracker) => {
         const agentName = tracker.user_name || "-";
         const projectName = tracker.project_name || "-";
         const taskName = tracker.task_name || "-";
@@ -1240,8 +1361,8 @@ const QATrackerReport = () => {
         'Task': 'TOTALS',
         'Shift': '',
         'Per Hour Target': '',
-        'Production': totals.production.toFixed(2),
-        'Billable Hours': totals.billableHours.toFixed(2),
+        'Production': Number(exportTotals.production || 0).toFixed(2),
+        'Billable Hours': Number(exportTotals.billableHours || 0).toFixed(2),
         'Notes': '',
         'Has File': ''
       });
@@ -1280,7 +1401,7 @@ const QATrackerReport = () => {
             </div>
             <button
               onClick={handleExportToExcel}
-              disabled={loading || trackers.length === 0}
+              disabled={loading || pagination.totalRecords === 0}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200"
               title="Export filtered data to CSV"
             >
@@ -1290,6 +1411,28 @@ const QATrackerReport = () => {
           </div>
         </div>
 
+        {/* Sub-tab Navigation */}
+        <SubTabsBar
+          bordered
+          equalWidth
+          activeTab={activeSubTab}
+          onChange={setActiveSubTab}
+          tabs={[
+            { id: 'tracker_report', label: 'Tracker Entries', icon: UsersIcon },
+            {
+              id: 'task_eod_report',
+              label: 'Task EOD Report',
+              icon: FileText,
+              hidden: !canAccessTaskEODReport,
+            },
+          ]}
+        />
+
+        {/* Sub-tab Content */}
+        {activeSubTab === 'task_eod_report' && canAccessTaskEODReport ? (
+          <TaskEODReport />
+        ) : (
+          <>
         {/* Filter Section */}
         <div className="bg-white rounded-2xl shadow-lg p-3 mb-6 border border-slate-200">
           <div className="flex flex-wrap items-end gap-3 mb-3">
@@ -1298,8 +1441,8 @@ const QATrackerReport = () => {
               <DateRangePicker
                 startDate={startDate}
                 endDate={endDate}
-                onStartDateChange={setStartDate}
-                onEndDateChange={setEndDate}
+                onStartDateChange={handleStartDateChange}
+                onEndDateChange={handleEndDateChange}
                 label=""
                 description={null}
                 showClearButton={false}
@@ -1318,7 +1461,7 @@ const QATrackerReport = () => {
               <MultiSelectWithCheckbox
                 icon={UsersIcon}
                 value={selectedAgents}
-                onChange={setSelectedAgents}
+                onChange={handleAgentsChange}
                 options={usersList.map(agent => ({ 
                   value: String(agent.user_id), 
                   label: agent.label 
@@ -1339,7 +1482,7 @@ const QATrackerReport = () => {
                 <SearchableSelect
                   icon={UsersIcon}
                   value={selectedTeams}
-                  onChange={setSelectedTeams}
+                  onChange={handleTeamChange}
                   options={teamsList.map(team => ({ 
                     value: String(team.team_id || team.value), 
                     label: team.label 
@@ -1360,7 +1503,7 @@ const QATrackerReport = () => {
               <SearchableSelect
                 icon={Briefcase}
                 value={selectedProject}
-                onChange={setSelectedProject}
+                onChange={handleProjectChange}
                 options={projectsList.map(project => ({ 
                   value: String(project.project_id), 
                   label: project.project_name 
@@ -1380,7 +1523,7 @@ const QATrackerReport = () => {
               <SearchableSelect
                 icon={ListTodo}
                 value={selectedTask}
-                onChange={setSelectedTask}
+                onChange={handleTaskChange}
                 options={filteredTasksList.map(task => ({ 
                   value: String(task.task_id), 
                   label: task.task_name 
@@ -1647,6 +1790,91 @@ const QATrackerReport = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+          <div className="border-t-2 border-slate-200 bg-gradient-to-r from-slate-50 via-blue-50 to-slate-50 px-6 py-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-4">
+                <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-white px-4 py-2.5 shadow-sm">
+                  <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">Show</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => handleItemsPerPageChange(e.target.value)}
+                    className="rounded-lg border border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-1.5 text-sm font-bold text-blue-700 outline-none transition-all hover:from-blue-100 hover:to-indigo-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>{size}</option>
+                    ))}
+                  </select>
+                  <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">entries</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-slate-700 shadow-sm border border-slate-200">
+                    Showing {pageStartRecord}-{pageEndRecord}
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-slate-700 shadow-sm border border-slate-200">
+                    {pagination.totalRecords} total records
+                  </span>
+                  <span className="rounded-full bg-blue-600 px-3 py-1.5 font-semibold text-white shadow-sm">
+                    Page {pagination.currentPage} of {pagination.totalPages}
+                  </span>
+                </div>
+              </div>
+
+              {pagination.totalPages > 1 && (
+                <Pagination className="w-full justify-start xl:w-auto xl:justify-end">
+                  <PaginationContent className="flex-wrap justify-start gap-2 xl:justify-end">
+                    <PaginationItem>
+                      <PaginationLink
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        size="default"
+                        className={`h-10 rounded-lg px-4 font-semibold transition-all ${
+                          pagination.hasPrevious
+                            ? 'border-slate-300 bg-white text-slate-700 shadow-sm hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700'
+                            : 'pointer-events-none border-slate-200 bg-slate-100 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        Previous
+                      </PaginationLink>
+                    </PaginationItem>
+
+                    {pageNumbers.map((pageNumber) => (
+                      <PaginationItem key={pageNumber}>
+                        {String(pageNumber).startsWith('ellipsis') ? (
+                          <PaginationEllipsis className="text-slate-500" />
+                        ) : (
+                          <PaginationLink
+                            onClick={() => handlePageChange(pageNumber)}
+                            isActive={currentPage === pageNumber}
+                            className={`h-10 min-w-[40px] rounded-lg font-bold transition-all ${
+                              currentPage === pageNumber
+                                ? 'border-blue-400 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                                : 'border-slate-300 bg-white text-slate-700 shadow-sm hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700'
+                            }`}
+                          >
+                            {pageNumber}
+                          </PaginationLink>
+                        )}
+                      </PaginationItem>
+                    ))}
+
+                    <PaginationItem>
+                      <PaginationLink
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        size="default"
+                        className={`h-10 rounded-lg px-4 font-semibold transition-all ${
+                          pagination.hasNext
+                            ? 'border-slate-300 bg-white text-slate-700 shadow-sm hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700'
+                            : 'pointer-events-none border-slate-200 bg-slate-100 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        Next
+                      </PaginationLink>
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              )}
             </div>
           </div>
         </div>
@@ -2740,8 +2968,10 @@ const QATrackerReport = () => {
             </div>
           </div>
         )}
-      </div>
+      </>
+      )}
     </div>
+  </div>
   );
 };
 
