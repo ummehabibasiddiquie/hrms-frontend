@@ -245,16 +245,18 @@ export function getDayDisplayInfo(day, options = null) {
     cellClass = "bg-amber-50 border-amber-200";
     primaryLabel = "Leave";
     badges.push("Full Day");
-  } else if (effectiveDay.is_holiday_on_week_off) {
-    cellClass = "bg-slate-100 border-slate-300";
-    primaryLabel = "Week Off";
-    badges.push("Holiday");
+  } else if (
+    effectiveDay.day_type === "Holiday" ||
+    (effectiveDay.holiday_id &&
+      effectiveDay.day_type !== "Working" &&
+      effectiveDay.day_type !== "Leave")
+  ) {
+    cellClass = "bg-purple-50 border-purple-200";
+    primaryLabel = "Holiday";
+    if (effectiveDay.day_type === "WeekOff") badges.push("Week Off");
   } else if (effectiveDay.day_type === "WeekOff") {
     cellClass = "bg-slate-100 border-slate-300";
     primaryLabel = "Week Off";
-  } else if (effectiveDay.day_type === "Holiday") {
-    cellClass = "bg-purple-50 border-purple-200";
-    primaryLabel = "Holiday";
   } else if (effectiveDay.day_type === "Working") {
     cellClass = isNightShift
       ? "bg-teal-100 border-teal-500"
@@ -262,6 +264,7 @@ export function getDayDisplayInfo(day, options = null) {
     primaryLabel = "Working";
     if (effectiveDay.shift) badges.push(isNightShift ? "Night" : "Day");
     badges.push("Full Day");
+    if (effectiveDay.holiday_id) badges.push("Holiday");
   }
 
   // Shift badge for half working / other day types (Working already added above)
@@ -289,7 +292,7 @@ export function getDayDisplayInfo(day, options = null) {
   ) {
     badges.push(`${hoursBadge}h`);
   }
-  if (effectiveDay.holiday_name && effectiveDay.day_type !== "Leave" && !effectiveDay.is_holiday_on_week_off) {
+  if (effectiveDay.holiday_name && effectiveDay.day_type !== "Leave") {
     badges.push(effectiveDay.holiday_name);
   }
 

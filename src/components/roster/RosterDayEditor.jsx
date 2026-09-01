@@ -46,7 +46,7 @@ const RosterDayEditor = ({
   useEffect(() => {
     if (!isOpen || !day) return;
     // Leave days aren't in the Day Type dropdown — default to Working so user can restore
-    const isRestoringLeave = day.day_type === "Leave" || day.day_type === "Holiday";
+    const isRestoringLeave = day.day_type === "Leave";
     const proposedType = isRestoringLeave ? "Working" : day.day_type || "Working";
     const wasHalf =
       (day.working_type || "").toLowerCase() === "half" || Number(day.is_half_day) === 1;
@@ -112,6 +112,7 @@ const RosterDayEditor = ({
   if (!isOpen || !day || !roster) return null;
 
   const rosterDate = toDateOnlyString(day.roster_date);
+  const isHolidayDay = day?.day_type === "Holiday" || Boolean(day?.holiday_id);
 
   const submitChange = async (change_type, change_payload) => {
     if (loading) return;
@@ -137,8 +138,17 @@ const RosterDayEditor = ({
     // Never submit day_type Leave via Day tab — Leave is managed on Leave tab.
     // Restoring a leave day must send Working/WeekOff so backend drops leave coverage.
     let dayType = dayForm.day_type;
-    if (dayType === "Leave" || dayType === "Holiday") {
+    if (dayType === "Leave") {
       dayType = "Working";
+    }
+    if (isHolidayDay && dayType === "WeekOff") {
+      dayType = "Holiday";
+    }
+    if (isHolidayDay && (dayForm.working_type === "Half" || dayType === "Leave")) {
+      toast.error(
+        "Leave or half day cannot be added on a Holiday. Set Working (day or night) if this person must work."
+      );
+      return;
     }
     submitChange("DAY_UPDATE", {
       roster_date: rosterDate,
@@ -191,6 +201,17 @@ const RosterDayEditor = ({
     }
     if (leaveForm.end_date < leaveForm.start_date) {
       toast.error("End date cannot be before start date");
+      return;
+    }
+    const holidayInRange = (roster.days || []).some((d) => {
+      const ds = toDateOnlyString(d.roster_date);
+      if (!ds || ds < leaveForm.start_date || ds > leaveForm.end_date) return false;
+      return d.day_type === "Holiday" || Boolean(d.holiday_id);
+    });
+    if (holidayInRange) {
+      toast.error(
+        "Leave or half day cannot be added on a Holiday. Set Working (day or night) if this person must work."
+      );
       return;
     }
     // Same dates already on roster → update (so Affect Target can be corrected)
@@ -289,6 +310,12 @@ const RosterDayEditor = ({
                   <p className="sm:col-span-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
                     Daily full-day hours are set from tenure when the roster is generated. Monthly extra assigned hours are edited on the summary card, not per day.
                   </p>
+                  {isHolidayDay && (
+                    <p className="sm:col-span-2 text-xs text-purple-800 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                      This date is a Holiday (highest priority). You can set Working day or Night if this
+                      person must work. Leave and half day cannot be added here.
+                    </p>
+                  )}
                   {day?.day_type === "Leave" && (
                     <p className="sm:col-span-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                       This day is on leave. Keep Day Type as Working and submit for approval to restore it
@@ -305,6 +332,9 @@ const RosterDayEditor = ({
                     >
                       <option value="Working">Working</option>
                       <option value="WeekOff">Week Off</option>
+                      {(isHolidayDay || dayForm.day_type === "Holiday") && (
+                        <option value="Holiday">Holiday</option>
+                      )}
                     </select>
                   </label>
                   <label className="block">
@@ -338,7 +368,9 @@ const RosterDayEditor = ({
                       className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
                     >
                       <option value="Full">Full Day</option>
-                      <option value="Half">Half Day (reduces monthly target)</option>
+                      {!isHolidayDay && (
+                        <option value="Half">Half Day (reduces monthly target)</option>
+                      )}
                     </select>
                   </label>
                   <label className="block">
@@ -426,6 +458,12 @@ const RosterDayEditor = ({
 
               {tab === "leave" && (
                 <div className="space-y-4">
+                  {isHolidayDay && (
+                    <p className="text-sm text-purple-800 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                      Leave and half day cannot be added on a Holiday. Use the Day tab to assign a
+                      working day or night shift if this person must work.
+                    </p>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className="block sm:col-span-2">
                       <span className="text-sm font-medium text-slate-700">Leave Type</span>
@@ -494,9 +532,9 @@ const RosterDayEditor = ({
                   </div>
                   <button
                     type="button"
-                    disabled={loading}
+                    disabled={loading || isHolidayDay}
                     onClick={handleLeaveSave}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50"
                   >
                     <Save className="w-4 h-4" />
                     {editingLeaveId ||
