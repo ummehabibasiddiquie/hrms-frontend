@@ -21,6 +21,9 @@ const RosterTeamWeekGrid = ({
   weekLocks = [],
   readOnly = false,
   onCellClick,
+  canUnlockWeeks = false,
+  unlockingWeek = "",
+  onUnlockWeek,
 }) => {
   const weeks = useMemo(() => getWeeksInMonth(monthYear), [monthYear]);
   const [activeWeek, setActiveWeek] = useState(1);
@@ -112,6 +115,18 @@ const RosterTeamWeekGrid = ({
           {week?.label}
           {activeWeekLocked ? " · Locked" : ""}
         </span>
+        {canUnlockWeeks && activeWeekLocked && typeof onUnlockWeek === "function" && (
+          <button
+            type="button"
+            disabled={Boolean(unlockingWeek)}
+            onClick={() => onUnlockWeek(activeWeek)}
+            className="self-center px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-amber-400 bg-white text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+          >
+            {unlockingWeek === `unlock-week-${activeWeek}`
+              ? "Unlocking…"
+              : `Unlock Week ${activeWeek}`}
+          </button>
+        )}
       </div>
 
       <div className="overflow-auto max-h-[min(70vh,720px)]">

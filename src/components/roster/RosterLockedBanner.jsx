@@ -2,7 +2,13 @@ import React from "react";
 import { Lock } from "lucide-react";
 import { getRosterLockMessage } from "../../utils/rosterUtils";
 
-const RosterLockedBanner = ({ roster, message, title = "Roster locked", className = "" }) => {
+const RosterLockedBanner = ({
+  roster,
+  message,
+  title = "Roster locked",
+  className = "",
+  action = null,
+}) => {
   const text = message || getRosterLockMessage(roster);
   if (!text) return null;
 
@@ -12,10 +18,11 @@ const RosterLockedBanner = ({ roster, message, title = "Roster locked", classNam
       role="status"
     >
       <Lock className="w-5 h-5 shrink-0 mt-0.5 text-red-600" />
-      <div>
+      <div className="min-w-0 flex-1">
         <p className="font-semibold text-red-900">{title}</p>
         <p className="mt-0.5 text-red-800/90">{text}</p>
       </div>
+      {action ? <div className="shrink-0 self-center">{action}</div> : null}
     </div>
   );
 };

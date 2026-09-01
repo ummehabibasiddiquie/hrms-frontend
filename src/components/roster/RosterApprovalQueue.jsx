@@ -203,11 +203,18 @@ const RosterApprovalQueue = ({
       if (type === "approve" || type === "reject") {
         setActionId(request.request_id);
         if (type === "approve") {
-          await approveChangeRequest({
+          const res = await approveChangeRequest({
             request_id: request.request_id,
             ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
           });
           toast.success("Request approved");
+          const mailRows = res?.data?.weekly_roster_emails || [];
+          const mailed = mailRows.filter((e) => e.sent).length;
+          if (mailed) toast.success(`Weekly roster emailed for ${mailed} week(s)`);
+          else {
+            const reason = mailRows.find((e) => e.reason)?.reason;
+            toast.error(reason || "Approved, but weekly roster email was not sent");
+          }
         } else {
           await rejectChangeRequest({
             request_id: request.request_id,
@@ -223,6 +230,7 @@ const RosterApprovalQueue = ({
 
         let approved = 0;
         let failed = [];
+        let mailedWeeks = 0;
         for (let i = 0; i < ids.length; i += BULK_APPROVE_CHUNK) {
           const chunk = ids.slice(i, i + BULK_APPROVE_CHUNK);
           const res = await approveChangeRequestsBulk({
@@ -231,6 +239,7 @@ const RosterApprovalQueue = ({
           });
           approved += res.data?.approved ?? 0;
           failed = failed.concat(res.data?.failed || []);
+          mailedWeeks += (res.data?.weekly_roster_emails || []).filter((e) => e.sent).length;
           setBulkProgress({
             done: Math.min(i + chunk.length, total),
             total,
@@ -243,6 +252,8 @@ const RosterApprovalQueue = ({
         } else {
           toast.success(`Approved ${approved} request(s)`);
         }
+        if (mailedWeeks) toast.success(`Weekly roster emailed for ${mailedWeeks} week(s)`);
+        else toast.error("Approved, but weekly roster email was not sent");
         setSelectedIds(new Set());
       } else if (type === "reject_selected") {
         setBulkLoading(true);

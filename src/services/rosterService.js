@@ -112,8 +112,8 @@ export async function unlockRosterWeek(payload) {
   return rosterPost("/roster/week/unlock", payload);
 }
 
-export async function listRosterWeekLocks(payload) {
-  return rosterPost("/roster/week/locks", payload);
+export async function emailRosterWeek(payload) {
+  return rosterPost("/roster/week/email", payload);
 }
 
 export async function listRosterAudit(payload = {}) {
