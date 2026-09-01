@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import { MonthYearPicker } from '../common/CustomCalendar';
 import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
 import { exportToCSV } from '../../utils/csvExport';
+import { getCurrentMonthYear, getDefaultRecentMonthYears } from '../../utils/rosterUtils';
 
 const ProjectMonthlyReport = () => {
   const { user } = useAuth();
@@ -44,13 +45,6 @@ const ProjectMonthlyReport = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  // Helper to get current month in format like FEB2026
-  function getCurrentMonthYear() {
-    const now = new Date();
-    const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    return `${monthNames[now.getMonth()]}${now.getFullYear()}`;
-  }
 
   // Fetch projects from API
   useEffect(() => {
@@ -90,24 +84,17 @@ const ProjectMonthlyReport = () => {
     }
   }, [user?.user_id, projects.length]);
 
-  // Auto-expand current month on initial load
+  // Auto-expand newest default month (or the selected month)
   useEffect(() => {
     const currentMonth = getCurrentMonthYear();
+    const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
+    const newest = selectedMonthFilter !== 'all' ? selectedMonthFilter : defaultMonths[0];
     setExpandedMonths(prev => ({
       ...prev,
-      [currentMonth]: true
+      [newest]: true,
+      ...(selectedMonthFilter === 'all' ? { [currentMonth]: true } : {})
     }));
-  }, [projects, reportData]);
-
-  // Auto-expand when a specific month is selected in filter
-  useEffect(() => {
-    if (selectedMonthFilter !== 'all') {
-      setExpandedMonths(prev => ({
-        ...prev,
-        [selectedMonthFilter]: true
-      }));
-    }
-  }, [selectedMonthFilter]);
+  }, [projects, reportData, selectedMonthFilter]);
 
   // Handle month/year filter change
   const handleMonthYearChange = (value) => {
@@ -324,39 +311,31 @@ const ProjectMonthlyReport = () => {
 
   // Create merged data: all projects with their report data for each month
   const getTableDataByMonth = () => {
-    // Get all unique months from reportData
-    const monthsFromData = [...new Set(reportData.map(r => r.month_year))];
-    const currentMonth = getCurrentMonthYear();
-    
-    // Include current month if not in data
-    const allMonths = monthsFromData.includes(currentMonth) 
-      ? monthsFromData 
-      : [...monthsFromData, currentMonth];
-    
+    const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
+    const visibleMonths = selectedMonthFilter !== 'all'
+      ? [selectedMonthFilter]
+      : defaultMonths;
+
     const result = {};
-    
-    // For each month, create entries for all projects
-    allMonths.forEach(monthYear => {
-      result[monthYear] = projects.map(project => {
-        // Check if this specific project has data for this specific month
+
+    visibleMonths.forEach((monthYear) => {
+      result[monthYear] = projects.map((project) => {
         const existingReport = reportData.find(
-          r => r.project_id === project.project_id && r.month_year === monthYear
+          (r) => r.project_id === project.project_id && r.month_year === monthYear
         );
-        
+
         if (existingReport) {
           return existingReport;
-        } else {
-          // No data for this project-month combination
-          return {
-            project_id: project.project_id,
-            project_name: project.project_name,
-            month_year: monthYear,
-            isNew: true
-          };
         }
+        return {
+          project_id: project.project_id,
+          project_name: project.project_name,
+          month_year: monthYear,
+          isNew: true
+        };
       });
     });
-    
+
     return result;
   };
 
@@ -466,34 +445,10 @@ const ProjectMonthlyReport = () => {
   };
 
   const groupedData = getTableDataByMonth();
-  
-  // Sort months in reverse chronological order (most recent first)
-  const allMonthYears = Object.keys(groupedData).sort((a, b) => {
-    // Parse month and year from format like "FEB2026"
-    const parseMonthYear = (str) => {
-      const monthMap = {
-        'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
-        'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
-      };
-      const month = str.substring(0, 3);
-      const year = parseInt(str.substring(3));
-      return { year, month: monthMap[month] };
-    };
-    
-    const dateA = parseMonthYear(a);
-    const dateB = parseMonthYear(b);
-    
-    // Sort by year descending, then by month descending
-    if (dateB.year !== dateA.year) {
-      return dateB.year - dateA.year;
-    }
-    return dateB.month - dateA.month;
-  });
-  
-  // Filter months based on selected filter
-  const monthYears = selectedMonthFilter === 'all' 
-    ? allMonthYears 
-    : allMonthYears.filter(month => month === selectedMonthFilter);
+  const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
+  const monthYears = selectedMonthFilter === 'all'
+    ? defaultMonths
+    : [selectedMonthFilter];
 
   return (
     <div className="space-y-6">
@@ -550,7 +505,7 @@ const ProjectMonthlyReport = () => {
         <div className="space-y-4">
           {monthYears.map((monthYear) => {
             const isExpanded = expandedMonths[monthYear];
-            const monthData = groupedData[monthYear];
+            const monthData = groupedData[monthYear] || [];
             const filteredMonthData = monthData.filter(record => 
               record.project_name.toLowerCase().includes(searchTerm.toLowerCase())
             );
