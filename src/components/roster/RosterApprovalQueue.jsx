@@ -35,6 +35,21 @@ import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
 const PAGE_SIZE = 8;
 const BULK_APPROVE_CHUNK = 10;
 
+function notifyWeeklyRosterEmail(mailRows) {
+  const rows = mailRows || [];
+  const mailed = rows.filter((e) => e.sent).length;
+  if (mailed) {
+    toast.success(`Weekly roster emailed for ${mailed} week(s)`);
+    return;
+  }
+  if (rows.some((e) => e.deferred)) {
+    toast("Weekly roster email will send after all pending requests are reviewed");
+    return;
+  }
+  const reason = rows.find((e) => e.reason)?.reason;
+  if (reason) toast.error(reason);
+}
+
 const STATUS_TABS = [
   { id: "Pending", label: "Pending" },
   { id: "Approved", label: "Approved" },
@@ -208,19 +223,14 @@ const RosterApprovalQueue = ({
             ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
           });
           toast.success("Request approved");
-          const mailRows = res?.data?.weekly_roster_emails || [];
-          const mailed = mailRows.filter((e) => e.sent).length;
-          if (mailed) toast.success(`Weekly roster emailed for ${mailed} week(s)`);
-          else {
-            const reason = mailRows.find((e) => e.reason)?.reason;
-            toast.error(reason || "Approved, but weekly roster email was not sent");
-          }
+          notifyWeeklyRosterEmail(res?.data?.weekly_roster_emails);
         } else {
-          await rejectChangeRequest({
+          const res = await rejectChangeRequest({
             request_id: request.request_id,
             reviewer_comment: comment.trim(),
           });
           toast.success("Request rejected");
+          notifyWeeklyRosterEmail(res?.data?.weekly_roster_emails);
         }
       } else if (type === "approve_selected") {
         setBulkLoading(true);
@@ -231,6 +241,7 @@ const RosterApprovalQueue = ({
         let approved = 0;
         let failed = [];
         let mailedWeeks = 0;
+        let deferredMail = false;
         for (let i = 0; i < ids.length; i += BULK_APPROVE_CHUNK) {
           const chunk = ids.slice(i, i + BULK_APPROVE_CHUNK);
           const res = await approveChangeRequestsBulk({
@@ -239,7 +250,9 @@ const RosterApprovalQueue = ({
           });
           approved += res.data?.approved ?? 0;
           failed = failed.concat(res.data?.failed || []);
-          mailedWeeks += (res.data?.weekly_roster_emails || []).filter((e) => e.sent).length;
+          const mailRows = res.data?.weekly_roster_emails || [];
+          mailedWeeks += mailRows.filter((e) => e.sent).length;
+          if (mailRows.some((e) => e.deferred)) deferredMail = true;
           setBulkProgress({
             done: Math.min(i + chunk.length, total),
             total,
@@ -253,7 +266,9 @@ const RosterApprovalQueue = ({
           toast.success(`Approved ${approved} request(s)`);
         }
         if (mailedWeeks) toast.success(`Weekly roster emailed for ${mailedWeeks} week(s)`);
-        else toast.error("Approved, but weekly roster email was not sent");
+        else if (deferredMail) {
+          toast("Weekly roster email will send after all pending requests are reviewed");
+        } else toast.error("Approved, but weekly roster email was not sent");
         setSelectedIds(new Set());
       } else if (type === "reject_selected") {
         setBulkLoading(true);
@@ -263,12 +278,14 @@ const RosterApprovalQueue = ({
 
         let ok = 0;
         let fail = 0;
+        let lastMailRows = [];
         for (let i = 0; i < ids.length; i += 1) {
           try {
-            await rejectChangeRequest({
+            const res = await rejectChangeRequest({
               request_id: ids[i],
               reviewer_comment: comment.trim(),
             });
+            lastMailRows = res?.data?.weekly_roster_emails || lastMailRows;
             ok += 1;
           } catch {
             fail += 1;
@@ -277,6 +294,7 @@ const RosterApprovalQueue = ({
         }
         if (fail) toast.error(`Rejected ${ok}; ${fail} failed`);
         else toast.success(`Rejected ${ok} request(s)`);
+        notifyWeeklyRosterEmail(lastMailRows);
         setSelectedIds(new Set());
       }
 
