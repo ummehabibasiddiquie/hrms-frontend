@@ -14,6 +14,35 @@ export function getNextMonthYear() {
   return `${MONTH_NAMES[date.getMonth()]}${date.getFullYear()}`;
 }
 
+export function shiftMonthYear(monthYear, deltaMonths) {
+  const parsed = parseMonthYear(monthYear);
+  if (!parsed) return monthYear;
+  const date = new Date(parsed.year, parsed.month, 1);
+  date.setMonth(date.getMonth() + deltaMonths);
+  return `${MONTH_NAMES[date.getMonth()]}${date.getFullYear()}`;
+}
+
+/** True in the last 7 calendar days of the month (when next-month roster is typically generated). */
+export function isInLastWeekOfMonth(referenceDate = new Date()) {
+  const lastDay = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0).getDate();
+  return referenceDate.getDate() > lastDay - 7;
+}
+
+/**
+ * Default User Monthly Goal window: current + 2 previous months.
+ * If next-month roster/tracker already exists (or it is the last week of the month),
+ * use upcoming + current + previous instead.
+ */
+export function getDefaultRecentMonthYears(existingMonthYears = [], referenceDate = new Date()) {
+  const current = `${MONTH_NAMES[referenceDate.getMonth()]}${referenceDate.getFullYear()}`;
+  const nextDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 1);
+  const next = `${MONTH_NAMES[nextDate.getMonth()]}${nextDate.getFullYear()}`;
+  const known = new Set((existingMonthYears || []).filter(Boolean));
+  const includeUpcoming = known.has(next) || isInLastWeekOfMonth(referenceDate);
+  const newest = includeUpcoming ? next : current;
+  return [newest, shiftMonthYear(newest, -1), shiftMonthYear(newest, -2)];
+}
+
 export function parseMonthYear(monthYear) {
   if (!monthYear || monthYear.length < 5) return null;
   const year = parseInt(monthYear.slice(-4), 10);

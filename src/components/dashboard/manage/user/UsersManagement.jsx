@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { UserPlus, Key, Users, Plus, Search, Filter, Mail, Phone, Shield, Briefcase, Edit, Trash2 } from "lucide-react";
 import { useAuth } from "../../../../context/AuthContext";
-import AddUserFormModal from "./AddUserFormModal";
+import AddUserFormModal, { joiningDateToIso } from "./AddUserFormModal";
 import EditUserFormModal from "./EditUserFormModal";
 import UsersTable from "./UsersTable";
 import TaskAssignmentModal from "./TaskAssignmentModal";
@@ -338,7 +338,7 @@ const UsersManagement = ({
           formData.append('user_address', newUser.address || '');
           formData.append('user_tenure', newUser.tenure || '');
           if (newUser.joining_date) {
-               formData.append('joining_date', newUser.joining_date);
+               formData.append('joining_date', joiningDateToIso(newUser.joining_date) || newUser.joining_date);
           }
           formData.append('device_id', deviceInfo.device_id);
           formData.append('device_type', deviceInfo.device_type);
@@ -657,11 +657,12 @@ const UsersManagement = ({
                               </label>
                               <input
                                    type="text"
+                                   name="hrms_user_filter_name"
+                                   autoComplete="off"
                                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                                    placeholder="e.g. John Doe"
                                    value={filterUser.name}
                                    onChange={(e) => setFilterUser({ ...filterUser, name: e.target.value })}
-                                   required
                               />
                          </div>
                          <div className="col-span-1">
@@ -669,7 +670,9 @@ const UsersManagement = ({
                                    Email
                               </label>
                               <input
-                                   type="email"
+                                   type="text"
+                                   name="hrms_user_filter_email"
+                                   autoComplete="off"
                                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
                                    placeholder="user@co.com"
                                    value={filterUser.email}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import AddUserFormModal from "./AddUserFormModal";
+import AddUserFormModal, { joiningDateToIso } from "./AddUserFormModal";
 import { fetchUserDropdowns } from "../../../../services/dropdownService";
 import { fetchUserById, updateUser } from "../../../../services/userService";
 import { log, logError, logWarn } from "../../../../config/environment";
@@ -127,6 +127,7 @@ const EditUserFormModal = ({
             qualityAnalysts: qaIds, // Array for multi-select
             team: String(teamValue || ''), // Convert to string for select element
             tenure: user.user_tenure || user.tenure || "",
+            joining_date: user.joining_date ? String(user.joining_date).slice(0, 10) : "",
             address: user.user_address || user.address || "",
           };
           
@@ -187,6 +188,7 @@ const EditUserFormModal = ({
         phone: 'user_number',
         password: 'user_password',
         tenure: 'user_tenure',
+        joining_date: 'joining_date',
         address: 'user_address',
         role: 'role_id',
         designation: 'designation_id',
@@ -226,6 +228,16 @@ const EditUserFormModal = ({
         const originalStr = String(originalValue || '');
         const hasChanged = currentStr !== originalStr;
         
+        if (frontendKey === 'joining_date') {
+          const iso = joiningDateToIso(currentValue);
+          const originalIso = joiningDateToIso(originalValue);
+          if (iso && iso !== originalIso) {
+            payload[backendKey] = iso;
+            changedFieldsLog.push(`${frontendKey} → ${backendKey}: "${originalValue}" → "${iso}"`);
+          }
+          return;
+        }
+
         // Special handling for password - only include if it was actually changed
         if (frontendKey === 'password') {
           if (hasChanged && currentValue && String(currentValue).trim() !== "") {

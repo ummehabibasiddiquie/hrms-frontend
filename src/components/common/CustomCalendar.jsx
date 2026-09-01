@@ -325,6 +325,97 @@ export const DateRangePicker = ({
   );
 };
 
+/** Single date picker. Button shows dd/mm/yyyy; value stored as YYYY-MM-DD. */
+export const SingleDatePicker = ({
+  value,
+  onChange,
+  disabled = false,
+  placeholder = "dd/mm/yyyy",
+  hasError = false,
+  allowFuture = false,
+  className = "",
+}) => {
+  const [open, setOpen] = useState(false);
+
+  const parseDate = (dateStr) => {
+    if (!dateStr) return undefined;
+    const match = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    }
+    const dmy = String(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (dmy) {
+      return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+    }
+    return undefined;
+  };
+
+  const formatDate = (date) => {
+    if (!date) return "";
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
+
+  const formatToDisplay = (dateStr) => {
+    if (!dateStr) return "";
+    const match = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+    const date = parseDate(dateStr);
+    if (!date || Number.isNaN(date.getTime())) return "";
+    return format(date, "dd/MM/yyyy");
+  };
+
+  const isDateDisabled = (date) => {
+    if (allowFuture) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    return day > today;
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className={cn(
+            "w-full px-3 py-3 text-sm bg-gray-50 border rounded-lg text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500",
+            hasError ? "border-red-500" : "border-gray-200",
+            disabled && "opacity-50 cursor-not-allowed",
+            className
+          )}
+        >
+          <span className={!value ? "text-gray-400" : "text-gray-800"}>
+            {formatToDisplay(value) || placeholder}
+          </span>
+          <CalendarIcon className="w-4 h-4 text-blue-600 shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0 border-2 border-blue-200 bg-white z-[80]" align="start">
+        <Calendar
+          mode="single"
+          selected={parseDate(value)}
+          onSelect={(date) => {
+            if (date) {
+              onChange(formatDate(date));
+              setOpen(false);
+            }
+          }}
+          disabled={isDateDisabled}
+          initialFocus
+          captionLayout="dropdown"
+          fromYear={1990}
+          toYear={new Date().getFullYear() + (allowFuture ? 1 : 0)}
+          className="rounded-md bg-white"
+        />
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 // Month Year Picker Component (Custom Implementation with Blue/White Theme)
 export const MonthYearPicker = ({
   selectedMonthYear,

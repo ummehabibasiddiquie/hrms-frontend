@@ -9,14 +9,19 @@ import { exportToCSV } from '../../utils/csvExport';
 import { MonthYearPicker } from '../common/CustomCalendar';
 import SearchableSelect from '../common/SearchableSelect';
 import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
-import PaginatedSlice from '../common/PaginatedSlice';
+import { getCurrentMonthYear, getDefaultRecentMonthYears } from '../../utils/rosterUtils';
 
-// Helper to get current month in format JAN2026
-const getCurrentMonthYear = () => {
-  const date = new Date();
-  const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
-  const year = date.getFullYear();
-  return `${month}${year}`;
+const sortTeamWise = (a, b) => {
+  const teamA = (a.team_name || "").trim();
+  const teamB = (b.team_name || "").trim();
+  if (!teamA && teamB) return 1;
+  if (teamA && !teamB) return -1;
+  const teamCmp = teamA.localeCompare(teamB, undefined, { sensitivity: "base" });
+  if (teamCmp !== 0) return teamCmp;
+  const aAgent = (a.user_name || "").trim().toLowerCase() === teamA.toLowerCase() ? 0 : 1;
+  const bAgent = (b.user_name || "").trim().toLowerCase() === teamB.toLowerCase() ? 0 : 1;
+  if (aAgent !== bAgent) return aAgent - bAgent;
+  return (a.user_name || "").localeCompare(b.user_name || "", undefined, { sensitivity: "base" });
 };
 
 const UserMonthlyReport = () => {
@@ -106,7 +111,7 @@ const UserMonthlyReport = () => {
             user_name: u.user_name,
             team_name: u.team_name
           }));
-          setUsers(usersList);
+          setUsers([...usersList].sort(sortTeamWise));
         } else {
           setUsers([]);
         }
@@ -190,7 +195,7 @@ const UserMonthlyReport = () => {
             submitted: true
           }));
         
-        setReportData(mappedData);
+        setReportData([...mappedData].sort(sortTeamWise));
       } else {
         setReportData([]);
       }
@@ -209,24 +214,17 @@ const UserMonthlyReport = () => {
     fetchReportData();
   }, [user?.user_id, selectedMonthFilter, selectedTeam, assistantManagerTeamId]);
 
-  // Auto-expand current month on initial load
+  // Auto-expand newest default month (or the selected month)
   useEffect(() => {
     const currentMonth = getCurrentMonthYear();
+    const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
+    const newest = selectedMonthFilter !== 'all' ? selectedMonthFilter : defaultMonths[0];
     setExpandedMonths(prev => ({
       ...prev,
-      [currentMonth]: true
+      [newest]: true,
+      ...(selectedMonthFilter === 'all' ? { [currentMonth]: true } : {})
     }));
-  }, [users, reportData]);
-
-  // Auto-expand when a specific month is selected in filter
-  useEffect(() => {
-    if (selectedMonthFilter !== 'all') {
-      setExpandedMonths(prev => ({
-        ...prev,
-        [selectedMonthFilter]: true
-      }));
-    }
-  }, [selectedMonthFilter]);
+  }, [users, reportData, selectedMonthFilter]);
 
   // Handle month/year change from picker
   const handleMonthYearChange = (value) => {
@@ -486,15 +484,13 @@ const UserMonthlyReport = () => {
 
   // Build table rows: tracker data + empty rows for users missing a record in each visible month
   const getTableData = () => {
-    const allData = [...reportData];
-    const monthsNeedingPlaceholders = new Set();
+    const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
+    const visibleMonths = selectedMonthFilter !== 'all'
+      ? [selectedMonthFilter]
+      : defaultMonths;
 
-    if (selectedMonthFilter !== 'all') {
-      monthsNeedingPlaceholders.add(selectedMonthFilter);
-    } else {
-      monthsNeedingPlaceholders.add(getCurrentMonthYear());
-      reportData.forEach((r) => monthsNeedingPlaceholders.add(r.month_year));
-    }
+    const allData = reportData.filter((r) => visibleMonths.includes(r.month_year));
+    const monthsNeedingPlaceholders = new Set(visibleMonths);
 
     monthsNeedingPlaceholders.forEach((monthKey) => {
       const monthUserIds = new Set(
@@ -531,6 +527,9 @@ const UserMonthlyReport = () => {
         grouped[month] = [];
       }
       grouped[month].push(record);
+    });
+    Object.keys(grouped).forEach((month) => {
+      grouped[month].sort(sortTeamWise);
     });
     return grouped;
   };
@@ -613,34 +612,11 @@ const UserMonthlyReport = () => {
 
   const tableData = getTableData();
   const groupedData = groupByMonth(tableData);
-  
-  // Sort months in reverse chronological order (most recent first)
-  const allMonthYears = Object.keys(groupedData).sort((a, b) => {
-    // Parse month and year from format like "FEB2026"
-    const parseMonthYear = (str) => {
-      const monthMap = {
-        'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
-        'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
-      };
-      const month = str.substring(0, 3);
-      const year = parseInt(str.substring(3));
-      return { year, month: monthMap[month] };
-    };
-    
-    const dateA = parseMonthYear(a);
-    const dateB = parseMonthYear(b);
-    
-    // Sort by year descending, then by month descending
-    if (dateB.year !== dateA.year) {
-      return dateB.year - dateA.year;
-    }
-    return dateB.month - dateA.month;
-  });
-  
-  // Filter months based on selected filter
-  const monthYears = selectedMonthFilter === 'all' 
-    ? allMonthYears 
-    : allMonthYears.filter(month => month === selectedMonthFilter);
+  const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
+
+  const monthYears = selectedMonthFilter === 'all'
+    ? defaultMonths
+    : [selectedMonthFilter];
 
   return (
     <div className="space-y-6">
@@ -700,7 +676,7 @@ const UserMonthlyReport = () => {
         <div className="space-y-4">
           {monthYears.map((monthYear) => {
             const isExpanded = expandedMonths[monthYear];
-            const monthData = groupedData[monthYear];
+            const monthData = groupedData[monthYear] || [];
             const filteredMonthData = monthData.filter(record => 
               record.user_name.toLowerCase().includes(searchTerm.toLowerCase())
             );
@@ -785,12 +761,6 @@ const UserMonthlyReport = () => {
                     </div>
 
                     {/* Table */}
-                    <PaginatedSlice
-                      items={filteredMonthData}
-                      resetKeys={[searchTerm, selectedTeam, monthYear]}
-                      itemLabel="users"
-                    >
-                      {(pagedItems) => (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200 border-collapse">
                         <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
@@ -808,7 +778,7 @@ const UserMonthlyReport = () => {
                         <tbody className="bg-white divide-y divide-slate-100">
                           {filteredMonthData.length > 0 ? (
                             <>
-                            {pagedItems.map((record) => {
+                            {filteredMonthData.map((record) => {
                               // Check if this record is being edited
                               const isEditing = editingId === record.id;
                               const hasData = record.id && record.submitted;
@@ -981,8 +951,6 @@ const UserMonthlyReport = () => {
                         </tbody>
                       </table>
                     </div>
-                      )}
-                    </PaginatedSlice>
                   </div>
                 )}
               </div>

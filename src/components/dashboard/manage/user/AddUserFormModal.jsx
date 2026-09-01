@@ -11,6 +11,38 @@ import React, { useRef, useState, useEffect } from "react";
 import { UserPlus, X, Upload, XCircle, User, Eye, EyeOff, ChevronDown, Users } from "lucide-react";
 import SearchableSelect from "../../../common/SearchableSelect";
 import MultiSelectWithCheckbox from "../../../common/MultiSelectWithCheckbox";
+import { SingleDatePicker } from "../../../common/CustomCalendar";
+
+/** Show joining date as dd/mm/yyyy. Accepts YYYY-MM-DD from the API. */
+export function joiningDateToDisplay(value) {
+     if (!value) return "";
+     const s = String(value).trim();
+     const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+     if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+     return s;
+}
+
+/** Convert dd/mm/yyyy (or YYYY-MM-DD) to YYYY-MM-DD for the API. */
+export function joiningDateToIso(value) {
+     if (!value) return "";
+     const s = String(value).trim();
+     const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+     if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+     const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+     if (!dmy) return "";
+     const day = dmy[1].padStart(2, "0");
+     const month = dmy[2].padStart(2, "0");
+     const year = dmy[3];
+     const dt = new Date(Number(year), Number(month) - 1, Number(day));
+     if (
+          dt.getFullYear() !== Number(year) ||
+          dt.getMonth() !== Number(month) - 1 ||
+          dt.getDate() !== Number(day)
+     ) {
+          return "";
+     }
+     return `${year}-${month}-${day}`;
+}
 
 const AddUserFormModal = ({
      newUser,
@@ -59,6 +91,7 @@ const AddUserFormModal = ({
                     assistantManager: { visible: true, required: true },
                     qualityAnalyst: { visible: true, required: true },
                     tenure: { visible: true, required: true },
+                    joiningDate: { visible: true, required: true },
                };
           }
           
@@ -69,6 +102,7 @@ const AddUserFormModal = ({
                     assistantManager: { visible: true, required: true },
                     qualityAnalyst: { visible: true, required: true },
                     tenure: { visible: false, required: false },
+                    joiningDate: { visible: true, required: false },
                };
           }
           
@@ -79,6 +113,7 @@ const AddUserFormModal = ({
                     assistantManager: { visible: true, required: true },
                     qualityAnalyst: { visible: false, required: false },
                     tenure: { visible: false, required: false },
+                    joiningDate: { visible: true, required: true },
                };
           }
           
@@ -89,6 +124,7 @@ const AddUserFormModal = ({
                     assistantManager: { visible: false, required: false },
                     qualityAnalyst: { visible: false, required: false },
                     tenure: { visible: false, required: false },
+                    joiningDate: { visible: true, required: false },
                };
           }
           
@@ -99,6 +135,7 @@ const AddUserFormModal = ({
                     assistantManager: { visible: false, required: false },
                     qualityAnalyst: { visible: false, required: false },
                     tenure: { visible: false, required: false },
+                    joiningDate: { visible: true, required: false },
                };
           }
           
@@ -108,6 +145,7 @@ const AddUserFormModal = ({
                assistantManager: { visible: true, required: true },
                qualityAnalyst: { visible: true, required: true },
                tenure: { visible: false, required: false },
+               joiningDate: { visible: true, required: false },
           };
      };
 
@@ -223,6 +261,16 @@ const AddUserFormModal = ({
           return "";
      };
 
+     const validateJoiningDate = (value) => {
+          if (!value || !String(value).trim()) {
+               return "Please enter joining date (dd/mm/yyyy)";
+          }
+          if (!joiningDateToIso(value)) {
+               return "Use dd/mm/yyyy";
+          }
+          return "";
+     };
+
      /**
       * Validate all fields at once
       */
@@ -293,6 +341,11 @@ const AddUserFormModal = ({
           if (visibility.tenure && visibility.tenure.visible && visibility.tenure.required) {
                const tenureError = validateTenure(newUser.tenure || "");
                if (tenureError) errors.tenure = tenureError;
+          }
+
+          if (visibility.joiningDate && visibility.joiningDate.visible && visibility.joiningDate.required) {
+               const joiningError = validateJoiningDate(newUser.joining_date || "");
+               if (joiningError) errors.joining_date = joiningError;
           }
 
           return errors;
@@ -491,6 +544,8 @@ const AddUserFormModal = ({
                     {/* Form Body - Scrollable Area */}
                     <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white">
                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <input type="text" name="fake_username" autoComplete="username" tabIndex={-1} aria-hidden="true" className="hidden" />
+                              <input type="password" name="fake_password" autoComplete="current-password" tabIndex={-1} aria-hidden="true" className="hidden" />
                               
                               {/* Full Name Input */}
                               <div>
@@ -499,6 +554,8 @@ const AddUserFormModal = ({
                                    </label>
                                    <input
                                         type="text"
+                                        name="hrms_new_user_name"
+                                        autoComplete="off"
                                         className={`block w-full px-3 py-3 text-sm bg-gray-50 border ${hasError("name") ? 'border-red-500' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`}
                                         placeholder="John Doe"
                                         value={newUser.name || ""}
@@ -517,7 +574,10 @@ const AddUserFormModal = ({
                                         Email Address <span className="text-red-600">*</span>
                                    </label>
                                    <input
-                                        type="email"
+                                        type="text"
+                                        inputMode="email"
+                                        name="hrms_new_user_email"
+                                        autoComplete="off"
                                         className={`block w-full px-3 py-3 text-sm bg-gray-50 border ${hasError("email") ? 'border-red-500' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isEditMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                                         placeholder="user@company.com"
                                         value={newUser.email || ""}
@@ -692,6 +752,8 @@ const AddUserFormModal = ({
                                    <div className="relative">
                                         <input
                                              type={showPassword ? "text" : "password"}
+                                             name="hrms_new_user_password"
+                                             autoComplete="new-password"
                                              className={`block w-full px-3 py-3 pr-10 text-sm bg-gray-50 border ${hasError("password") ? 'border-red-500' : 'border-gray-200'} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500`}
                                              placeholder={isEditMode ? "Leave blank to keep current password" : "Enter password.."}
                                              value={newUser.password || ""}
@@ -718,6 +780,27 @@ const AddUserFormModal = ({
                                    </div>
 
 
+
+                              {fieldVisibility.joiningDate && fieldVisibility.joiningDate.visible && (
+                                   <div className="md:col-span-1">
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                             Joining Date {fieldVisibility.joiningDate.required && <span className="text-red-600">*</span>}
+                                        </label>
+                                        <SingleDatePicker
+                                             value={joiningDateToIso(newUser.joining_date) || newUser.joining_date}
+                                             onChange={(iso) => handleFieldChange(
+                                                  "joining_date",
+                                                  iso,
+                                                  fieldVisibility.joiningDate.required ? validateJoiningDate : undefined
+                                             )}
+                                             placeholder="dd/mm/yyyy"
+                                             hasError={hasError("joining_date")}
+                                        />
+                                        {getErrorMessage("joining_date") && (
+                                             <p className="mt-1 text-xs text-red-600">{getErrorMessage("joining_date")}</p>
+                                        )}
+                                   </div>
+                              )}
 
                               {/* Tenure Field - Only for Agents */}
                               {fieldVisibility.tenure && fieldVisibility.tenure.visible && (
