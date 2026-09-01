@@ -22,6 +22,7 @@ import {
   resetRegenerateRoster,
   resetRegenerateEmployeeRoster,
   lockRosterMonth,
+  lockRosterWeek,
   unlockRosterMonth,
   unlockRosterWeek,
   emailRosterWeek,
@@ -39,6 +40,7 @@ import {
   getRosterLockDateHint,
   getWeekLockMessage,
   canLockRosterMonthByDate,
+  getWeeksInMonth,
 } from "../../utils/rosterUtils";
 import LoadingSpinner from "../common/LoadingSpinner";
 import { MonthYearPicker } from "../common/CustomCalendar";
@@ -523,6 +525,11 @@ const RosterManagement = () => {
   const canManageWeekLocks = isAdmin || isSuperAdmin;
   const showTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
   const isBusy = !!actionLoading;
+  const monthWeeks = useMemo(() => getWeeksInMonth(monthYear), [monthYear]);
+  const lockedWeekNumbers = useMemo(
+    () => new Set((weekLocks || []).map((l) => Number(l.week_number))),
+    [weekLocks]
+  );
 
   const runAction = async (key, fn) => {
     // Close confirm dialog immediately so it doesn't stick during long API/refresh work
@@ -658,6 +665,25 @@ const RosterManagement = () => {
             week_number: wn,
           });
           toast.success(res.message || `Week ${wn} unlocked`);
+        }),
+    });
+  };
+
+  const handleLockWeek = (lockOrWeekNumber) => {
+    const wn =
+      typeof lockOrWeekNumber === "object"
+        ? lockOrWeekNumber.week_number
+        : lockOrWeekNumber;
+    setConfirmAction({
+      title: `Lock Week ${wn}`,
+      message: `Lock Week ${wn} for ${formatMonthYearLabel(monthYear)}? Managers and assistant managers will not be able to edit that week until you unlock it again.`,
+      onConfirm: () =>
+        runAction(`lock-week-${wn}`, async () => {
+          const res = await lockRosterWeek({
+            month_year: monthYear,
+            week_number: wn,
+          });
+          toast.success(res.message || `Week ${wn} locked`);
         }),
     });
   };
@@ -946,8 +972,8 @@ const RosterManagement = () => {
                       </ActionBtn>
                       {weekLocks.length === 0 ? (
                         <p className="w-full text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 mb-1">
-                          Weeks lock automatically when you approve submitted roster
-                          changes. Unlock a week here to allow edits again.
+                          Weeks also lock automatically when you approve submitted roster
+                          changes. Use Lock Week / Unlock Week here to change that anytime.
                         </p>
                       ) : (
                         <p className="w-full text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-1">
@@ -956,28 +982,48 @@ const RosterManagement = () => {
                           editable.
                         </p>
                       )}
-                      {weekLocks.map((lock) => (
-                        <React.Fragment key={lock.week_number}>
-                          <ActionBtn
-                            icon={Unlock}
-                            loading={actionLoading === `unlock-week-${lock.week_number}`}
-                            disabled={isBusy}
-                            onClick={() => handleUnlockWeek(lock)}
-                            title={getWeekLockMessage(lock) || `Unlock Week ${lock.week_number}`}
-                          >
-                            Unlock Week {lock.week_number}
-                          </ActionBtn>
-                          <ActionBtn
-                            icon={Mail}
-                            loading={actionLoading === "email-weeks"}
-                            disabled={isBusy}
-                            onClick={() => handleEmailApprovedWeeks([lock])}
-                            title={`Email only Week ${lock.week_number} (the approved week)`}
-                          >
-                            Email Week {lock.week_number}
-                          </ActionBtn>
-                        </React.Fragment>
-                      ))}
+                      {monthWeeks.map((week) => {
+                        const locked = lockedWeekNumbers.has(Number(week.week_number));
+                        const lock = weekLocks.find(
+                          (l) => Number(l.week_number) === Number(week.week_number)
+                        );
+                        return (
+                          <React.Fragment key={week.week_number}>
+                            {locked ? (
+                              <ActionBtn
+                                icon={Unlock}
+                                loading={actionLoading === `unlock-week-${week.week_number}`}
+                                disabled={isBusy}
+                                onClick={() => handleUnlockWeek(lock || week.week_number)}
+                                title={getWeekLockMessage(lock) || `Unlock Week ${week.week_number}`}
+                              >
+                                Unlock Week {week.week_number}
+                              </ActionBtn>
+                            ) : (
+                              <ActionBtn
+                                icon={Lock}
+                                loading={actionLoading === `lock-week-${week.week_number}`}
+                                disabled={isBusy || monthCalendarLocked}
+                                onClick={() => handleLockWeek(week.week_number)}
+                                title={`Lock Week ${week.week_number} so managers cannot edit it`}
+                              >
+                                Lock Week {week.week_number}
+                              </ActionBtn>
+                            )}
+                            {locked && (
+                              <ActionBtn
+                                icon={Mail}
+                                loading={actionLoading === "email-weeks"}
+                                disabled={isBusy}
+                                onClick={() => handleEmailApprovedWeeks([lock])}
+                                title={`Email only Week ${week.week_number}`}
+                              >
+                                Email Week {week.week_number}
+                              </ActionBtn>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                       {canResetRegenerate && (
                         <>
                           <ActionBtn
@@ -1089,9 +1135,13 @@ const RosterManagement = () => {
               readOnly
               canUnlockWeeks={canManageWeekLocks}
               unlockingWeek={
-                String(actionLoading).startsWith("unlock-week-") ? actionLoading : ""
+                String(actionLoading).startsWith("unlock-week-") ||
+                String(actionLoading).startsWith("lock-week-")
+                  ? actionLoading
+                  : ""
               }
               onUnlockWeek={(weekNumber) => handleUnlockWeek(weekNumber)}
+              onLockWeek={(weekNumber) => handleLockWeek(weekNumber)}
             />
           )}
         </div>
