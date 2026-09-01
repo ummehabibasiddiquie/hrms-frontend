@@ -66,7 +66,11 @@ export default function UserCard({
   // Assigned hours edit: Super Admin, Admin, Project Manager, Assistant Manager only (not QA).
   const canSeeActions =
     !isQA && (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager);
-  
+
+  const rowAllowsManualQc = (row) => {
+    const v = row?.can_manual_qc ?? row?.canManualQc;
+    return v === true || Number(v) === 1;
+  }; 
   // Helper function to get QC score color classes
   const getQCScoreColorClass = (score) => {
     if (score === null || score === undefined || score === '-' || isNaN(Number(score))) return 'text-slate-700';
@@ -111,6 +115,13 @@ export default function UserCard({
 
   const expanded = alwaysExpanded || (controlledExpanded !== undefined ? controlledExpanded : false);
   const filteredRows = dailyData;
+  const showActionsColumn = canSeeActions || filteredRows.some(rowAllowsManualQc);
+  const rowShowsActions = (row) => canSeeActions || rowAllowsManualQc(row);
+  const editButtonTitle = (row) => {
+    if (canSeeActions && rowAllowsManualQc(row)) return "Edit assigned hours / QC score";
+    if (rowAllowsManualQc(row)) return "Add or edit QC score";
+    return "Edit Assigned Hours";
+  };
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' or 'edit'
   const [selectedEntry, setSelectedEntry] = useState(null);
@@ -162,7 +173,7 @@ export default function UserCard({
               <th className="px-6 py-4 text-center font-semibold">QC Score</th>
               <th className="px-6 py-4 text-center font-semibold">Tracker Count</th>
               <th className="px-6 py-4 text-center font-semibold">Daily Required Hours</th>
-              {canSeeActions && (
+              {showActionsColumn && (
                 <th className="px-6 py-4 text-center font-semibold">Actions</th>
               )}
             </tr>
@@ -191,16 +202,18 @@ export default function UserCard({
                   </span>
                 </td>
                 <td className="px-6 py-4 text-center text-slate-700">{row.tenure_target || row.daily_required_hours ? Number(row.tenure_target || row.daily_required_hours).toFixed(2) : '-'}</td>
-                {canSeeActions && (
+                {showActionsColumn && (
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-2">
+                      {rowShowsActions(row) && (
                       <button
                         onClick={() => handleEditClick(row)}
                         className="group relative p-2 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 transition-all duration-200 hover:shadow-md"
-                        title="Edit Assigned Hours"
+                        title={editButtonTitle(row)}
                       >
                         <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                       </button>
+                      )}
                     </div>
                   </td>
                 )}
@@ -229,7 +242,7 @@ export default function UserCard({
                 <td className="px-6 py-4 text-center text-gray-900 font-bold">
                   {filteredRows.reduce((sum, row) => sum + (Number(row.tenure_target || row.daily_required_hours) || 0), 0).toFixed(2)}
                 </td>
-                {canSeeActions && (
+                {showActionsColumn && (
                   <td className="px-6 py-4 text-center"></td>
                 )}
               </tr>
@@ -247,14 +260,14 @@ export default function UserCard({
 
     const renderColGroup = () => (
       <colgroup>
-        <col style={{ width: canSeeActions ? "17%" : "18%" }} />
-        <col style={{ width: canSeeActions ? "12%" : "13%" }} />
+        <col style={{ width: showActionsColumn ? "17%" : "18%" }} />
+        <col style={{ width: showActionsColumn ? "12%" : "13%" }} />
         <col style={{ width: "11%" }} />
         <col style={{ width: "11%" }} />
         <col style={{ width: "11%" }} />
         <col style={{ width: "11%" }} />
-        <col style={{ width: canSeeActions ? "13%" : "14%" }} />
-        {canSeeActions && <col style={{ width: "8%" }} />}
+        <col style={{ width: showActionsColumn ? "13%" : "14%" }} />
+        {showActionsColumn && <col style={{ width: "8%" }} />}
       </colgroup>
     );
 
@@ -275,7 +288,7 @@ export default function UserCard({
                     <th className={`${headerTh} text-center`}>QC Score</th>
                     <th className={`${headerTh} text-center`}>Tracker Count</th>
                     <th className={`${headerTh} text-center`}>Daily Required Hours</th>
-                    {canSeeActions && <th className={`${headerTh} text-center`}>Actions</th>}
+                    {showActionsColumn && <th className={`${headerTh} text-center`}>Actions</th>}
                   </tr>
                 </thead>
               </table>
@@ -317,15 +330,17 @@ export default function UserCard({
                         <td className="px-4 py-2 text-center text-slate-700">
                           {row.daily_required_hours === '-' || row.dailyRequiredHours === '-' ? '-' : (row.tenure_target !== undefined && row.tenure_target !== null && !isNaN(Number(row.tenure_target)) ? Number(row.tenure_target).toFixed(2) : (row.daily_required_hours ?? row.dailyRequiredHours ?? '-'))}
                         </td>
-                        {canSeeActions && (
+                        {showActionsColumn && (
                           <td className="px-4 py-2 text-center">
+                            {rowShowsActions(row) && (
                             <button
                               onClick={() => handleEditClick(row)}
                               className="group relative p-2 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 transition-all duration-200 hover:shadow-md"
-                              title="Edit Assigned Hours"
+                              title={editButtonTitle(row)}
                             >
                               <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                             </button>
+                            )}
                           </td>
                         )}
                       </tr>
@@ -351,12 +366,12 @@ export default function UserCard({
                       <td className="px-4 py-2 text-center text-gray-900 font-bold">
                         {filteredRows.reduce((sum, row) => sum + (Number(row.tenure_target ?? row.daily_required_hours ?? row.dailyRequiredHours) || 0), 0).toFixed(2)}
                       </td>
-                      {canSeeActions && <td className="px-4 py-2" />}
+                      {showActionsColumn && <td className="px-4 py-2" />}
                     </tr>
                   </>
                 ) : (
                   <tr>
-                    <td colSpan={canSeeActions ? 8 : 7} className="px-4 py-8 text-center text-slate-400">
+                    <td colSpan={showActionsColumn ? 8 : 7} className="px-4 py-8 text-center text-slate-400">
                       No daily entries for this period
                     </td>
                   </tr>
@@ -379,6 +394,8 @@ export default function UserCard({
           userId={user?.user_id || user?.id}
           date={selectedDate}
           logged_in_user_id={currentUser?.user_id || currentUser?.id}
+          allowAssignedHours={canSeeActions}
+          allowQcScore={rowAllowsManualQc(selectedEntry)}
         />
       </div>
     );
@@ -463,7 +480,7 @@ export default function UserCard({
                   <th className="px-4 py-2 text-center font-semibold">QC Score</th>
                   <th className="px-4 py-2 text-center font-semibold">Tracker Count</th>
                   <th className="px-4 py-2 text-center font-semibold">Daily Required Hours</th>
-                  {canSeeActions && (
+                  {showActionsColumn && (
                     <th className="px-4 py-2 text-center font-semibold">Actions</th>
                   )}
                 </tr>
@@ -501,15 +518,17 @@ export default function UserCard({
                         <td className="px-5 py-3 text-center text-slate-700">
                           {row.daily_required_hours === '-' || row.dailyRequiredHours === '-' ? '-' : (row.tenure_target !== undefined && row.tenure_target !== null && !isNaN(Number(row.tenure_target)) ? Number(row.tenure_target).toFixed(2) : (row.daily_required_hours ?? row.dailyRequiredHours ?? '-'))}
                         </td>
-                        {canSeeActions && (
+                        {showActionsColumn && (
                           <td className="px-5 py-3 text-center">
+                            {rowShowsActions(row) && (
                             <button
                               onClick={() => handleEditClick(row)}
                               className="group relative p-2 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 transition-all duration-200 hover:shadow-md"
-                              title="Edit Assigned Hours"
+                              title={editButtonTitle(row)}
                             >
                               <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                             </button>
+                            )}
                           </td>
                         )}
                       </tr>
@@ -535,12 +554,12 @@ export default function UserCard({
                       <td className="px-5 py-3 text-center text-gray-900 font-bold">
                         {filteredRows.reduce((sum, row) => sum + (Number(row.tenure_target ?? row.daily_required_hours) || 0), 0).toFixed(2)}
                       </td>
-                      {canSeeActions && <td />}
+                      {showActionsColumn && <td />}
                     </tr>
                   </>
                 ) : (
                   <tr>
-                    <td colSpan={canSeeActions ? 8 : 7} className="px-5 py-12 text-center text-slate-500">
+                    <td colSpan={showActionsColumn ? 8 : 7} className="px-5 py-12 text-center text-slate-500">
                       No data for the selected date range
                     </td>
                   </tr>
@@ -562,6 +581,8 @@ export default function UserCard({
           userId={user?.user_id || user?.id}
           date={selectedDate}
           logged_in_user_id={currentUser?.user_id || currentUser?.id}
+          allowAssignedHours={canSeeActions}
+          allowQcScore={rowAllowsManualQc(selectedEntry)}
         />
       </div>
     );
@@ -679,7 +700,7 @@ export default function UserCard({
                   <th className="px-6 py-4 text-center font-semibold">QC Score</th>
                   <th className="px-6 py-4 text-center font-semibold">Tracker Count</th>
                   <th className="px-6 py-4 text-center font-semibold">Daily Required Hours</th>
-                  {canSeeActions && (
+                  {showActionsColumn && (
                     <th className="px-6 py-4 text-center font-semibold">Actions</th>
                   )}
                 </tr>
@@ -714,16 +735,18 @@ export default function UserCard({
                         <td className="px-6 py-4 text-center text-slate-700">
                           {row.daily_required_hours === '-' || row.dailyRequiredHours === '-' ? '-' : (row.tenure_target !== undefined && row.tenure_target !== null && !isNaN(Number(row.tenure_target)) ? Number(row.tenure_target).toFixed(2) : (row.daily_required_hours ?? row.dailyRequiredHours ?? '-'))}
                         </td>
-                        {canSeeActions && (
+                        {showActionsColumn && (
                           <td className="px-6 py-4 text-center">
                             <div className="flex items-center justify-center gap-2">
+                              {rowShowsActions(row) && (
                               <button
                                 onClick={() => handleEditClick(row)}
                                 className="group relative p-2 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 hover:border-blue-300 transition-all duration-200 hover:shadow-md"
-                                title="Edit Assigned Hours"
+                                title={editButtonTitle(row)}
                               >
                                 <Edit className="w-4 h-4 text-blue-600 group-hover:text-blue-700" />
                               </button>
+                              )}
                             </div>
                           </td>
                         )}
@@ -763,7 +786,7 @@ export default function UserCard({
                           return sum + (Number(val) || 0);
                         }, 0).toFixed(2)}
                       </td>
-                      {canSeeActions && (
+                      {showActionsColumn && (
                         <td className="px-6 py-4 text-center"></td>
                       )}
                     </tr>
@@ -800,6 +823,8 @@ export default function UserCard({
         userId={user?.user_id || user?.id}
         date={selectedDate}
         logged_in_user_id={currentUser?.user_id || currentUser?.id}
+        allowAssignedHours={canSeeActions}
+        allowQcScore={rowAllowsManualQc(selectedEntry)}
       />
     </div>
   );

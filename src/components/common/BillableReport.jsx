@@ -584,6 +584,8 @@ const BillableReport = ({ userId }) => {
       const qc_score = r.qc_score !== null && r.qc_score !== undefined ? r.qc_score : null;
       const trackers_count_day = r.trackers_count_day !== null && r.trackers_count_day !== undefined ? r.trackers_count_day : null;
 
+      const can_manual_qc = r.can_manual_qc === true || Number(r.can_manual_qc) === 1;
+
       return {
         date,
         date_time: date,
@@ -600,6 +602,7 @@ const BillableReport = ({ userId }) => {
         total_billable_hours_day: r.total_billable_hours_day,
         qc_score,
         qcScore: qc_score,
+        can_manual_qc,
         trackers_count_day,
         daily_required_hours,
         dailyRequiredHours: daily_required_hours,

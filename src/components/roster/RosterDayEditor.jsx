@@ -31,6 +31,7 @@ const RosterDayEditor = ({
   });
 
   const [weekOffDates, setWeekOffDates] = useState([]);
+  const [applyThroughMonthEnd, setApplyThroughMonthEnd] = useState(true);
   const [swapPreview, setSwapPreview] = useState(null);
   const [leaveForm, setLeaveForm] = useState({
     leave_type: "",
@@ -52,8 +53,11 @@ const RosterDayEditor = ({
       (day.working_type || "").toLowerCase() === "half" || Number(day.is_half_day) === 1;
     let workingType = isRestoringLeave ? "Full" : day.working_type || "Full";
     let workingHours = Number(day.working_hours);
-    if (!Number.isFinite(workingHours) || workingHours <= 0) {
+    if (proposedType !== "Left" && (!Number.isFinite(workingHours) || workingHours <= 0)) {
       workingHours = 9;
+    }
+    if (proposedType === "Left") {
+      workingHours = 0;
     }
     // Leave → Working: restore full-day hours for this person (double half-leave hours)
     if (isRestoringLeave) {
@@ -82,6 +86,7 @@ const RosterDayEditor = ({
     setTab("day");
     setSwapPreview(null);
     setEditingLeaveId(null);
+    setApplyThroughMonthEnd(proposedType !== "Left");
   }, [isOpen, day, roster]);
 
   useEffect(() => {
@@ -144,18 +149,21 @@ const RosterDayEditor = ({
     if (isHolidayDay && dayType === "WeekOff") {
       dayType = "Holiday";
     }
-    if (isHolidayDay && (dayForm.working_type === "Half" || dayType === "Leave")) {
+    if (isHolidayDay && dayType !== "Left" && (dayForm.working_type === "Half" || dayType === "Leave")) {
       toast.error(
         "Leave or half day cannot be added on a Holiday. Set Working (day or night) if this person must work."
       );
       return;
     }
+    const isLeft = dayType === "Left";
     submitChange("DAY_UPDATE", {
       roster_date: rosterDate,
       day_type: dayType,
       shift: dayForm.shift,
-      working_type: dayForm.working_type,
-      working_hours: Number(dayForm.working_hours),
+      working_type: isLeft ? "Full" : dayForm.working_type,
+      working_hours: isLeft ? 0 : Number(dayForm.working_hours),
+      apply_through_month_end: isLeft && applyThroughMonthEnd ? 1 : 0,
+      through_end_date: isLeft && applyThroughMonthEnd ? toDateOnlyString(roster.roster_end_date) : undefined,
     });
   };
 
@@ -323,20 +331,37 @@ const RosterDayEditor = ({
                       the leave request.
                     </p>
                   )}
+                  {dayForm.day_type === "Left" && (
+                    <p className="sm:col-span-2 text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                      Left means the agent is no longer coming. Weekday Left days always reduce working days
+                      and monthly target (unlike leave, there is no keep-target option).
+                    </p>
+                  )}
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Day Type</span>
                     <select
                       value={dayForm.day_type}
-                      onChange={(e) => setDayForm({ ...dayForm, day_type: e.target.value })}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setDayForm({
+                          ...dayForm,
+                          day_type: next,
+                          working_hours: next === "Left" ? 0 : dayForm.working_hours,
+                        });
+                        if (next === "Left") setApplyThroughMonthEnd(true);
+                      }}
                       className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
                     >
                       <option value="Working">Working</option>
                       <option value="WeekOff">Week Off</option>
+                      <option value="Left">Left</option>
                       {(isHolidayDay || dayForm.day_type === "Holiday") && (
                         <option value="Holiday">Holiday</option>
                       )}
                     </select>
                   </label>
+                  {dayForm.day_type !== "Left" && (
+                    <>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Shift</span>
                     <select
@@ -384,6 +409,24 @@ const RosterDayEditor = ({
                       className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
                     />
                   </label>
+                    </>
+                  )}
+                  {dayForm.day_type === "Left" && (
+                    <label className="sm:col-span-2 flex items-start gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={applyThroughMonthEnd}
+                        onChange={(e) => setApplyThroughMonthEnd(e.target.checked)}
+                      />
+                      <span>
+                        Apply Left from this date through the end of the month
+                        <span className="block text-xs text-slate-500 mt-0.5">
+                          Use this when someone will not come from a date (e.g. 21 Sep) onwards.
+                        </span>
+                      </span>
+                    </label>
+                  )}
                   <div className="sm:col-span-2">
                     <button
                       type="button"

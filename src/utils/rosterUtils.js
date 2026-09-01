@@ -245,11 +245,16 @@ export function getDayDisplayInfo(day, options = null) {
     cellClass = "bg-amber-50 border-amber-200";
     primaryLabel = "Leave";
     badges.push("Full Day");
+  } else if (effectiveDay.day_type === "Left") {
+    cellClass = "bg-rose-50 border-rose-300";
+    primaryLabel = "Left";
+    badges.push("Reduces target");
   } else if (
     effectiveDay.day_type === "Holiday" ||
     (effectiveDay.holiday_id &&
       effectiveDay.day_type !== "Working" &&
-      effectiveDay.day_type !== "Leave")
+      effectiveDay.day_type !== "Leave" &&
+      effectiveDay.day_type !== "Left")
   ) {
     cellClass = "bg-purple-50 border-purple-200";
     primaryLabel = "Holiday";
@@ -292,7 +297,7 @@ export function getDayDisplayInfo(day, options = null) {
   ) {
     badges.push(`${hoursBadge}h`);
   }
-  if (effectiveDay.holiday_name && effectiveDay.day_type !== "Leave") {
+  if (effectiveDay.holiday_name && effectiveDay.day_type !== "Leave" && effectiveDay.day_type !== "Left") {
     badges.push(effectiveDay.holiday_name);
   }
 
