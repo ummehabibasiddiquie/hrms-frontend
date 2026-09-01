@@ -58,8 +58,14 @@ export default function UserCard({
     normalizedDesignation.includes("ASSISTANT") ||
     normalizedDesignation.includes("ASST");
   
-  // Only Admin, Project Manager, and Assistant Manager can edit assigned hours in Billable Report.
-  const canSeeActions = isAdmin || isProjectManager || isAssistantManager;
+  const isQA =
+    roleId === 5 ||
+    normalizedRole.includes("QA") ||
+    normalizedDesignation.includes("QA");
+
+  // Assigned hours edit: Super Admin, Admin, Project Manager, Assistant Manager only (not QA).
+  const canSeeActions =
+    !isQA && (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager);
   
   // Helper function to get QC score color classes
   const getQCScoreColorClass = (score) => {

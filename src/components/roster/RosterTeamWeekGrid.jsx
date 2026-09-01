@@ -25,6 +25,8 @@ const RosterTeamWeekGrid = ({
   unlockingWeek = "",
   onUnlockWeek,
   onLockWeek,
+  onEmailWeek,
+  emailingWeek = false,
 }) => {
   const weeks = useMemo(() => getWeeksInMonth(monthYear), [monthYear]);
   const [activeWeek, setActiveWeek] = useState(1);
@@ -116,6 +118,16 @@ const RosterTeamWeekGrid = ({
           {week?.label}
           {activeWeekLocked ? " · Locked" : ""}
         </span>
+        {canUnlockWeeks && activeWeekLocked && typeof onEmailWeek === "function" && (
+          <button
+            type="button"
+            disabled={emailingWeek || Boolean(unlockingWeek)}
+            onClick={() => onEmailWeek(activeWeek)}
+            className="self-center px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {emailingWeek ? "Emailing…" : `Email Week ${activeWeek}`}
+          </button>
+        )}
         {canUnlockWeeks && activeWeekLocked && typeof onUnlockWeek === "function" && (
           <button
             type="button"
