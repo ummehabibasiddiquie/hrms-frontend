@@ -223,7 +223,7 @@ export function getDayDisplayInfo(day, options = null) {
 
   const isNightShift = String(effectiveDay.shift || "").toUpperCase() === "NIGHT";
 
-  // Half-day leave and Half Working feel the same: Half Working + hours
+  // Half-day leave and Half Working: show hours; leave also shows whether target is reduced.
   if (isHalfLeave || isHalfWorking) {
     cellClass = isNightShift
       ? "bg-teal-100 border-teal-500"
@@ -232,6 +232,14 @@ export function getDayDisplayInfo(day, options = null) {
     badges.push("Half Day");
     if (isHalfLeave) {
       badges.push("Leave");
+      const affectTarget =
+        Number(effectiveDay.leave_affect_target) === 1 ||
+        effectiveDay.leave_affect_target === true ||
+        Number(effectiveDay.affect_target) === 1 ||
+        effectiveDay.affect_target === true;
+      badges.push(affectTarget ? "Affects target" : "Does not affect target");
+    } else if (isHalfWorking) {
+      badges.push("Affects target");
     }
   } else if (effectiveDay.day_type === "Leave") {
     cellClass = "bg-amber-50 border-amber-200";
@@ -545,7 +553,7 @@ export function formatChangeRequestSummary(changeType, payload) {
       const range = [p.start_date, p.end_date].filter(Boolean).join(" → ") || "—";
       const flags = [
         p.is_half_day ? "Half day" : null,
-        p.affect_target ? "Affects target" : null,
+        p.affect_target ? "Affects target" : "Does not affect target",
       ].filter(Boolean);
       const reason = p.reason ? ` — ${p.reason}` : "";
       return `${p.leave_type || "Leave"} (${range})${flags.length ? ` [${flags.join(", ")}]` : ""}${reason}`;
@@ -684,11 +692,14 @@ export function buildPendingCalendarOverlay(requests, rosterMonthId) {
       case "LEAVE_UPDATE":
         eachDateInRange(p.start_date, p.end_date).forEach((d) => {
           const half = Boolean(Number(p.is_half_day) === 1 || p.is_half_day === true);
+          const affect = Boolean(Number(p.affect_target) === 1 || p.affect_target === true);
           mergePendingDate(byDate, d, {
             day_type: "Leave",
             working_type: half ? "Half" : "Full",
             leave_is_half_day: half,
             is_half_day: half,
+            leave_affect_target: affect,
+            affect_target: affect,
             display_as_half_working: half,
             _pendingLeaveType: "Leave",
           }, summary, overlayOpts);

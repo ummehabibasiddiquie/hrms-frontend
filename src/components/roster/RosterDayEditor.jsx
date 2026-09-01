@@ -338,7 +338,7 @@ const RosterDayEditor = ({
                       className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
                     >
                       <option value="Full">Full Day</option>
-                      <option value="Half">Half Day</option>
+                      <option value="Half">Half Day (reduces monthly target)</option>
                     </select>
                   </label>
                   <label className="block">
@@ -463,21 +463,33 @@ const RosterDayEditor = ({
                         className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
                       />
                     </label>
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-start gap-2">
                       <input
                         type="checkbox"
+                        className="mt-1"
                         checked={leaveForm.affect_target}
                         onChange={(e) => setLeaveForm({ ...leaveForm, affect_target: e.target.checked })}
                       />
-                      <span className="text-sm text-slate-700">Affect Target</span>
+                      <span className="text-sm text-slate-700">
+                        Affect Target
+                        <span className="block text-xs text-slate-500 font-normal">
+                          Reduces monthly working days and hours. Leave unchecked to keep the full monthly target.
+                        </span>
+                      </span>
                     </label>
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-start gap-2">
                       <input
                         type="checkbox"
+                        className="mt-1"
                         checked={leaveForm.is_half_day}
                         onChange={(e) => setLeaveForm({ ...leaveForm, is_half_day: e.target.checked })}
                       />
-                      <span className="text-sm text-slate-700">Half Day</span>
+                      <span className="text-sm text-slate-700">
+                        Half Day
+                        <span className="block text-xs text-slate-500 font-normal">
+                          Employee works half the day. Combine with Affect Target only when that half day should reduce the monthly goal.
+                        </span>
+                      </span>
                     </label>
                   </div>
                   <button
