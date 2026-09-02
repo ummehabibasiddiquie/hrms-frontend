@@ -209,8 +209,11 @@ const RosterExcelUpload = ({
       } else if (s?.errors) {
         toast.error(`${s.errors} error(s) found — fix before applying`);
       } else if (s?.changes === 0) {
+        const sampleSkip = (res.data?.skipped || []).find((x) => x?.reason)?.reason;
         toast.success(
-          `No roster changes to apply (${s?.skipped || 0} row(s) skipped / unchanged)`
+          sampleSkip
+            ? `No roster changes to apply (${s?.skipped || 0} skipped). ${sampleSkip}`
+            : `No roster changes to apply (${s?.skipped || 0} row(s) skipped / unchanged)`
         );
       } else {
         const sheets = s?.sheets ? ` across ${s.sheets} sheet(s)` : "";
@@ -506,6 +509,24 @@ const RosterExcelUpload = ({
                             {err.name ? ` · ${err.name}` : ""}
                             {err.date ? ` · ${err.date}` : ""}
                             {err.value ? ` · "${err.value}"` : ""} — {err.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {(preview.skipped?.length || 0) > 0 && (preview.changes?.length || 0) === 0 && (
+                    <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+                      <p className="text-xs font-semibold text-slate-600 mb-2">
+                        Why rows were skipped
+                      </p>
+                      <ul className="text-xs text-slate-600 space-y-1 max-h-32 overflow-y-auto">
+                        {(preview.skipped || []).slice(0, 20).map((row, i) => (
+                          <li key={i}>
+                            {row.sheet ? `${row.sheet} · ` : ""}
+                            {row.user_name || row.name || "Row"}
+                            {row.date ? ` · ${row.date}` : ""}
+                            {row.label ? ` · "${row.label}"` : ""} — {row.reason}
                           </li>
                         ))}
                       </ul>
