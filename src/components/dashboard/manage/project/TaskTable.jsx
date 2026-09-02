@@ -90,13 +90,13 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                 }
           }
         >
-          <table className="w-full text-sm table-fixed">
+          <table className="w-full text-sm">
             <colgroup>
-              <col style={{ width: '24%' }} />
+              <col style={{ width: '36%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '26%' }} />
+              <col style={{ width: '12%' }} />
               <col style={{ width: '14%' }} />
-              <col style={{ width: '32%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '16%' }} />
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className={compact ? 'bg-slate-700 text-white' : 'bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white'}>
@@ -137,16 +137,16 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                   const cellPad = compact ? 'py-2 px-3' : 'py-4 px-4';
                   return (
                     <tr key={key} className={`hover:bg-blue-50 transition-colors duration-150 ${!isActive ? 'opacity-75' : ''}`}>
-                      <td className={`${cellPad} align-middle`}>
-                        <div className="flex items-center gap-2">
+                      <td className={`${cellPad} align-top`}>
+                        <div className="flex items-start gap-2 min-w-0">
                           {!compact && (
-                          <div className="bg-blue-100 p-1.5 rounded-lg flex-shrink-0">
+                          <div className="bg-blue-100 p-1.5 rounded-lg flex-shrink-0 mt-0.5">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-4 h-4 text-blue-700">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                             </svg>
                           </div>
                           )}
-                          <span className="text-slate-800 font-medium truncate">{taskName}</span>
+                          <span className="text-slate-800 font-medium whitespace-normal break-words">{taskName}</span>
                         </div>
                       </td>
                       <td className={`${cellPad} align-middle`}>
