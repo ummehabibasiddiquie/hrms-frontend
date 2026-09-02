@@ -248,7 +248,6 @@ export function getDayDisplayInfo(day, options = null) {
   } else if (effectiveDay.day_type === "Left") {
     cellClass = "bg-rose-50 border-rose-300";
     primaryLabel = "Left";
-    badges.push("Reduces target");
   } else if (
     effectiveDay.day_type === "Holiday" ||
     (effectiveDay.holiday_id &&
@@ -272,10 +271,12 @@ export function getDayDisplayInfo(day, options = null) {
     if (effectiveDay.holiday_id) badges.push("Holiday");
   }
 
-  // Shift badge for half working / other day types (Working already added above)
+  // Shift badge for half working / other day types (Working already added above).
+  // Left people do not work — do not show Day/Night.
   if (
     effectiveDay.shift &&
     effectiveDay.day_type !== "Working" &&
+    effectiveDay.day_type !== "Left" &&
     !(isHalfLeave || isHalfWorking)
   ) {
     badges.push(isNightShift ? "Night" : "Day");

@@ -333,8 +333,7 @@ const RosterDayEditor = ({
                   )}
                   {dayForm.day_type === "Left" && (
                     <p className="sm:col-span-2 text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-                      Left means the agent is no longer coming. Weekday Left days always reduce working days
-                      and monthly target (unlike leave, there is no keep-target option).
+                      Left means the agent is no longer coming from this date.
                     </p>
                   )}
                   <label className="block">
