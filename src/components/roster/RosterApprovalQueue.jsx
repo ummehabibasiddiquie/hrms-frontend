@@ -262,13 +262,17 @@ const RosterApprovalQueue = ({
 
         if (failed.length) {
           toast.error(`Approved ${approved}; ${failed.length} failed`);
+          const reason = failed.find((f) => f?.reason)?.reason;
+          if (reason) toast.error(reason);
         } else {
           toast.success(`Approved ${approved} request(s)`);
         }
-        if (mailedWeeks) toast.success(`Weekly roster emailed for ${mailedWeeks} week(s)`);
-        else if (deferredMail) {
-          toast("Weekly roster email will send after all pending requests are reviewed");
-        } else toast.error("Approved, but weekly roster email was not sent");
+        if (approved > 0) {
+          if (mailedWeeks) toast.success(`Weekly roster emailed for ${mailedWeeks} week(s)`);
+          else if (deferredMail) {
+            toast("Weekly roster email will send after all pending requests are reviewed");
+          }
+        }
         setSelectedIds(new Set());
       } else if (type === "reject_selected") {
         setBulkLoading(true);
