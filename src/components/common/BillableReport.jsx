@@ -191,7 +191,6 @@ const BillableReport = ({ userId }) => {
         const totalBillable = exportData.reduce((sum, r) => sum + (parseFloat(r['Billable Hour Delivered']) || 0), 0);
         const totalGoal = exportData.reduce((sum, r) => sum + (parseFloat(r['Monthly Goal']) || 0), 0);
         const totalPending = exportData.reduce((sum, r) => sum + (parseFloat(r['Pending Target']) || 0), 0);
-        // For Avg. QC Score, show average if all are numbers (exclude null, empty, undefined)
         const qcScores = exportData
           .filter(r => r['Avg. QC Score'] !== null && r['Avg. QC Score'] !== undefined && r['Avg. QC Score'] !== '' && r['Avg. QC Score'] !== '-')
           .map(r => parseFloat(r['Avg. QC Score']))
@@ -580,7 +579,12 @@ const BillableReport = ({ userId }) => {
       if (r.daily_required_hours !== null && r.daily_required_hours !== undefined && !isNaN(Number(r.daily_required_hours))) {
         daily_required_hours = Number(r.daily_required_hours).toFixed(2);
       }
-      const assigned_hours = r.assigned_hours !== null && r.assigned_hours !== undefined ? r.assigned_hours : null;
+      const isTeamAgent =
+        String(r.user_name || "").trim().toLowerCase() === String(r.team_name || "").trim().toLowerCase()
+        && Boolean(String(r.user_name || "").trim());
+      const assigned_hours = isTeamAgent
+        ? null
+        : (r.assigned_hours !== null && r.assigned_hours !== undefined ? r.assigned_hours : null);
       const qc_score = r.qc_score !== null && r.qc_score !== undefined ? r.qc_score : null;
       const trackers_count_day = r.trackers_count_day !== null && r.trackers_count_day !== undefined ? r.trackers_count_day : null;
 

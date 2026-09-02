@@ -90,6 +90,7 @@ export default function UserCard({
     if (s.includes('leave')) return 'text-orange-800 bg-orange-100 font-semibold';
     if (s.includes('half day')) return 'text-amber-800 bg-amber-50 font-semibold';
     if (s.includes('pre join')) return 'text-slate-600 bg-slate-50 font-semibold';
+    if (s === 'left' || s.includes('left')) return 'text-rose-800 bg-rose-100 font-semibold';
     if (s.includes('working')) return 'text-green-800 bg-green-50 font-semibold';
     return 'text-slate-600 bg-slate-50';
   };
