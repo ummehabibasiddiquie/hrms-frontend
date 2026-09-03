@@ -116,11 +116,13 @@ export default function UserCard({
 
   const expanded = alwaysExpanded || (controlledExpanded !== undefined ? controlledExpanded : false);
   const filteredRows = dailyData;
-  const showActionsColumn = canSeeActions || filteredRows.some(rowAllowsManualQc);
-  const rowShowsActions = (row) => canSeeActions || rowAllowsManualQc(row);
+  const showActionsColumn =
+    canSeeActions || (isQA && filteredRows.some(rowAllowsManualQc));
+  const rowShowsActions = (row) =>
+    canSeeActions || (isQA && rowAllowsManualQc(row));
+  const rowAllowsQcEdit = (row) => isQA && rowAllowsManualQc(row);
   const editButtonTitle = (row) => {
-    if (canSeeActions && rowAllowsManualQc(row)) return "Edit assigned hours / QC score";
-    if (rowAllowsManualQc(row)) return "Add or edit QC score";
+    if (rowAllowsQcEdit(row)) return "Add or edit QC score";
     return "Edit Assigned Hours";
   };
   const [showEntryModal, setShowEntryModal] = useState(false);
@@ -396,7 +398,7 @@ export default function UserCard({
           date={selectedDate}
           logged_in_user_id={currentUser?.user_id || currentUser?.id}
           allowAssignedHours={canSeeActions}
-          allowQcScore={rowAllowsManualQc(selectedEntry)}
+          allowQcScore={rowAllowsQcEdit(selectedEntry)}
         />
       </div>
     );
@@ -583,7 +585,7 @@ export default function UserCard({
           date={selectedDate}
           logged_in_user_id={currentUser?.user_id || currentUser?.id}
           allowAssignedHours={canSeeActions}
-          allowQcScore={rowAllowsManualQc(selectedEntry)}
+          allowQcScore={rowAllowsQcEdit(selectedEntry)}
         />
       </div>
     );
@@ -825,7 +827,7 @@ export default function UserCard({
         date={selectedDate}
         logged_in_user_id={currentUser?.user_id || currentUser?.id}
         allowAssignedHours={canSeeActions}
-        allowQcScore={rowAllowsManualQc(selectedEntry)}
+        allowQcScore={rowAllowsQcEdit(selectedEntry)}
       />
     </div>
   );
