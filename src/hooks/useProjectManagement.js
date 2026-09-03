@@ -587,7 +587,8 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
           setIsDeleting(true);
 
           try {
-               const response = await deleteProject(deletingProject.id);
+               const projectId = deletingProject.id || deletingProject.project_id;
+               const response = await deleteProject(projectId);
 
                if (response?.status === 200 || response?.status === 201) {
                     toast.success("Project deleted successfully!", {
