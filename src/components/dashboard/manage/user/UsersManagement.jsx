@@ -169,6 +169,12 @@ const UsersManagement = ({
           [users]
      );
 
+     const roleKey = (value) =>
+          String(value || "")
+               .toLowerCase()
+               .replace(/[_\s]+/g, " ")
+               .trim();
+
      const filteredUsers = useMemo(() => {
           return users.filter((u) => {
                const matchesName = filterUser.name
@@ -185,17 +191,22 @@ const UsersManagement = ({
                     ? (asstManagerValue === filterUser.reportingManager || asstManagerValue === filterUser.reportingManager?.name)
                     : true;
 
-
                const selectedRole = String(filterUser.role ?? "").trim();
+               const selectedOpt = roleOptions.find(
+                    (r) => String(r.role_id ?? r.value ?? r.id) === selectedRole
+               );
+               const selectedName = roleKey(
+                    selectedOpt?.label || selectedOpt?.role_name || selectedRole
+               );
+               const userName = roleKey(u.role || u.user_role || u.role_name);
                const matchesRole = !selectedRole
                     ? true
                     : String(u.role_id ?? "") === selectedRole ||
-                      String(u.role || "").toLowerCase().replace(/[_\s]+/g, " ") ===
-                        selectedRole.toLowerCase().replace(/[_\s]+/g, " ");
+                      (!!userName && userName === selectedName);
 
                return matchesName && matchesEmail && matchesManager && matchesRole;
           });
-     }, [users, filterUser]);
+     }, [users, filterUser, roleOptions]);
 
      const userPagination = useClientPagination(filteredUsers, {
           resetKeys: [filterUser.name, filterUser.email, filterUser.reportingManager, filterUser.role],
