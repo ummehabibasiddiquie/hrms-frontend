@@ -186,12 +186,12 @@ const UsersManagement = ({
                     : true;
 
 
-               // Filter by selected Role (case-insensitive, match value or label)
-               const userRole = (u.role || u.user_role || "").toString().toLowerCase();
-               const selectedRole = (filterUser.role || "").toString().toLowerCase();
-               const matchesRole = selectedRole
-                    ? (userRole === selectedRole)
-                    : true;
+               const selectedRole = String(filterUser.role ?? "").trim();
+               const matchesRole = !selectedRole
+                    ? true
+                    : String(u.role_id ?? "") === selectedRole ||
+                      String(u.role || "").toLowerCase().replace(/[_\s]+/g, " ") ===
+                        selectedRole.toLowerCase().replace(/[_\s]+/g, " ");
 
                return matchesName && matchesEmail && matchesManager && matchesRole;
           });
@@ -711,10 +711,12 @@ const UsersManagement = ({
                                    onChange={(value) => setFilterUser({ ...filterUser, role: value })}
                                    options={[
                                         { value: '', label: 'All Roles' },
-                                        ...roleOptions.map((role, idx) => ({
-                                             value: role.value || role.name || role.id,
-                                             label: role.label || role.name || role.value
-                                        }))
+                                        ...roleOptions
+                                             .filter((role) => role.role_id != null || role.value != null || role.id != null)
+                                             .map((role) => ({
+                                                  value: String(role.role_id ?? role.value ?? role.id),
+                                                  label: role.label || role.role_name || role.name || String(role.value ?? ""),
+                                             })),
                                    ]}
                                    icon={Shield}
                                    placeholder="Select Role"
