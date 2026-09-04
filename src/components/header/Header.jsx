@@ -28,7 +28,8 @@ import {
   UserCheck,
   BarChart3,
   CheckCircle2,
-  CalendarDays
+  CalendarDays,
+  Mail
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import GeminiKeyModal from "../GeminiKeyModal";
@@ -136,6 +137,11 @@ const Header = ({
       setIsMobileMenuOpen(false);
       return;
     }
+    if (view === 'REPORT_EMAILS') {
+      navigate(dashboardTabUrl('report_emails'));
+      setIsMobileMenuOpen(false);
+      return;
+    }
     
     if (view === ViewState.ADMIN_PANEL) {
       navigate(dashboardTabUrl('manage'));
@@ -179,7 +185,7 @@ const Header = ({
     const role = (currentUser?.role || currentUser?.role_name || currentUser?.user_role || '').toString().toUpperCase();
     // Always show for admin and super admin (by role_id)
     if (roleId === 1 || roleId === 2) {
-      return [
+      const items = [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
@@ -187,6 +193,10 @@ const Header = ({
         { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
+      if (roleId === 1) {
+        items.push({ view: "REPORT_EMAILS", label: "Report emails", icon: Mail });
+      }
+      return items;
     }
     // For agents (role_id 6 or role includes 'AGENT')
     if (roleId === 6 || role.includes('AGENT')) {
@@ -212,6 +222,7 @@ const Header = ({
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
             { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
             { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
@@ -256,6 +267,7 @@ const Header = ({
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
         { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
         { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
@@ -304,6 +316,10 @@ const Header = ({
 
     if (view === 'MY_ROSTER') {
       return currentPath === '/dashboard' && currentTab === 'my_roster';
+    }
+
+    if (view === 'REPORT_EMAILS') {
+      return currentPath === '/dashboard' && currentTab === 'report_emails';
     }
 
     // Check for Manage/Admin Panel

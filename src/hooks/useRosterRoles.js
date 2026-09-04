@@ -24,9 +24,9 @@ export function useRosterRoles() {
 
     const canManageRoster =
       isSuperAdmin || isAdmin || isProjectManager || isAssistantManager;
-    const canApproveRoster = isSuperAdmin || isAdmin;
-    const canResetRegenerate = isSuperAdmin;
-    const canModifyHolidayMaster = isSuperAdmin;
+    const canApproveRoster = isSuperAdmin || isAdmin || isProjectManager;
+    const canResetRegenerate = isSuperAdmin || isAdmin;
+    const canModifyHolidayMaster = isSuperAdmin || isAdmin;
     const canViewMyRoster = isAgent || isQA;
 
     return {

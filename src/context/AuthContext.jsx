@@ -206,7 +206,12 @@ export const AuthProvider = ({ children }) => {
       // Can create/manage users - based on user_creation_permission flag
       canManageUsers:
         user.user_creation_permission === 1 ||
-        user.user_creation_permission === "1",
+        user.user_creation_permission === "1" ||
+        roleId === 1 ||
+        roleId === 2 ||
+        roleId === 3 ||
+        isAdmin ||
+        isProjectManager,
 
       // Can create/manage projects - based on project_creation_permission flag OR role
       // Accessible to: Admin (1), Project Manager (3), Assistant Manager (4)
@@ -228,6 +233,8 @@ export const AuthProvider = ({ children }) => {
       // Can view salary details
       canViewSalary:
         String(user.role_name || "").toLowerCase() === "admin" ||
+        String(user.role_name || "").toLowerCase() === "super admin" ||
+        String(user.role_name || "").toLowerCase() === "project manager" ||
         String(user.user_role || "").toUpperCase() === "FINANCE_HR",
     };
 

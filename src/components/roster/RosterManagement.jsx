@@ -175,7 +175,7 @@ const RosterManagement = () => {
   }, []);
 
   const loadMonthSummary = useCallback(async () => {
-    if (!(isAdmin || isSuperAdmin)) {
+    if (!(isAdmin || isSuperAdmin || isProjectManager)) {
       setMonthStatusRosters([]);
       return null;
     }
@@ -198,7 +198,7 @@ const RosterManagement = () => {
       setMonthStatusRosters([]);
       return null;
     }
-  }, [monthYear, isAdmin, isSuperAdmin]);
+  }, [monthYear, isAdmin, isSuperAdmin, isProjectManager]);
 
   const loadPendingRequests = useCallback(async () => {
     try {
@@ -520,7 +520,7 @@ const RosterManagement = () => {
     return () => window.removeEventListener("focus", onFocus);
   }, [refreshRosterViews]);
 
-  const canManageWeekLocks = isAdmin || isSuperAdmin;
+  const canManageWeekLocks = isAdmin || isSuperAdmin || isProjectManager;
   const showTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
   const isBusy = !!actionLoading;
 

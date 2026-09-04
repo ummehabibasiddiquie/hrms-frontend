@@ -437,7 +437,10 @@ const UsersManagement = ({
                String(authUser?.user_role || ""),
           ].map((r) => r.trim().toUpperCase());
 
-          const isAdminLike = authRoleCandidates.includes("ADMIN");
+          const isAdminLike =
+               authRoleCandidates.includes("ADMIN") ||
+               authRoleCandidates.includes("PROJECT_MANAGER") ||
+               authRoleCandidates.includes("PROJECT MANAGER");
 
           const canDeleteExplicit = Number(userPermissions?.delete_permission) === 1;
           const canDelete = isSuperAdmin || isAdminLike || canDeleteExplicit;

@@ -34,6 +34,7 @@ import { getFriendlyErrorMessage } from '../utils/errorMessages';
 import ErrorMessage from '../components/common/ErrorMessage';
 import AgentTabsNavigation from '../components/AgentDashboard/AgentTabsNavigation';
 import RosterManagement from '../components/roster/RosterManagement';
+import ReportEmails from '../components/dashboard/manage/ReportEmails';
 import MyRoster from '../components/roster/MyRoster';
 import QATabsNavigation from '../components/QAAgentDashboard/QATabsNavigation';
 import SubTabsBar from '../components/common/SubTabsBar';
@@ -104,6 +105,7 @@ const DashboardPage = ({
   const [adminActiveTab, setAdminActiveTab] = useState(() => searchParams.get('adminTab') || 'users');
   const [error, setError] = useState(null);
   const canAccessRoster = isSuperAdmin || isAdmin || isProjectManager || isAssistantManager;
+  const canManageReportEmails = isSuperAdmin;
   const canAccessManage = canManageUsers || canManageProjects || isSuperAdmin || canAccessRoster;
   const canViewIncentivesTab = isAdmin || userRole === 'FINANCE_HR' || userRole === 'PROJECT_MANAGER' || isSuperAdmin;
   const canViewAdherence = isAdmin || userRole === 'PROJECT_MANAGER' || isQA || isSuperAdmin;
@@ -134,15 +136,15 @@ const DashboardPage = ({
   useEffect(() => {
     if (activeTab !== 'manage') return;
     const visibleTabs = [
-      ...(canManageUsers || isSuperAdmin || isAdmin ? ['users'] : []),
+      ...(canManageUsers || isSuperAdmin || isAdmin || isProjectManager ? ['users'] : []),
       ...(isAssistantManager || canManageProjects ? ['projects', 'afd'] : []),
-      ...(isSuperAdmin || isAdmin || isAssistantManager ? ['category', 'permissions'] : []),
+      ...(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager ? ['category', 'permissions'] : []),
       ...(canAccessRoster ? ['roster'] : []),
     ];
     if (!visibleTabs.includes(adminActiveTab) && visibleTabs.length > 0) {
       setManageSubTab(visibleTabs[0]);
     }
-  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, canManageProjects, canAccessRoster, setManageSubTab]);
+  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, canManageProjects, canAccessRoster, canManageReportEmails, setManageSubTab]);
 
   const setDashboardTab = useCallback((tab) => {
     setActiveTab(tab);
@@ -463,7 +465,7 @@ const DashboardPage = ({
                 {
                   id: 'users',
                   label: 'User Management',
-                  hidden: !(canManageUsers || isSuperAdmin || isAdmin),
+                  hidden: !(canManageUsers || isSuperAdmin || isAdmin || isProjectManager),
                 },
                 {
                   id: 'projects',
@@ -478,12 +480,12 @@ const DashboardPage = ({
                 {
                   id: 'category',
                   label: 'Project Category',
-                  hidden: !(isSuperAdmin || isAdmin || isAssistantManager),
+                  hidden: !(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager),
                 },
                 {
                   id: 'permissions',
                   label: 'User Permission',
-                  hidden: !(isSuperAdmin || isAdmin || isAssistantManager),
+                  hidden: !(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager),
                 },
                 {
                   id: 'roster',
@@ -589,6 +591,12 @@ const DashboardPage = ({
       )}
 
       {/* My Roster — Agent & QA read-only (standalone, no analytics sub-tabs) */}
+      {activeTab === 'report_emails' && canManageReportEmails && (
+        <div className="max-w-7xl mx-auto mt-2">
+          <ReportEmails />
+        </div>
+      )}
+
       {activeTab === 'my_roster' && (isAgent || isQA) && (
         <div className="max-w-7xl mx-auto mt-2">
           <MyRoster />
