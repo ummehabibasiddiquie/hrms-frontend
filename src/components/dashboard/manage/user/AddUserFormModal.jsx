@@ -83,69 +83,73 @@ const AddUserFormModal = ({
       */
      const getFieldVisibility = (selectedRoleId) => {
           const roleId = Number(selectedRoleId);
-          
-          // Agent (role_id = 6): Show tenure field
-          if (roleId === 6) {
-               return {
-                    projectManager: { visible: true, required: false },
-                    assistantManager: { visible: true, required: true },
-                    qualityAnalyst: { visible: true, required: true },
-                    tenure: { visible: true, required: true },
-                    joiningDate: { visible: true, required: true },
-               };
-          }
-          
-          // Default: hide tenure field (Super Admin, Admin)
+          const hidden = { visible: false, required: false };
+          const optional = { visible: true, required: false };
+          const required = { visible: true, required: true };
+
+          // Super Admin (1) and Admin (2): no reporting line or team
           if (!roleId || roleId === 1 || roleId === 2) {
                return {
-                    projectManager: { visible: true, required: false },
-                    assistantManager: { visible: true, required: true },
-                    qualityAnalyst: { visible: true, required: true },
-                    tenure: { visible: false, required: false },
-                    joiningDate: { visible: true, required: false },
+                    projectManager: hidden,
+                    assistantManager: hidden,
+                    qualityAnalyst: hidden,
+                    team: hidden,
+                    tenure: hidden,
+                    joiningDate: optional,
                };
           }
-          
-          // QA Agent (role_id = 5): Hide qualityAnalyst and tenure fields
-          if (roleId === 5) {
-               return {
-                    projectManager: { visible: true, required: false },
-                    assistantManager: { visible: true, required: true },
-                    qualityAnalyst: { visible: false, required: false },
-                    tenure: { visible: false, required: false },
-                    joiningDate: { visible: true, required: true },
-               };
-          }
-          
-          // Assistant Manager (role_id = 4): Hide assistantManager, qualityAnalyst and tenure fields
-          if (roleId === 4) {
-               return {
-                    projectManager: { visible: true, required: false },
-                    assistantManager: { visible: false, required: false },
-                    qualityAnalyst: { visible: false, required: false },
-                    tenure: { visible: false, required: false },
-                    joiningDate: { visible: true, required: false },
-               };
-          }
-          
-          // Project Manager (role_id = 3): Hide all three fields and tenure
+
           if (roleId === 3) {
                return {
-                    projectManager: { visible: false, required: false },
-                    assistantManager: { visible: false, required: false },
-                    qualityAnalyst: { visible: false, required: false },
-                    tenure: { visible: false, required: false },
-                    joiningDate: { visible: true, required: false },
+                    projectManager: hidden,
+                    assistantManager: hidden,
+                    qualityAnalyst: hidden,
+                    team: optional,
+                    tenure: hidden,
+                    joiningDate: optional,
                };
           }
-          
-          // Fallback: hide tenure field
+
+          if (roleId === 4) {
+               return {
+                    projectManager: optional,
+                    assistantManager: hidden,
+                    qualityAnalyst: hidden,
+                    team: required,
+                    tenure: hidden,
+                    joiningDate: optional,
+               };
+          }
+
+          if (roleId === 5) {
+               return {
+                    projectManager: optional,
+                    assistantManager: required,
+                    qualityAnalyst: hidden,
+                    team: required,
+                    tenure: hidden,
+                    joiningDate: required,
+               };
+          }
+
+          if (roleId === 6) {
+               return {
+                    projectManager: optional,
+                    assistantManager: required,
+                    qualityAnalyst: required,
+                    team: required,
+                    tenure: required,
+                    joiningDate: required,
+               };
+          }
+
           return {
-               projectManager: { visible: true, required: false },
-               assistantManager: { visible: true, required: true },
-               qualityAnalyst: { visible: true, required: true },
-               tenure: { visible: false, required: false },
-               joiningDate: { visible: true, required: false },
+               projectManager: optional,
+               assistantManager: required,
+               qualityAnalyst: required,
+               team: required,
+               tenure: hidden,
+               joiningDate: optional,
           };
      };
 
@@ -333,9 +337,10 @@ const AddUserFormModal = ({
                }
           }
 
-          // Validate team
-          const teamError = validateDropdown(newUser.team, "Team");
-          if (teamError) errors.team = teamError;
+          if (visibility.team?.visible && visibility.team.required) {
+               const teamError = validateDropdown(newUser.team, "Team");
+               if (teamError) errors.team = teamError;
+          }
 
           // Validate tenure (only if visible and required for this role)
           if (visibility.tenure && visibility.tenure.visible && visibility.tenure.required) {
@@ -355,7 +360,18 @@ const AddUserFormModal = ({
       * Handle field change with live validation
       */
      const handleFieldChange = (fieldName, value, validator) => {
-          setNewUser({ ...newUser, [fieldName]: value });
+          if (fieldName === "role") {
+               const vis = getFieldVisibility(value);
+               const next = { ...newUser, role: value };
+               if (!vis.projectManager.visible) next.projectManagers = [];
+               if (!vis.assistantManager.visible) next.assistantManagers = [];
+               if (!vis.qualityAnalyst.visible) next.qualityAnalysts = [];
+               if (!vis.team?.visible) next.team = "";
+               if (!vis.tenure?.visible) next.tenure = "";
+               setNewUser(next);
+          } else {
+               setNewUser({ ...newUser, [fieldName]: value });
+          }
           
           // Run live validation only if submit was attempted and validator is a function
           if (submitAttempted && typeof validator === "function") {
@@ -725,10 +741,10 @@ const AddUserFormModal = ({
                                    </div>
                               )}
 
-                              {/* Team Selection */}
+                              {fieldVisibility.team?.visible && (
                               <div>
                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                        Team <span className="text-red-600">*</span>
+                                        Team {fieldVisibility.team.required && <span className="text-red-600">*</span>}
                                    </label>
                                    <SearchableSelect
                                         value={newUser.team ?? ""}
@@ -744,6 +760,7 @@ const AddUserFormModal = ({
                                         errorMessage={getErrorMessage("team")}
                                    />
                               </div>
+                              )}
                               {/* Password Input - Shown in both create and edit mode */}
                               <div>
                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
