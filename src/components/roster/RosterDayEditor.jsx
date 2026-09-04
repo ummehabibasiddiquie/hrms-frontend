@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { X, Save, Trash2, RefreshCw } from "lucide-react";
+import { X, Save, Trash2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import {
   createChangeRequest,
   listRosterLeaves,
-  weekoffSwapPreview,
 } from "../../services/rosterService";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
 import { toDateOnlyString, getRosterLockMessage, isRosterLocked } from "../../utils/rosterUtils";
@@ -30,9 +29,7 @@ const RosterDayEditor = ({
     working_hours: 9,
   });
 
-  const [weekOffDates, setWeekOffDates] = useState([]);
   const [applyThroughMonthEnd, setApplyThroughMonthEnd] = useState(true);
-  const [swapPreview, setSwapPreview] = useState(null);
   const [leaveForm, setLeaveForm] = useState({
     leave_type: "",
     start_date: "",
@@ -84,7 +81,6 @@ const RosterDayEditor = ({
       };
     });
     setTab("day");
-    setSwapPreview(null);
     setEditingLeaveId(null);
     setApplyThroughMonthEnd(proposedType !== "Left");
   }, [isOpen, day, roster]);
@@ -104,15 +100,6 @@ const RosterDayEditor = ({
     };
     load();
   }, [isOpen, roster?.roster_month_id]);
-
-  useEffect(() => {
-    if (!isOpen || !roster?.days) return;
-    const offs = roster.days
-      .filter((d) => d.day_type === "WeekOff")
-      .map((d) => toDateOnlyString(d.roster_date))
-      .filter(Boolean);
-    setWeekOffDates(offs);
-  }, [isOpen, roster?.days]);
 
   if (!isOpen || !day || !roster) return null;
 
@@ -165,36 +152,6 @@ const RosterDayEditor = ({
       apply_through_month_end: isLeft && applyThroughMonthEnd ? 1 : 0,
       through_end_date: isLeft && applyThroughMonthEnd ? toDateOnlyString(roster.roster_end_date) : undefined,
     });
-  };
-
-  const handlePreviewSwap = async () => {
-    try {
-      setLoading(true);
-      const res = await weekoffSwapPreview({
-        roster_month_id: roster.roster_month_id,
-        week_off_dates: weekOffDates,
-      });
-      setSwapPreview(res.data);
-    } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfirmSwap = () => {
-    if (!swapPreview?.changes?.length) {
-      toast.error("No week-off changes to apply");
-      return;
-    }
-    submitChange("WEEKOFF_SWAP", { changes: swapPreview.changes });
-  };
-
-  const toggleWeekOffDate = (dateStr) => {
-    setSwapPreview(null);
-    setWeekOffDates((prev) =>
-      prev.includes(dateStr) ? prev.filter((d) => d !== dateStr) : [...prev, dateStr]
-    );
   };
 
   const handleLeaveSave = () => {
@@ -294,7 +251,6 @@ const RosterDayEditor = ({
             <div className="flex border-b border-slate-200 px-4">
               {[
                 { id: "day", label: "Day" },
-                { id: "weekoff", label: "Week Off Swap" },
                 { id: "leave", label: "Leave" },
               ].map((t) => (
                 <button
@@ -437,64 +393,6 @@ const RosterDayEditor = ({
                       Save Day Change Request
                     </button>
                   </div>
-                </div>
-              )}
-
-              {tab === "weekoff" && (
-                <div className="space-y-4">
-                  <p className="text-sm text-slate-600">
-                    Toggle week-off dates for this month. Preview changes before submitting.
-                  </p>
-                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-                    {(roster.days || []).map((d) => {
-                      const ds = d.roster_date?.slice(0, 10);
-                      if (!ds) return null;
-                      const isOff = weekOffDates.includes(ds);
-                      return (
-                        <button
-                          key={ds}
-                          type="button"
-                          onClick={() => toggleWeekOffDate(ds)}
-                          className={`px-2 py-1 text-xs rounded border ${
-                            isOff
-                              ? "bg-slate-200 border-slate-400 text-slate-800"
-                              : "bg-white border-slate-200 text-slate-600"
-                          }`}
-                        >
-                          {ds.slice(8)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={handlePreviewSwap}
-                    className="inline-flex items-center gap-2 px-4 py-2 border border-blue-600 text-blue-700 rounded-lg hover:bg-blue-50"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Preview Swap
-                  </button>
-                  {swapPreview?.changes?.length > 0 && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm">
-                      <p className="font-semibold mb-2">{swapPreview.changes.length} day(s) will change</p>
-                      <ul className="space-y-1 max-h-32 overflow-y-auto">
-                        {swapPreview.changes.map((c) => (
-                          <li key={c.roster_date}>
-                            {c.roster_date}: {c.current_day_type} → {c.proposed_day_type}
-                          </li>
-                        ))}
-                      </ul>
-                      <button
-                        type="button"
-                        disabled={loading}
-                        onClick={handleConfirmSwap}
-                        className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        Confirm Week-Off Swap
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
 

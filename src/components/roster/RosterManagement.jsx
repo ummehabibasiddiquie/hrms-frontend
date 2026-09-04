@@ -39,10 +39,14 @@ import {
   getRosterLockDateHint,
   getWeekLockMessage,
   canLockRosterMonthByDate,
+  isRosterEditable,
+  isRosterLocked,
+  getRosterLockMessage,
 } from "../../utils/rosterUtils";
 import LoadingSpinner from "../common/LoadingSpinner";
 import { MonthYearPicker } from "../common/CustomCalendar";
 import RosterTeamWeekGrid from "./RosterTeamWeekGrid";
+import RosterDayEditor from "./RosterDayEditor";
 import RosterApprovalQueue from "./RosterApprovalQueue";
 import RosterSubmissionTracker from "./RosterSubmissionTracker";
 import HolidayMaster from "./HolidayMaster";
@@ -95,6 +99,7 @@ const RosterManagement = () => {
     canApproveRoster,
     canResetRegenerate,
     canModifyHolidayMaster,
+    canManageRoster,
   } = useRosterRoles();
 
   const [view, setView] = useRoutedSubTab("team_week", {
@@ -121,6 +126,8 @@ const RosterManagement = () => {
   const [confirmAction, setConfirmAction] = useState(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [showActions, setShowActions] = useState(true);
+  const [editorDay, setEditorDay] = useState(null);
+  const [editorRoster, setEditorRoster] = useState(null);
 
   const selectedRoster = useMemo(
     () => rosters.find((r) => String(r.user_id) === String(selectedUserId)) || null,
@@ -705,6 +712,30 @@ const RosterManagement = () => {
     });
   };
 
+  const handleTeamCellClick = ({ roster, day }) => {
+    if (!canManageRoster || !roster) return;
+    if (monthCalendarLocked || isRosterLocked(roster)) {
+      toast.error(
+        monthCalendarLocked
+          ? getMonthCalendarLockMessage(monthYear, monthLockInfo)
+          : getRosterLockMessage(roster)
+      );
+      return;
+    }
+    if ((roster.status || "") === "Pending Approval") {
+      toast.error("This roster is pending approval and cannot be edited.");
+      return;
+    }
+    const rosterReadOnly =
+      roster.access_mode === "read_only" || !isRosterEditable(roster, false);
+    if (!isRosterEditable(roster, rosterReadOnly)) {
+      toast.error("This roster cannot be edited right now.");
+      return;
+    }
+    setEditorRoster(roster);
+    setEditorDay(day);
+  };
+
   const handleEmailApprovedWeeks = (locks = weekLocks) => {
     const weeks = (locks || []).filter((l) => l?.week_number != null);
     if (!weeks.length) {
@@ -1027,7 +1058,7 @@ const RosterManagement = () => {
           {monthTotalPendingCount > 0 && !monthCalendarLocked && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               {monthTotalPendingCount} change(s) pending approval — working days update after approval.
-              Use Excel Upload to apply and submit more changes.
+              Click a day to edit, or use Excel Upload for bulk changes.
             </p>
           )}
           {teamWeekLoading ? (
@@ -1040,7 +1071,8 @@ const RosterManagement = () => {
               pendingRequests={monthPendingAll}
               monthCalendarLocked={monthCalendarLocked}
               weekLocks={weekLocks}
-              readOnly
+              readOnly={!canManageRoster}
+              onCellClick={handleTeamCellClick}
               canUnlockWeeks={canManageWeekLocks}
               unlockingWeek={
                 String(actionLoading).startsWith("unlock-week-") ||
@@ -1061,6 +1093,27 @@ const RosterManagement = () => {
           )}
         </div>
       )}
+
+      <RosterDayEditor
+        isOpen={!!editorDay}
+        day={editorDay}
+        roster={editorRoster || selectedRoster}
+        readOnly={
+          !canManageRoster ||
+          (editorRoster || selectedRoster)?.access_mode === "read_only" ||
+          !isRosterEditable(editorRoster || selectedRoster, false) ||
+          monthCalendarLocked ||
+          isRosterLocked(editorRoster || selectedRoster) ||
+          ((editorRoster || selectedRoster)?.status || "") === "Pending Approval"
+        }
+        onClose={() => {
+          setEditorDay(null);
+          setEditorRoster(null);
+        }}
+        onSaved={() => {
+          refreshRosterViews({ silent: true });
+        }}
+      />
 
       {confirmAction && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">

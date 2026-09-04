@@ -10,7 +10,7 @@ const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /**
  * Excel-style team roster: Week tabs × employee rows × day cells.
- * Cells are view-only; roster changes go through Excel Upload.
+ * Managers click a day to edit (leave, week-off, working type). Excel remains for bulk.
  */
 const RosterTeamWeekGrid = ({
   monthYear,
