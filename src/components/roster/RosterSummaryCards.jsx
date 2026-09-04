@@ -130,7 +130,7 @@ const RosterSummaryCards = ({
             <p className="text-[11px] text-slate-400 mt-0.5">
               {frozen
                 ? "Locked — extra hours cannot be changed until unlock"
-                : "Edit via User Monthly Report — changes appear here after save (refresh if needed)"}
+                : "Edit monthly target and extra hours on User Monthly Goal"}
             </p>
           </div>
           <p className="text-lg font-bold text-slate-900 tabular-nums shrink-0">

@@ -39,7 +39,7 @@ const UserMonthlyReport = () => {
   const isAssistantManager =
     roleId === 4 || normalizedRole.includes('assistant') || designation.includes('assistant');
   const canManageAssignedHours = isAssistantManager || isProjectManager || isAdmin || isSuperAdmin;
-  const canEditMonthlyBaseline = false;
+  const canEditMonthlyBaseline = canManageAssignedHours;
   const canEditExtraHours = canManageAssignedHours;
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
   const canViewTeamColumn = isAdmin || isSuperAdmin || isProjectManager;
@@ -264,12 +264,27 @@ const UserMonthlyReport = () => {
       toast.error('You do not have permission to update assigned hours');
       return;
     }
+    const monthlyTarget = parseFloat(editData.monthly_target);
+    if (canEditMonthlyBaseline && (Number.isNaN(monthlyTarget) || monthlyTarget < 0)) {
+      toast.error('Enter a valid monthly target (0 or more)');
+      return;
+    }
+    const extraHours = parseFloat(editData.extra_assign_hours);
+    if (canEditExtraHours && Number.isNaN(extraHours)) {
+      toast.error('Enter valid extra assigned hours');
+      return;
+    }
+
     try {
       const payload = {
+        logged_in_user_id: user?.user_id,
         user_monthly_tracker_id: id,
         month_year: editData.month_year,
-        extra_assigned_hours: parseFloat(editData.extra_assign_hours),
+        extra_assigned_hours: extraHours,
       };
+      if (canEditMonthlyBaseline) {
+        payload.monthly_target = monthlyTarget;
+      }
 
       const response = await api.post('/user_monthly_tracker/update', payload);
       
@@ -624,7 +639,7 @@ const UserMonthlyReport = () => {
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
         <h2 className="text-2xl font-bold text-white">User Monthly Goal</h2>
         <p className="text-blue-100 text-sm mt-1">
-          Monthly target and working days are read-only. Edit extra assigned hours here for employees who already have a monthly baseline.
+          Monthly target is calculated from the roster. Assistant Manager, Project Manager, Admin, and Super Admin can edit it here when hours need to be reduced or raised. Working days stay roster-driven.
         </p>
       </div>
 
@@ -792,9 +807,22 @@ const UserMonthlyReport = () => {
                                       <td className="px-6 py-4 text-slate-600 border border-slate-300">{record.team_name || '-'}</td>
                                     )}
                                     <td className="px-6 py-4 border border-slate-300">
-                                      <span className="block text-center text-slate-600 font-semibold">
-                                        {editData.monthly_target ?? record.monthly_target ?? '—'}
-                                      </span>
+                                      {canEditMonthlyBaseline ? (
+                                        <input
+                                          type="number"
+                                          name="monthly_target"
+                                          min="0"
+                                          step="0.01"
+                                          value={editData.monthly_target}
+                                          onChange={handleEditDataChange}
+                                          placeholder="Monthly hours"
+                                          className="w-full bg-white border-2 border-indigo-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                                        />
+                                      ) : (
+                                        <span className="block text-center text-slate-600 font-semibold">
+                                          {editData.monthly_target ?? record.monthly_target ?? '—'}
+                                        </span>
+                                      )}
                                     </td>
                                     <td className="px-6 py-4 border border-slate-300">
                                       {canEditExtraHours ? (
@@ -875,7 +903,7 @@ const UserMonthlyReport = () => {
                                           <button
                                             onClick={() => handleEditClick(record)}
                                             className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all hover:shadow-md"
-                                            title="Edit extra hours"
+                                            title="Edit monthly target and extra hours"
                                           >
                                             <Edit2 className="w-4 h-4" />
                                           </button>
