@@ -520,7 +520,7 @@ const RosterManagement = () => {
     return () => window.removeEventListener("focus", onFocus);
   }, [refreshRosterViews]);
 
-  const canManageWeekLocks = isAdmin || isSuperAdmin || isProjectManager;
+  const canManageWeekLocks = isAdmin || isSuperAdmin;
   const showTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
   const isBusy = !!actionLoading;
 
