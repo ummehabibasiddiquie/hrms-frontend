@@ -344,7 +344,9 @@ const UsersManagement = ({
           formData.append('assistant_manager', JSON.stringify(assistantManagers));
           formData.append('qa', JSON.stringify(qualityAnalysts));
           
-          formData.append('team', newUser.team || '');
+          if (newUser.team !== "" && newUser.team != null) {
+               formData.append('team', newUser.team);
+          }
           formData.append('user_number', newUser.phone || '');
           formData.append('user_address', newUser.address || '');
           formData.append('user_tenure', newUser.tenure || '');
