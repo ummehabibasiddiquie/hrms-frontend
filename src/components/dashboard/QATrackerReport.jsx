@@ -955,11 +955,11 @@ const QATrackerReport = () => {
         base_target: tracker.tenure_target || tracker.actual_target || "",
         tracker_note: tracker.tracker_note || tracker.notes || "",
         tracker_file: null,
+        newFile: null,
+        remove_file: false,
       });
 
-      if (tracker.tracker_file) {
-        setEditFilePreview(tracker.tracker_file);
-      }
+      setEditFilePreview(tracker.tracker_file || null);
 
       if (tracker.project_id && projectsData.length > 0) {
         const project = projectsData.find(p => String(p.project_id) === String(tracker.project_id));
@@ -1090,7 +1090,7 @@ const QATrackerReport = () => {
     const maxSize = 10 * 1024 * 1024;
     if (fileObj.size > maxSize) {
       setEditFileError("File size must not exceed 10MB");
-      setEditFormData(prev => ({ ...prev, tracker_file: null, newFile: null }));
+      setEditFormData(prev => ({ ...prev, tracker_file: null, newFile: null, remove_file: false }));
       setEditFilePreview(null);
       toast.error("File size exceeds 10MB limit", { duration: 4000 });
       e.target.value = null;
@@ -1108,7 +1108,7 @@ const QATrackerReport = () => {
 
     if (!allowedTypes.includes(fileObj.type)) {
       setEditFileError("Invalid file type. Please upload Excel, PDF, Word, or CSV files.");
-      setEditFormData(prev => ({ ...prev, tracker_file: null, newFile: null }));
+      setEditFormData(prev => ({ ...prev, tracker_file: null, newFile: null, remove_file: false }));
       setEditFilePreview(null);
       toast.error("Invalid file type", { duration: 4000 });
       e.target.value = null;
@@ -1116,10 +1116,30 @@ const QATrackerReport = () => {
     }
 
     setEditFileError("");
-    setEditFormData(prev => ({ ...prev, tracker_file: fileObj, newFile: fileObj }));
+    setEditFormData(prev => ({ ...prev, tracker_file: fileObj, newFile: fileObj, remove_file: false }));
     setEditFilePreview(fileObj.name);
     toast.success(`File selected: ${fileObj.name}`);
     log('[QATrackerReport] Edit file selected:', fileObj.name);
+  };
+
+  const clearEditFileInput = () => {
+    const input = document.getElementById('edit-file-upload');
+    if (input) input.value = '';
+  };
+
+  const handleRemoveEditFile = (e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    setEditFormData((prev) => ({
+      ...prev,
+      tracker_file: null,
+      newFile: null,
+      remove_file: true,
+    }));
+    setEditFilePreview(null);
+    setEditFileError("");
+    clearEditFileInput();
+    toast.success("File will be removed when you save");
   };
 
   // Handle edit form submit
@@ -1169,6 +1189,12 @@ const QATrackerReport = () => {
       if (editFormData.newFile) {
         formData.append('tracker_file', editFormData.newFile);
         log('[QATrackerReport] Uploading new file:', editFormData.newFile.name);
+      } else if (
+        editFormData.remove_file ||
+        (!editFilePreview && editingTracker?.tracker_file)
+      ) {
+        formData.append('remove_file', '1');
+        log('[QATrackerReport] Clearing tracker file');
       }
 
       log('[QATrackerReport] Submitting tracker update with FormData');
@@ -1190,7 +1216,8 @@ const QATrackerReport = () => {
           base_target: "",
           tracker_note: "",
           tracker_file: null,
-          newFile: null
+          newFile: null,
+          remove_file: false,
         });
         setEditFilePreview(null);
         setEditFileError("");
@@ -1219,6 +1246,8 @@ const QATrackerReport = () => {
       base_target: "",
       tracker_note: "",
       tracker_file: null,
+      newFile: null,
+      remove_file: false,
     });
     setEditFilePreview(null);
     setEditFileBase64(null);
@@ -2335,22 +2364,37 @@ const QATrackerReport = () => {
                           Project Files
                         </label>
                         
-                        {editFilePreview && !editFormData.tracker_file && (
-                          <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+                        {(editFilePreview || editFormData.remove_file) && !editFormData.tracker_file && (
+                          <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600 shrink-0">
                                 <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
                               </svg>
-                              <span className="text-xs font-medium text-blue-700">Existing file</span>
+                              <span className="text-xs font-medium text-blue-700 truncate">
+                                {editFormData.remove_file ? 'File will be removed on save' : 'Existing file'}
+                              </span>
                             </div>
-                            <a
-                              href={editFilePreview}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 text-xs font-semibold"
-                            >
-                              View
-                            </a>
+                            <div className="flex items-center gap-3 shrink-0">
+                              {editFilePreview && !editFormData.remove_file && (
+                                <a
+                                  href={editFilePreview}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 text-xs font-semibold"
+                                >
+                                  View
+                                </a>
+                              )}
+                              {!editFormData.remove_file && (
+                                <button
+                                  type="button"
+                                  onClick={handleRemoveEditFile}
+                                  className="text-red-600 hover:text-red-800 text-xs font-semibold"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -2381,6 +2425,15 @@ const QATrackerReport = () => {
                                 )}
                               </p>
                               <p className="text-xs text-slate-500 mt-1">Max: 10MB</p>
+                              {editFormData.tracker_file && (
+                                <button
+                                  type="button"
+                                  onClick={handleRemoveEditFile}
+                                  className="mt-1 text-xs font-semibold text-red-600 hover:text-red-800"
+                                >
+                                  Remove selected file
+                                </button>
+                              )}
                             </div>
                           </div>
                           <input

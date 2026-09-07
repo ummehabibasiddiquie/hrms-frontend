@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, ChevronUp, ChevronDown, Search, Download, FileX } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, ChevronUp, ChevronDown, ChevronRight, Search, Download, FileX } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -45,6 +45,9 @@ const ProjectMonthlyReport = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [expandedProjectKeys, setExpandedProjectKeys] = useState({});
+  const [projectTasks, setProjectTasks] = useState({});
+  const [loadingProjectTasks, setLoadingProjectTasks] = useState({});
 
   // Fetch projects from API
   useEffect(() => {
@@ -132,7 +135,14 @@ const ProjectMonthlyReport = () => {
           achieved_monthly_target: parseFloat(record.achieved_hours) || 0,
           pending_monthly_target: parseFloat(record.pending_hours) || 0,
           tenure_achieved_hours: parseFloat(record.tenure_achieved_hours) || 0,
-          tenure_pending_hours: parseFloat(record.tenure_pending_hours) || 0
+          tenure_pending_hours: parseFloat(record.tenure_pending_hours) || 0,
+          tasks: Array.isArray(record.tasks)
+            ? record.tasks.map((t) => ({
+                task_id: t.task_id,
+                task_name: t.task_name,
+                achieved_hours: parseFloat(t.achieved_hours) || 0,
+              }))
+            : undefined,
         }));
         setReportData(mappedData);
       } else {
@@ -147,6 +157,120 @@ const ProjectMonthlyReport = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const projectRowKey = (projectId, monthYear) => `${projectId}-${monthYear}`;
+
+  const toggleProjectTasks = async (event, record, monthYear) => {
+    event?.stopPropagation?.();
+    const projectId = record.project_id;
+    const key = projectRowKey(projectId, monthYear);
+    const opening = !expandedProjectKeys[key];
+    setExpandedProjectKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+    if (!opening) return;
+
+    const cached = projectTasks[key];
+    const staleZeroCache =
+      Array.isArray(cached) &&
+      cached.length > 0 &&
+      cached.every((t) => Number(t.achieved_hours) === 0) &&
+      Number(record.achieved_monthly_target) > 0;
+    if (cached && !staleZeroCache) return;
+
+    const attached = Array.isArray(record.tasks) ? record.tasks : null;
+    const attachedHasHours = !!attached?.some((t) => Number(t.achieved_hours) > 0);
+    if (attached?.length && (attachedHasHours || Number(record.achieved_monthly_target) === 0)) {
+      setProjectTasks((prev) => ({ ...prev, [key]: attached }));
+      return;
+    }
+
+    try {
+      setLoadingProjectTasks((prev) => ({ ...prev, [key]: true }));
+      const response = await api.post('/task/list', { project_id: projectId });
+      const rows = Array.isArray(response.data?.data) ? response.data.data : [];
+      const named = rows.filter((t) => Number(t.project_id) === Number(projectId));
+      const hourResults = await Promise.all(
+        named.map((t) =>
+          api.post('/project_monthly_tracker/list', {
+            project_id: projectId,
+            month_year: monthYear,
+            task_id: t.task_id,
+            limit: 1,
+          })
+        )
+      );
+      const tasks = named.map((t, i) => ({
+        task_id: t.task_id,
+        task_name: t.task_name,
+        achieved_hours: parseFloat(hourResults[i]?.data?.data?.rows?.[0]?.achieved_hours) || 0,
+      }));
+      setProjectTasks((prev) => ({ ...prev, [key]: tasks }));
+    } catch (err) {
+      console.error('Error fetching project tasks:', err);
+      toast.error('Failed to load tasks');
+      setProjectTasks((prev) => ({ ...prev, [key]: attached || [] }));
+    } finally {
+      setLoadingProjectTasks((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const renderProjectName = (record, monthYear) => {
+    const key = projectRowKey(record.project_id, monthYear);
+    const open = !!expandedProjectKeys[key];
+    return (
+      <button
+        type="button"
+        onClick={(e) => toggleProjectTasks(e, record, monthYear)}
+        className="inline-flex items-center gap-2 text-left font-medium text-slate-800 hover:text-blue-700"
+        title={open ? 'Hide tasks' : 'Show tasks'}
+      >
+        {open ? (
+          <ChevronDown className="w-4 h-4 shrink-0 text-slate-500" />
+        ) : (
+          <ChevronRight className="w-4 h-4 shrink-0 text-slate-500" />
+        )}
+        <span>{record.project_name}</span>
+      </button>
+    );
+  };
+
+  const renderTaskDropdown = (record, monthYear) => {
+    const key = projectRowKey(record.project_id, monthYear);
+    if (!expandedProjectKeys[key]) return null;
+    const tasks = projectTasks[key] || [];
+    const loadingTasks = !!loadingProjectTasks[key];
+    return (
+      <tr key={`${key}-tasks`} className="bg-slate-50">
+        <td colSpan={5} className="px-6 py-3 border border-slate-300">
+          {loadingTasks ? (
+            <p className="text-sm text-slate-500 pl-6">Loading tasks…</p>
+          ) : tasks.length === 0 ? (
+            <p className="text-sm text-slate-500 pl-6">No tasks for this project</p>
+          ) : (
+            <div className="pl-6">
+              <table className="min-w-[320px]">
+                <thead>
+                  <tr className="text-xs uppercase tracking-wider text-slate-500">
+                    <th className="py-1 pr-8 text-left font-semibold">Task</th>
+                    <th className="py-1 text-center font-semibold">Achieved Target</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.map((task) => (
+                    <tr key={task.task_id} className="text-sm text-slate-700">
+                      <td className="py-1 pr-8">{task.task_name}</td>
+                      <td className="py-1 text-center font-semibold">
+                        {Number(task.achieved_hours || 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </td>
+      </tr>
+    );
   };
 
   // Handle add mode - when clicking Add icon for a new project
@@ -568,12 +692,13 @@ const ProjectMonthlyReport = () => {
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
                           {filteredMonthData.map((record) => (
-                  <tr key={`${record.project_id}-${monthYear}`} className="transition-all duration-200">
+                  <React.Fragment key={`${record.project_id}-${monthYear}`}>
+                  <tr className="transition-all duration-200">
                     {record.isNew && addingProjectId === record.project_id && addingMonthYear === monthYear ? (
                       // Add Mode - for new records
                       <>
                         <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
-                          {record.project_name}
+                          {renderProjectName(record, monthYear)}
                         </td>
                         <td className="px-6 py-4 border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
                           <input
@@ -614,7 +739,7 @@ const ProjectMonthlyReport = () => {
                       // Edit Mode - Only Monthly Target is editable
                       <>
                         <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
-                          {record.project_name}
+                          {renderProjectName(record, monthYear)}
                         </td>
                         <td className="px-6 py-4 border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
                           <input
@@ -654,7 +779,7 @@ const ProjectMonthlyReport = () => {
                       // View Mode for New Records - Show ADD icon
                       <>
                         <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
-                          {record.project_name}
+                          {renderProjectName(record, monthYear)}
                         </td>
                         <td className="px-6 py-4 text-center text-slate-400 italic border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
                           Not set
@@ -681,7 +806,7 @@ const ProjectMonthlyReport = () => {
                       // View Mode for Existing Records - Show EDIT/DELETE icons
                       <>
                         <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
-                          {record.project_name}
+                          {renderProjectName(record, monthYear)}
                         </td>
                         <td className="px-6 py-4 text-center text-slate-800 font-semibold border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
                           {Number(record.monthly_target).toFixed(2)}
@@ -713,6 +838,8 @@ const ProjectMonthlyReport = () => {
                       </>
                     )}
                   </tr>
+                  {renderTaskDropdown(record, monthYear)}
+                  </React.Fragment>
                 ))}
                 {/* Totals Row - Only show if there's actual data */}
                 {filteredMonthData.some(r => !r.isNew) && (
