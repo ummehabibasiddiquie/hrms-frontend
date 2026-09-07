@@ -120,6 +120,10 @@ export async function emailRosterWeek(payload) {
   return rosterPost("/roster/week/email", payload);
 }
 
+export async function notifyRosterApproval(payload) {
+  return rosterPost("/roster/notify_approval", payload);
+}
+
 export async function listRosterAudit(payload = {}) {
   return rosterPost("/roster/audit/list", payload);
 }

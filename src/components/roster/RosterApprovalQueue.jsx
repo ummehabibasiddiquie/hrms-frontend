@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Mail,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import {
@@ -18,6 +19,7 @@ import {
   approveChangeRequestsBulk,
   listChangeRequests,
   rejectChangeRequest,
+  notifyRosterApproval,
 } from "../../services/rosterService";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
 import {
@@ -31,6 +33,7 @@ import {
 import LoadingSpinner from "../common/LoadingSpinner";
 import { MonthYearPicker } from "../common/CustomCalendar";
 import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
+import { useRosterRoles } from "../../hooks/useRosterRoles";
 
 const PAGE_SIZE = 8;
 const BULK_APPROVE_CHUNK = 10;
@@ -105,6 +108,8 @@ const RosterApprovalQueue = ({
   const [modal, setModal] = useState(null);
   const [detailRequest, setDetailRequest] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [notifying, setNotifying] = useState(false);
+  const { isSuperAdmin } = useRosterRoles();
 
   const loadRequests = useCallback(async () => {
     try {
@@ -321,7 +326,24 @@ const RosterApprovalQueue = ({
     : [];
 
   const showBulkBar = statusFilter === "Pending" || statusFilter === "";
-  const busy = !!actionId || bulkLoading;
+  const busy = !!actionId || bulkLoading || notifying;
+
+  const handleNotifyApprovers = async () => {
+    if (!isSuperAdmin || notifying) return;
+    if (!counts.pending) {
+      toast.error("No pending submitted requests to email");
+      return;
+    }
+    try {
+      setNotifying(true);
+      const res = await notifyRosterApproval({ month_year: monthYear });
+      toast.success(res.message || "Approval email sent to Admin and Super Admin");
+    } catch (err) {
+      toast.error(getFriendlyErrorMessage(err));
+    } finally {
+      setNotifying(false);
+    }
+  };
 
   const modalTitle = (() => {
     if (!modal) return "";
@@ -370,6 +392,17 @@ const RosterApprovalQueue = ({
             />
           </div>
           <p className="text-xs text-slate-400 lg:pb-2 shrink-0">{formatMonthYearLabel(monthYear)}</p>
+          {isSuperAdmin && counts.pending > 0 && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleNotifyApprovers}
+              className="lg:mb-0.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-amber-700 text-white hover:bg-amber-800 disabled:opacity-50"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              {notifying ? "Sending…" : "Email approvers (pending)"}
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-1.5">

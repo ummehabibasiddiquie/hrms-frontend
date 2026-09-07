@@ -22,7 +22,6 @@ const RosterDayEditor = ({
   const [dayForm, setDayForm] = useState({
     day_type: "Working",
     shift: "DAY",
-    working_type: "Full",
     working_hours: 9,
   });
 
@@ -40,7 +39,6 @@ const RosterDayEditor = ({
       (day.working_type || "").toLowerCase() === "half" ||
       Number(day.is_half_day) === 1 ||
       Number(day.leave_is_half_day) === 1;
-    let workingType = isLeaveDay ? "Full" : day.working_type || "Full";
     let workingHours = Number(day.working_hours);
     if (proposedType !== "Left" && (!Number.isFinite(workingHours) || workingHours <= 0)) {
       workingHours = 9;
@@ -48,19 +46,12 @@ const RosterDayEditor = ({
     if (proposedType === "Left") {
       workingHours = 0;
     }
-    if (isLeaveDay) {
-      workingType = "Full";
-      if (wasHalf) {
-        workingHours = Math.round(workingHours * 2 * 100) / 100;
-      }
-      if (!workingHours || workingHours < 4) {
-        workingHours = 9;
-      }
+    if (isLeaveDay && wasHalf && workingHours > 5.4) {
+      workingHours = Math.round((workingHours / 2) * 100) / 100;
     }
     setDayForm({
       day_type: proposedType,
       shift: day.shift || "DAY",
-      working_type: workingType,
       working_hours: workingHours,
     });
     setLeaveForm({
@@ -69,11 +60,7 @@ const RosterDayEditor = ({
         day.leave_affect_target === true ||
         Number(day.affect_target) === 1 ||
         day.affect_target === true,
-      is_half_day:
-        Number(day.leave_is_half_day) === 1 ||
-        day.leave_is_half_day === true ||
-        Number(day.is_half_day) === 1 ||
-        day.is_half_day === true,
+      is_half_day: wasHalf,
     });
     setApplyThroughMonthEnd(proposedType !== "Left");
   }, [isOpen, day, roster]);
@@ -133,7 +120,7 @@ const RosterDayEditor = ({
     if (isHolidayDay && dayType === "WeekOff") {
       dayType = "Holiday";
     }
-    if (isHolidayDay && (dayForm.working_type === "Half" || dayForm.day_type === "Leave")) {
+    if (isHolidayDay && dayType === "Leave") {
       toast.error(
         "Leave or half day cannot be added on a Holiday. Set Working (day or night) if this person must work."
       );
@@ -144,7 +131,7 @@ const RosterDayEditor = ({
       roster_date: rosterDate,
       day_type: dayType,
       shift: dayForm.shift,
-      working_type: isLeft ? "Full" : dayForm.working_type,
+      working_type: "Full",
       working_hours: isLeft ? 0 : Number(dayForm.working_hours),
       apply_through_month_end: isLeft && applyThroughMonthEnd ? 1 : 0,
       through_end_date: isLeft && applyThroughMonthEnd ? toDateOnlyString(roster.roster_end_date) : undefined,
@@ -255,7 +242,7 @@ const RosterDayEditor = ({
                 </select>
               </label>
 
-              {dayForm.day_type === "Leave" && (
+              {dayForm.day_type === "Leave" && !isHolidayDay && (
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
                   <label className="flex items-start gap-2">
                     <input
@@ -290,53 +277,30 @@ const RosterDayEditor = ({
 
               {dayForm.day_type !== "Left" && dayForm.day_type !== "Leave" && (
                 <>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Shift</span>
-                <select
-                  value={dayForm.shift}
-                  onChange={(e) => setDayForm({ ...dayForm, shift: e.target.value })}
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                >
-                  <option value="DAY">Day</option>
-                  <option value="NIGHT">Night</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Working Type</span>
-                <select
-                  value={dayForm.working_type}
-                  onChange={(e) => {
-                    const nextType = e.target.value;
-                    setDayForm((prev) => {
-                      const currentHours = Number(prev.working_hours) || 9;
-                      let nextHours = currentHours;
-                      if (nextType === "Half" && prev.working_type !== "Half") {
-                        nextHours = Math.round((currentHours / 2) * 100) / 100;
-                      } else if (nextType === "Full" && prev.working_type === "Half") {
-                        nextHours = Math.round(currentHours * 2 * 100) / 100;
-                      }
-                      return { ...prev, working_type: nextType, working_hours: nextHours };
-                    });
-                  }}
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                >
-                  <option value="Full">Full Day</option>
-                  {!isHolidayDay && (
-                    <option value="Half">Half Day (reduces monthly target)</option>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">Shift</span>
+                    <select
+                      value={dayForm.shift}
+                      onChange={(e) => setDayForm({ ...dayForm, shift: e.target.value })}
+                      className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+                    >
+                      <option value="DAY">Day</option>
+                      <option value="NIGHT">Night</option>
+                    </select>
+                  </label>
+                  {dayForm.day_type === "Working" && (
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-700">Working Hours</span>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        value={dayForm.working_hours}
+                        onChange={(e) => setDayForm({ ...dayForm, working_hours: e.target.value })}
+                        className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+                      />
+                    </label>
                   )}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Working Hours</span>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  value={dayForm.working_hours}
-                  onChange={(e) => setDayForm({ ...dayForm, working_hours: e.target.value })}
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                />
-              </label>
                 </>
               )}
               {dayForm.day_type === "Left" && (
