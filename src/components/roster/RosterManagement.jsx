@@ -727,10 +727,12 @@ const RosterManagement = () => {
     }
     setConfirmAction({
       title: "Submit roster edits for approval",
-      message: `Submit ${draftPendingCount} saved change(s) for ${formatMonthYearLabel(monthYear)}? The calendar will keep showing them as pending until they are approved.`,
+      message: `Submit ${draftPendingCount} saved change(s) for ${formatMonthYearLabel(monthYear)}? Each week you edited will go for approval. After approve, only those weeks are mailed.`,
       onConfirm: () =>
         runAction("submit-edits", async () => {
-          const res = await submitRosterBatch({ month_year: monthYear });
+          const res = await submitRosterBatch({
+            month_year: monthYear,
+          });
           toast.success(res.message || "Submitted for approval");
         }),
     });

@@ -250,7 +250,10 @@ const RosterExcelUpload = ({
       }
 
       try {
-        const submitRes = await submitRosterBatch({ month_year: monthYear });
+        const submitRes = await submitRosterBatch({
+          month_year: monthYear,
+          week_number: weekNumber,
+        });
         if (failed.length) {
           toast.error(
             `Submitted with ${failed.length} row failure(s). ${submitRes.message || "Sent for approval."}`
