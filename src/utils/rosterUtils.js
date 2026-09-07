@@ -648,7 +648,9 @@ function mergePendingDate(byDate, dateStr, preview, summary, { submitted = false
   const key = dateStr.slice(0, 10);
   const existing = byDate[key] || { preview: {}, summaries: [], submitted: false };
   const summaries = [...existing.summaries, summary];
-  const phaseLabel = "Submitted — awaiting approval";
+  const phaseLabel = submitted
+    ? "Submitted — awaiting approval"
+    : "Saved — submit for approval";
   byDate[key] = {
     preview: { ...existing.preview, ...preview },
     summaries,
@@ -666,8 +668,7 @@ export function buildPendingCalendarOverlay(requests, rosterMonthId) {
 
   const relevant = (requests || []).filter(
     (r) =>
-      r.status === "Pending" &&
-      Boolean(r.batch_id) &&
+      (r.status || "") === "Pending" &&
       (!rosterMonthId || String(r.roster_month_id) === String(rosterMonthId))
   );
 

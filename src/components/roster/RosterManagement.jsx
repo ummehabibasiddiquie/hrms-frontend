@@ -25,6 +25,7 @@ import {
   unlockRosterMonth,
   unlockRosterWeek,
   emailRosterWeek,
+  submitRosterBatch,
 } from "../../services/rosterService";
 import { useRosterRoles } from "../../hooks/useRosterRoles";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
@@ -158,6 +159,13 @@ const RosterManagement = () => {
 
   const monthTotalPendingCount = useMemo(
     () => monthPendingAll.filter((r) => (r.status || "") === "Pending").length,
+    [monthPendingAll]
+  );
+  const draftPendingCount = useMemo(
+    () =>
+      monthPendingAll.filter(
+        (r) => (r.status || "") === "Pending" && !r.batch_id
+      ).length,
     [monthPendingAll]
   );
 
@@ -712,6 +720,22 @@ const RosterManagement = () => {
     });
   };
 
+  const handleSubmitPendingEdits = () => {
+    if (!draftPendingCount) {
+      toast.error("No saved edits to submit");
+      return;
+    }
+    setConfirmAction({
+      title: "Submit roster edits for approval",
+      message: `Submit ${draftPendingCount} saved change(s) for ${formatMonthYearLabel(monthYear)}? The calendar will keep showing them as pending until they are approved.`,
+      onConfirm: () =>
+        runAction("submit-edits", async () => {
+          const res = await submitRosterBatch({ month_year: monthYear });
+          toast.success(res.message || "Submitted for approval");
+        }),
+    });
+  };
+
   const handleTeamCellClick = ({ roster, day }) => {
     if (!canManageRoster || !roster) return;
     if (monthCalendarLocked || isRosterLocked(roster)) {
@@ -813,6 +837,7 @@ const RosterManagement = () => {
               variant="manager"
               monthYear={monthYear}
               onMonthYearChange={setMonthYear}
+              onActionComplete={() => refreshRosterViews({ silent: true })}
             />
           </div>
         )}
@@ -1056,10 +1081,23 @@ const RosterManagement = () => {
             </div>
           )}
           {monthTotalPendingCount > 0 && !monthCalendarLocked && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              {monthTotalPendingCount} change(s) pending approval — working days update after approval.
-              Click a day to edit, or use Excel Upload for bulk changes.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p className="flex-1">
+                {draftPendingCount > 0
+                  ? `${draftPendingCount} saved change(s) are not submitted yet. Cells already show the pending leave/day preview.`
+                  : `${monthTotalPendingCount} change(s) pending approval — working days update after approval.`}
+              </p>
+              {draftPendingCount > 0 && canManageRoster && (
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={handleSubmitPendingEdits}
+                  className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-700 text-white font-semibold hover:bg-amber-800 disabled:opacity-50"
+                >
+                  {actionLoading === "submit-edits" ? "Submitting…" : "Submit for approval"}
+                </button>
+              )}
+            </div>
           )}
           {teamWeekLoading ? (
             <LoadingSpinner />

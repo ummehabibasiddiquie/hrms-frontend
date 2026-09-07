@@ -12,7 +12,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { listChangeRequests } from "../../services/rosterService";
+import { listChangeRequests, withdrawDraftChangeRequest } from "../../services/rosterService";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
 import {
   statusBadgeClass,
@@ -28,7 +28,15 @@ import { formatISTDateTime } from "../../utils/dateTimeIST";
 
 const PAGE_SIZE = 8;
 
-const STATUS_TABS = [
+const MANAGER_STATUS_TABS = [
+  { id: "Draft", label: "Draft" },
+  { id: "Pending", label: "Pending" },
+  { id: "Approved", label: "Approved" },
+  { id: "Rejected", label: "Rejected" },
+  { id: "", label: "All" },
+];
+
+const EMPLOYEE_STATUS_TABS = [
   { id: "Pending", label: "Pending" },
   { id: "Approved", label: "Approved" },
   { id: "Rejected", label: "Rejected" },
@@ -68,9 +76,12 @@ function getReviewNote(request) {
   );
 }
 
-/** Unsubmitted Excel/UI drafts — hidden now that Excel auto-submits. */
 function isUnsubmittedDraft(r) {
-  return r.status === "Pending" && !r.batch_id;
+  return (r.status || "") === "Pending" && !r.batch_id;
+}
+
+function displayStatus(request) {
+  return isUnsubmittedDraft(request) ? "Draft" : request.status;
 }
 
 /**
@@ -84,25 +95,28 @@ const RosterSubmissionTracker = ({
   defaultMonthYear,
   title,
   subtitle,
+  onActionComplete,
 }) => {
   const [internalMonthYear, setInternalMonthYear] = useState(
     controlledMonthYear || defaultMonthYear || getCurrentMonthYear()
   );
   const monthYear = controlledMonthYear ?? internalMonthYear;
   const setMonthYear = onMonthYearChange || setInternalMonthYear;
-  const [statusFilter, setStatusFilter] = useState("Pending");
+  const [statusFilter, setStatusFilter] = useState(variant === "manager" ? "Draft" : "Pending");
   const [search, setSearch] = useState("");
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [detailRequest, setDetailRequest] = useState(null);
+  const [withdrawingId, setWithdrawingId] = useState("");
+  const statusTabs = variant === "manager" ? MANAGER_STATUS_TABS : EMPLOYEE_STATUS_TABS;
 
   const loadRequests = useCallback(async () => {
     try {
       setLoading(true);
       const res = await listChangeRequests({ month_year: monthYear });
       const rows = Array.isArray(res.data) ? res.data : [];
-      setRequests(rows.filter((r) => !isUnsubmittedDraft(r)));
+      setRequests(variant === "employee" ? rows.filter((r) => !isUnsubmittedDraft(r)) : rows);
       setPage(1);
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
@@ -110,7 +124,7 @@ const RosterSubmissionTracker = ({
     } finally {
       setLoading(false);
     }
-  }, [monthYear]);
+  }, [monthYear, variant]);
 
   useEffect(() => {
     loadRequests();
@@ -121,17 +135,21 @@ const RosterSubmissionTracker = ({
   }, [statusFilter, search]);
 
   const counts = useMemo(() => {
-    const c = { pending: 0, approved: 0, rejected: 0, total: requests.length };
+    const c = { draft: 0, pending: 0, approved: 0, rejected: 0, total: requests.length };
     requests.forEach((r) => {
-      const s = (r.status || "").toLowerCase();
-      if (s === "pending") c.pending += 1;
-      else if (s === "approved") c.approved += 1;
-      else if (s === "rejected") c.rejected += 1;
+      if (isUnsubmittedDraft(r)) c.draft += 1;
+      else if ((r.status || "").toLowerCase() === "pending") c.pending += 1;
+      else if ((r.status || "").toLowerCase() === "approved") c.approved += 1;
+      else if ((r.status || "").toLowerCase() === "rejected") c.rejected += 1;
     });
     return c;
   }, [requests]);
 
   const statusFiltered = useMemo(() => {
+    if (statusFilter === "Draft") return requests.filter(isUnsubmittedDraft);
+    if (statusFilter === "Pending") {
+      return requests.filter((r) => (r.status || "") === "Pending" && r.batch_id);
+    }
     if (!statusFilter) return requests;
     return requests.filter((r) => (r.status || "") === statusFilter);
   }, [requests, statusFilter]);
@@ -165,14 +183,35 @@ const RosterSubmissionTracker = ({
     subtitle ||
     (variant === "employee"
       ? "Changes requested by your manager — track approval status and reviewer notes"
-      : "Track roster changes you submitted for approval");
+      : "Drafts are saved from the calendar. Submit for approval when you are ready.");
 
   const summaryStats = [
     { label: "Total", value: counts.total, className: "bg-slate-50 text-slate-700 border-slate-100" },
+    ...(variant === "manager"
+      ? [{ label: "Draft", value: counts.draft, className: "bg-slate-100 text-slate-700 border-slate-200" }]
+      : []),
     { label: "Pending", value: counts.pending, className: "bg-amber-50 text-amber-700 border-amber-100" },
     { label: "Approved", value: counts.approved, className: "bg-green-50 text-green-700 border-green-100" },
     { label: "Rejected", value: counts.rejected, className: "bg-red-50 text-red-700 border-red-100" },
   ];
+
+  const handleWithdrawDraft = async (requestId) => {
+    if (withdrawingId) return;
+    try {
+      setWithdrawingId(String(requestId));
+      const res = await withdrawDraftChangeRequest({ request_id: requestId });
+      toast.success(res.message || "Draft withdrawn");
+      setDetailRequest((current) =>
+        current && String(current.request_id) === String(requestId) ? null : current
+      );
+      await loadRequests();
+      onActionComplete?.();
+    } catch (err) {
+      toast.error(getFriendlyErrorMessage(err));
+    } finally {
+      setWithdrawingId("");
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -186,7 +225,7 @@ const RosterSubmissionTracker = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-2 ${variant === "manager" ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
         {summaryStats.map((stat) => (
           <div
             key={stat.label}
@@ -229,7 +268,7 @@ const RosterSubmissionTracker = ({
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          {STATUS_TABS.map((tab) => (
+          {statusTabs.map((tab) => (
             <button
               key={tab.id || "all"}
               type="button"
@@ -251,8 +290,14 @@ const RosterSubmissionTracker = ({
       ) : paged.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 bg-white py-16 text-center">
           <ClipboardList className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm font-medium text-slate-600">No change requests found</p>
-          <p className="text-xs text-slate-400 mt-1">Try a different month or status filter</p>
+          <p className="text-sm font-medium text-slate-600">
+            {statusFilter === "Draft" ? "No drafts for this month" : "No change requests found"}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            {statusFilter === "Draft"
+              ? "Save a day or leave from the roster calendar to create a draft"
+              : "Try a different month or status filter"}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -263,6 +308,8 @@ const RosterSubmissionTracker = ({
               CHANGE_TYPE_STYLES[req.change_type] || "bg-slate-50 text-slate-700 border-slate-100";
             const primaryName =
               variant === "manager" ? req.user_name : req.submitted_by_name || "Manager";
+            const isDraft = isUnsubmittedDraft(req);
+            const statusLabel = displayStatus(req);
 
             return (
               <article
@@ -283,9 +330,9 @@ const RosterSubmissionTracker = ({
                           {getChangeTypeLabel(req.change_type)}
                         </span>
                         <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${statusBadgeClass(req.status)}`}
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${statusBadgeClass(statusLabel)}`}
                         >
-                          {req.status}
+                          {statusLabel}
                         </span>
                       </div>
 
@@ -326,6 +373,16 @@ const RosterSubmissionTracker = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 lg:pt-1">
+                    {variant === "manager" && isDraft && (
+                      <button
+                        type="button"
+                        disabled={Boolean(withdrawingId)}
+                        onClick={() => handleWithdrawDraft(req.request_id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {String(withdrawingId) === String(req.request_id) ? "Withdrawing…" : "Withdraw"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setDetailRequest(req)}
@@ -394,10 +451,10 @@ const RosterSubmissionTracker = ({
                 </span>
                 <span
                   className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${statusBadgeClass(
-                    detailRequest.status
+                    displayStatus(detailRequest)
                   )}`}
                 >
-                  {detailRequest.status}
+                  {displayStatus(detailRequest)}
                 </span>
               </div>
 
@@ -429,6 +486,19 @@ const RosterSubmissionTracker = ({
                   <p className="font-semibold text-slate-700 mb-1">Reviewer note</p>
                   <p className="text-slate-600">{getReviewNote(detailRequest)}</p>
                 </div>
+              )}
+
+              {variant === "manager" && isUnsubmittedDraft(detailRequest) && (
+                <button
+                  type="button"
+                  disabled={Boolean(withdrawingId)}
+                  onClick={() => handleWithdrawDraft(detailRequest.request_id)}
+                  className="w-full px-3 py-2 rounded-lg text-sm font-semibold border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {String(withdrawingId) === String(detailRequest.request_id)
+                    ? "Withdrawing…"
+                    : "Withdraw draft"}
+                </button>
               )}
             </div>
           </div>
