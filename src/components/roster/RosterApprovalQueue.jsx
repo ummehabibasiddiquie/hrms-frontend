@@ -21,7 +21,7 @@ import {
   rejectChangeRequest,
   notifyRosterApproval,
 } from "../../services/rosterService";
-import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { showApiError } from "../../utils/errorMessages";
 import {
   statusBadgeClass,
   getCurrentMonthYear,
@@ -121,7 +121,7 @@ const RosterApprovalQueue = ({
       setPage(1);
       setSelectedIds(new Set());
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
       setRequests([]);
     } finally {
       setLoading(false);
@@ -313,7 +313,7 @@ const RosterApprovalQueue = ({
       await loadRequests();
       onActionComplete?.();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setActionId(null);
       setBulkLoading(false);
@@ -339,7 +339,7 @@ const RosterApprovalQueue = ({
       const res = await notifyRosterApproval({ month_year: monthYear });
       toast.success(res.message || "Approval email sent to Admin and Super Admin");
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setNotifying(false);
     }

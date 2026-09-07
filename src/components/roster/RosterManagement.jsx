@@ -29,7 +29,7 @@ import {
 } from "../../services/rosterService";
 import { useRosterRoles } from "../../hooks/useRosterRoles";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
-import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { showApiError } from "../../utils/errorMessages";
 import SubTabsBar from "../common/SubTabsBar";
 import {
   filterEmployeesByTeam,
@@ -248,7 +248,7 @@ const RosterManagement = () => {
         setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
         return list;
       } catch (err) {
-        toast.error(getFriendlyErrorMessage(err));
+        showApiError(err);
         setRosters([]);
         setMonthCalendarLocked(false);
         setMonthLockInfo(null);
@@ -277,7 +277,7 @@ const RosterManagement = () => {
         setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
         return list;
       } catch (err) {
-        toast.error(getFriendlyErrorMessage(err));
+        showApiError(err);
         setTeamWeekRosters([]);
         setMonthCalendarLocked(false);
         setMonthLockInfo(null);
@@ -393,7 +393,7 @@ const RosterManagement = () => {
         });
       } catch (err) {
         if (!cancelled) {
-          toast.error(getFriendlyErrorMessage(err));
+          showApiError(err);
           setEmployees([]);
           setSelectedUserId("");
         }
@@ -473,7 +473,7 @@ const RosterManagement = () => {
         setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
       } catch (err) {
         if (!cancelled) {
-          toast.error(getFriendlyErrorMessage(err));
+          showApiError(err);
           setRosters([]);
           setMonthCalendarLocked(false);
           setMonthLockInfo(null);
@@ -506,7 +506,7 @@ const RosterManagement = () => {
         setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
       } catch (err) {
         if (!cancelled) {
-          toast.error(getFriendlyErrorMessage(err));
+          showApiError(err);
           setTeamWeekRosters([]);
           setMonthCalendarLocked(false);
           setMonthLockInfo(null);
@@ -546,7 +546,7 @@ const RosterManagement = () => {
       setActionLoading(key);
       await fn();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
       setActionLoading("");
       return;
     }

@@ -3,7 +3,7 @@ import { fetchProjectTasks, updateTask } from '../../../../services/projectServi
 import { Edit, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import DeleteTaskModal from './DeleteTaskModal';
-import { getFriendlyErrorMessage } from '../../../../utils/errorMessages';
+import { showApiError } from '../../../../utils/errorMessages';
 
 const ROW_HEIGHT = 40;
 const VISIBLE_ROWS = 12;
@@ -51,7 +51,7 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
       toast.success(next === 1 ? 'Task activated' : 'Task deactivated');
       onTaskUpdated?.(project.id, taskId);
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err) || 'Failed to update task status');
+      showApiError(err, 'Failed to update task status');
     } finally {
       setTogglingId(null);
     }

@@ -5,7 +5,7 @@ import {
   createChangeRequest,
   listRosterLeaves,
 } from "../../services/rosterService";
-import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { showApiError } from "../../utils/errorMessages";
 import { toDateOnlyString, getRosterLockMessage, isRosterLocked } from "../../utils/rosterUtils";
 
 const RosterDayEditor = ({
@@ -72,7 +72,7 @@ const RosterDayEditor = ({
         const res = await listRosterLeaves({ roster_month_id: roster.roster_month_id });
         setLeaves(res.data || []);
       } catch (err) {
-        toast.error(getFriendlyErrorMessage(err));
+        showApiError(err);
       }
     };
     load();
@@ -106,7 +106,7 @@ const RosterDayEditor = ({
       onSaved?.();
       onClose();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setLoading(false);
     }

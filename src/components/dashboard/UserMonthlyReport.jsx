@@ -10,6 +10,7 @@ import { MonthYearPicker } from '../common/CustomCalendar';
 import SearchableSelect from '../common/SearchableSelect';
 import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
 import { getCurrentMonthYear, getDefaultRecentMonthYears } from '../../utils/rosterUtils';
+import { getFriendlyErrorMessage, showApiError } from '../../utils/errorMessages';
 
 const sortTeamWise = (a, b) => {
   const teamA = (a.team_name || "").trim();
@@ -117,7 +118,7 @@ const UserMonthlyReport = () => {
         }
       } catch (err) {
         console.error('Error fetching users:', err);
-        toast.error('Failed to load users');
+        showApiError(err);
         setUsers([]);
       } finally {
         setLoadingUsers(false);
@@ -144,7 +145,7 @@ const UserMonthlyReport = () => {
         setTeams(teamsData);
       } catch (err) {
         console.error('Error fetching teams:', err);
-        toast.error('Failed to load teams');
+        showApiError(err);
         setTeams([]);
       } finally {
         setLoadingTeams(false);
@@ -203,8 +204,8 @@ const UserMonthlyReport = () => {
       setLoading(false);
     } catch (err) {
       console.error('Error fetching report data:', err);
-      toast.error('Failed to fetch report data');
-      setError('Failed to fetch report data');
+      showApiError(err);
+      setError(getFriendlyErrorMessage(err));
       setLoading(false);
     }
   };

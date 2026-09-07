@@ -12,7 +12,7 @@ import { useDeviceInfo } from "../../../../hooks/useDeviceInfo";
 import DeleteUserModal from "./DeleteUserModal";
 import { deleteUser } from "../../../../services/authService";
 import LoadingSpinner from "../../../common/LoadingSpinner";
-import ErrorMessage from "../../../common/ErrorMessage";
+import { showApiError } from "../../../../utils/errorMessages";
 import SearchableSelect from "../../../common/SearchableSelect";
 import config from "../../../../config/environment";
 import { log, logError } from "../../../../config/environment";
@@ -86,7 +86,7 @@ const UsersManagement = ({
                     setTeamOptions(teamRes?.data || []);
                     setDesignationOptions(designationRes?.data || []);
                } catch (err) {
-                    toast.error("Failed to load dropdowns");
+                    showApiError(err);
                } finally {
                     setDropdownLoading(false);
                }

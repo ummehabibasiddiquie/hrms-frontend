@@ -14,7 +14,7 @@ import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { log, logError } from "../../config/environment";
-import { getFriendlyErrorMessage } from '../../utils/errorMessages';
+import { getFriendlyErrorMessage, showApiError } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
 import AppLayout from "../../layouts/AppLayout";
 import QATabsNavigation from "./QATabsNavigation";
@@ -232,7 +232,7 @@ const QAAgentDashboard = ({ embedded = false }) => {
     } catch (err) {
       logError('[QAAgentDashboard] Error fetching dashboard data:', err);
       setError(getFriendlyErrorMessage(err));
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setLoading(false);
     }

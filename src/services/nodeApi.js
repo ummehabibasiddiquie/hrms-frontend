@@ -1,6 +1,7 @@
 import axios from "axios";
 import config, { log, logError } from "../config/environment";
-import { getFriendlyErrorMessage } from "../utils/errorMessages";
+import { applyFriendlyNetworkError, getFriendlyErrorMessage } from "../utils/errorMessages";
+import { hideConnectionIssue } from "../utils/connectionStatus";
 
 const nodeApi = axios.create({
   baseURL: config.apiNodeBaseUrl,
@@ -31,6 +32,7 @@ nodeApi.interceptors.request.use(
   },
   (error) => {
     logError("[Node API Request Error]", error);
+    applyFriendlyNetworkError(error);
     return Promise.reject(error);
   }
 );
@@ -38,6 +40,7 @@ nodeApi.interceptors.request.use(
 nodeApi.interceptors.response.use(
   (response) => {
     log(`[Node API Response] ${response.config.url} - Status: ${response.status}`);
+    hideConnectionIssue();
     return response;
   },
   (error) => {
@@ -54,10 +57,8 @@ nodeApi.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    let friendlyMessage = getFriendlyErrorMessage(
-      error.response?.data?.code || error.response?.data?.message || error.message
-    );
-    error.friendlyMessage = friendlyMessage;
+    applyFriendlyNetworkError(error);
+    error.friendlyMessage = getFriendlyErrorMessage(error);
 
     return Promise.reject(error);
   }

@@ -9,7 +9,7 @@ import {
   updateHoliday,
   uploadHolidayExcel,
 } from "../../services/holidayService";
-import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { showApiError } from "../../utils/errorMessages";
 import LoadingSpinner from "../common/LoadingSpinner";
 import DeleteConfirmationModal from "../common/DeleteConfirmationModal";
 import TablePaginationBar from "../common/TablePaginationBar";
@@ -61,7 +61,7 @@ const HolidayMaster = ({ canModify = false }) => {
       });
       setHolidays(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
       setHolidays([]);
     } finally {
       setLoading(false);
@@ -127,7 +127,7 @@ const HolidayMaster = ({ canModify = false }) => {
       setModal(null);
       loadHolidays();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setSubmitting(false);
     }
@@ -142,7 +142,7 @@ const HolidayMaster = ({ canModify = false }) => {
       setDeleteTarget(null);
       loadHolidays();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setSubmitting(false);
     }
@@ -157,7 +157,7 @@ const HolidayMaster = ({ canModify = false }) => {
       toast.success(res.message || "Holidays uploaded");
       loadHolidays();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setUploading(false);
       e.target.value = "";

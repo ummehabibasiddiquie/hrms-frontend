@@ -6,7 +6,7 @@ import EditTaskModal from "./EditTaskModal";
 import TasksModal from "./TasksModal";
 import { useAuth } from "../../../../context/AuthContext";
 import { fetchProjectsList, updateProject } from "../../../../services/projectService";
-import { getFriendlyErrorMessage } from "../../../../utils/errorMessages";
+import { showApiError } from "../../../../utils/errorMessages";
 
 const ProjectDetailPanel = ({
   project,
@@ -43,7 +43,7 @@ const ProjectDetailPanel = ({
       toast.success(next === 1 ? "Project activated" : "Project deactivated");
       onStatusChanged?.(projectId, next);
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err) || "Failed to update project status");
+      showApiError(err, "Failed to update project status");
     } finally {
       setTogglingStatus(false);
     }

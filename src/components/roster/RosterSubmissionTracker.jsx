@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { listChangeRequests, withdrawDraftChangeRequest } from "../../services/rosterService";
-import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { showApiError } from "../../utils/errorMessages";
 import {
   statusBadgeClass,
   getCurrentMonthYear,
@@ -119,7 +119,7 @@ const RosterSubmissionTracker = ({
       setRequests(variant === "employee" ? rows.filter((r) => !isUnsubmittedDraft(r)) : rows);
       setPage(1);
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
       setRequests([]);
     } finally {
       setLoading(false);
@@ -207,7 +207,7 @@ const RosterSubmissionTracker = ({
       await loadRequests();
       onActionComplete?.();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setWithdrawingId("");
     }

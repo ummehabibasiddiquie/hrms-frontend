@@ -3,6 +3,12 @@ import { User, Lock, LogIn, Loader2, Eye, EyeOff, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import { loginUser, forgotPassword } from "../services/authService";
+import {
+  getFriendlyErrorMessage,
+  isNetworkError,
+  isTimeoutError,
+  reportConnectionIssue,
+} from "../utils/errorMessages";
 import { prefetchAgentGoalStatus } from "../services/agentGoalStatusService";
 import { useAuth } from "../context/AuthContext";
 import { useDeviceInfo } from "../hooks/useDeviceInfo";
@@ -86,9 +92,9 @@ const LoginPage = () => {
     setBackendUsernameError(""); // clear backend error
 
     if (!value.trim()) {
-      setUsernameError("Please enter your email");
+      setUsernameError("Enter your email");
     } else if (!isValidEmail(value)) {
-      setUsernameError("Please enter a valid email address");
+      setUsernameError("Enter a valid email");
     } else {
       setUsernameError("");
     }
@@ -100,9 +106,9 @@ const LoginPage = () => {
     setBackendPasswordError(""); // clear backend error
 
     if (!value.trim()) {
-      setPasswordError("Please enter your password");
+      setPasswordError("Enter your password");
     } else if (value.length < 6) {
-      setPasswordError("Password must be at least 6 characters");
+      setPasswordError("Password needs 6+ characters");
     } else {
       setPasswordError("");
     }
@@ -130,15 +136,15 @@ const LoginPage = () => {
       
       // Show toast for validation errors
       if (!username && !password) {
-        toast.error("Please enter your email and password", { duration: 3000 });
-        setUsernameError("Please enter your email");
-        setPasswordError("Please enter your password");
+        toast.error("Enter email and password", { duration: 3000 });
+        setUsernameError("Enter your email");
+        setPasswordError("Enter your password");
       } else if (!username) {
-        toast.error("Please enter your email", { duration: 3000 });
-        setUsernameError("Please enter your email");
+        toast.error("Enter your email", { duration: 3000 });
+        setUsernameError("Enter your email");
       } else if (!password) {
-        toast.error("Please enter your password", { duration: 3000 });
-        setPasswordError("Please enter your password");
+        toast.error("Enter your password", { duration: 3000 });
+        setPasswordError("Enter your password");
       } else if (usernameError) {
         toast.error(usernameError, { duration: 3000 });
       } else if (passwordError) {
@@ -160,14 +166,14 @@ const LoginPage = () => {
       
       if (!userData || !userData.user_id) {
         setIsLoading(false);
-        toast.error('Invalid response format from backend', { duration: 4000 });
+        toast.error("Login failed. Try again.", { duration: 4000 });
         return;
       }
       
       // Check if user account is active
       if (userData.is_active === 0 || userData.is_active === false) {
         setIsLoading(false);
-        toast.error("Your account is inactive. Please contact your admin.", { duration: 5000 });
+        toast.error("Account inactive. Contact admin.", { duration: 5000 });
         return;
       }
       
@@ -180,7 +186,7 @@ const LoginPage = () => {
         prefetchAgentGoalStatus(userData);
       }
 
-      toast.success("You are now logged in!", { duration: 4000 });
+      toast.success("Logged in", { duration: 3000 });
 
       // Role-based navigation after login
       if (roleId === 6) {
@@ -197,57 +203,48 @@ const LoginPage = () => {
       console.error('[LoginPage] Error response data:', err?.response?.data);
       console.error('[LoginPage] ========== END ERROR ==========');
       logError('[LoginPage] Login failed:', err);
-      
-      // Extract error message from various possible error formats
-      let message = "Invalid credentials";
-      
-      if (err?.response?.data?.message) {
-        message = err.response.data.message;
-      } else if (err?.response?.data?.error) {
-        message = err.response.data.error;
-      } else if (err?.message) {
-        message = err.message;
+
+      if (isNetworkError(err) || isTimeoutError(err)) {
+        reportConnectionIssue(err);
+        return;
       }
-      
-      console.log('[LoginPage] Error message extracted:', message);
-      
-      // Convert message to lowercase for checking
-      const lowerMessage = message.toLowerCase();
-      
-      // Show proper error messages in toast
-      if (lowerMessage.includes("email not found") || 
-          lowerMessage.includes("user not found") || 
-          lowerMessage.includes("email does not exist") ||
-          lowerMessage.includes("no user found") ||
-          lowerMessage.includes("user does not exist")) {
-        console.log('[LoginPage] Showing email not found error');
-        const toastId = toast.error("Email not found. Please check your email address.", { duration: 4000 });
-        console.log('[LoginPage] Toast ID:', toastId);
-        setBackendUsernameError("This email is not registered");
-      } else if (lowerMessage.includes("incorrect password") || 
-                 lowerMessage.includes("wrong password") ||
-                 lowerMessage.includes("invalid password") ||
-                 lowerMessage.includes("password is incorrect")) {
-        console.log('[LoginPage] Showing password error');
-        toast.error("Incorrect password. Please try again.", { duration: 4000 });
-        setBackendPasswordError("Password is incorrect");
-      } else if (lowerMessage.includes("invalid credentials") || 
-                 lowerMessage.includes("invalid email or password")) {
-        console.log('[LoginPage] Showing invalid credentials error');
-        toast.error("Invalid email or password. Please try again.", { duration: 4000 });
-        setBackendUsernameError("Invalid credentials");
-      } else if (lowerMessage.includes("email")) {
-        console.log('[LoginPage] Showing generic email error');
-        toast.error(message, { duration: 4000 });
-        setBackendUsernameError(message);
-      } else if (lowerMessage.includes("password")) {
-        console.log('[LoginPage] Showing generic password error');
-        toast.error(message, { duration: 4000 });
-        setBackendPasswordError(message);
+
+      let message = getFriendlyErrorMessage(err);
+      if (message === "Something went wrong. Try again.") {
+        message =
+          err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          "Login failed. Try again.";
+      }
+
+      const lowerMessage = String(message).toLowerCase();
+
+      if (
+        lowerMessage.includes("email not found") ||
+        lowerMessage.includes("user not found") ||
+        lowerMessage.includes("email does not exist") ||
+        lowerMessage.includes("no user found") ||
+        lowerMessage.includes("user does not exist")
+      ) {
+        toast.error("Email not found", { duration: 4000 });
+        setBackendUsernameError("Email not found");
+      } else if (
+        lowerMessage.includes("incorrect password") ||
+        lowerMessage.includes("wrong password") ||
+        lowerMessage.includes("invalid password") ||
+        lowerMessage.includes("password is incorrect")
+      ) {
+        toast.error("Wrong password", { duration: 4000 });
+        setBackendPasswordError("Wrong password");
+      } else if (
+        lowerMessage.includes("invalid credentials") ||
+        lowerMessage.includes("invalid email or password") ||
+        lowerMessage.includes("wrong email or password")
+      ) {
+        toast.error("Wrong email or password", { duration: 4000 });
+        setBackendUsernameError("Wrong email or password");
       } else {
-        // General error toast - show whatever message we have
-        console.log('[LoginPage] Showing general error');
-        toast.error(message || "Login failed. Please try again.", { duration: 4000 });
+        toast.error(message || "Login failed. Try again.", { duration: 4000 });
       }
     } finally {
       console.log('[LoginPage] Finally block, setting isLoading to false');
@@ -259,15 +256,15 @@ const LoginPage = () => {
   const handleForgotPassword = async () => {
     // Validate email is entered
     if (!username.trim()) {
-      setUsernameError("Please enter your email to reset password");
-      toast.error("Please enter your email address", { duration: 3000 });
+      setUsernameError("Enter your email to reset password");
+      toast.error("Enter your email", { duration: 3000 });
       return;
     }
 
     // Validate email format
     if (!isValidEmail(username)) {
-      setUsernameError("Please enter a valid email address");
-      toast.error("Please enter a valid email address", { duration: 3000 });
+      setUsernameError("Enter a valid email");
+      toast.error("Enter a valid email", { duration: 3000 });
       return;
     }
 
@@ -277,16 +274,19 @@ const LoginPage = () => {
       const response = await forgotPassword(username, device_id, device_type);
       
       if (response.status === 200) {
-        toast.success(
-          "Password reset link has been sent to your email. Please check your inbox and spam folder.",
-          { duration: 6000 }
-        );
+        toast.success("Reset link sent. Check your email.", { duration: 5000 });
       } else {
-        toast.error("Failed to send reset link. Please try again.", { duration: 4000 });
+        toast.error("Could not send reset link. Try again.", { duration: 4000 });
       }
     } catch (error) {
-      const errorMessage = error?.response?.data?.message || "Failed to send reset link. Please try again.";
-      toast.error(errorMessage, { duration: 5000 });
+      if (isNetworkError(error) || isTimeoutError(error)) {
+        reportConnectionIssue(error);
+        return;
+      }
+      toast.error(
+        getFriendlyErrorMessage(error) || "Could not send reset link. Try again.",
+        { duration: 4000 }
+      );
     } finally {
       setIsSendingResetLink(false);
     }

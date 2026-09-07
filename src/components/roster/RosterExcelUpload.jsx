@@ -8,7 +8,7 @@ import {
   previewRosterExcel,
   submitRosterBatch,
 } from "../../services/rosterService";
-import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { showApiError } from "../../utils/errorMessages";
 import { formatMonthYearLabel } from "../../utils/rosterUtils";
 import LoadingSpinner from "../common/LoadingSpinner";
 
@@ -93,7 +93,7 @@ const RosterExcelUpload = ({
         return current?.week_number || list[0]?.week_number || null;
       });
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
       setWeeks([]);
     } finally {
       setLoadingWeeks(false);
@@ -137,7 +137,7 @@ const RosterExcelUpload = ({
       triggerBlobDownload(blob, `Roster_${monthYear}_Week${weekNumber}.xlsx`);
       toast.success(`${selectedWeek?.short_label || `Week ${weekNumber}`} template downloaded`);
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setDownloading("");
     }
@@ -155,7 +155,7 @@ const RosterExcelUpload = ({
       triggerBlobDownload(blob, `Roster_${monthYear}_All_Weeks.xlsx`);
       toast.success("Full month template downloaded (Week 1–N sheets)");
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setDownloading("");
     }
@@ -225,7 +225,7 @@ const RosterExcelUpload = ({
         return;
       }
       setPreview(null);
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       if (previewAbortRef.current === controller) {
         previewAbortRef.current = null;
@@ -262,15 +262,13 @@ const RosterExcelUpload = ({
           );
         }
       } catch (submitErr) {
-        toast.error(
-          `Changes were applied, but submit failed: ${getFriendlyErrorMessage(submitErr)}`
-        );
+        showApiError(submitErr);
       }
 
       closeModal();
       onApplied?.();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setApplying(false);
     }
