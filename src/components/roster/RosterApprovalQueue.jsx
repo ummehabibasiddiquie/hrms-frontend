@@ -46,7 +46,7 @@ function notifyWeeklyRosterEmail(mailRows) {
     return;
   }
   if (rows.some((e) => e.deferred)) {
-    toast("Weekly roster email will send after all pending requests are reviewed");
+    toast("Weekly roster email waits until pending requests for that week are reviewed");
     return;
   }
   const reason = rows.find((e) => e.reason)?.reason;
@@ -275,7 +275,7 @@ const RosterApprovalQueue = ({
         if (approved > 0) {
           if (mailedWeeks) toast.success(`Weekly roster emailed for ${mailedWeeks} week(s)`);
           else if (deferredMail) {
-            toast("Weekly roster email will send after all pending requests are reviewed");
+            toast("Weekly roster email waits until pending requests for that week are reviewed");
           }
         }
         setSelectedIds(new Set());
