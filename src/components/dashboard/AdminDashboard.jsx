@@ -12,6 +12,7 @@ import BillableReport from "../common/BillableReport";
 import QATrackerReport from './QATrackerReport';
 import QAAgentList from './QAAgentList';
 import QAAgentAudit from './QAAgentAudit';
+import QAHoursTracker from "../QAAgentDashboard/QAHoursTracker";
 import { DateRangePicker } from '../common/CustomCalendar';
 import { useRoutedDashboardTab } from '../../hooks/useRoutedDashboardTab';
 import { formatISTDateTimeParts } from '../../utils/dateTimeIST';
@@ -393,6 +394,11 @@ const AdminDashboard = () => {
       {activeTab === 'agent_file_report' && (
         <div className="max-w-7xl mx-auto mt-6">
           <QAAgentList />
+        </div>
+      )}
+      {activeTab === 'qa_hours' && (
+        <div className="max-w-7xl mx-auto mt-6">
+          <QAHoursTracker mode="manager" />
         </div>
       )}
       {activeTab === 'qa_agent_audit' && (

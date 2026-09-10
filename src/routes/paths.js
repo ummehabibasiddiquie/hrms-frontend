@@ -40,6 +40,8 @@ export const ANALYTICS_TABS = [
   "mgmt_incentives",
   "my_roster",
   "audit_report",
+  "my_hours",
+  "qa_hours",
   "adherence",
 ];
 

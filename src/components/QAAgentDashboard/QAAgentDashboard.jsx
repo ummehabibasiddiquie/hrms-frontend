@@ -23,6 +23,7 @@ import QAFilterBar from "./QAFilterBar";
 import QAIndividualAuditReport from "./QAIndividualAuditReport";
 import QAAgentQCFormReport from "../dashboard/QAAgentQCFormReport";
 import QAAgentReworkCorrectionReview from "../dashboard/QAAgentReworkCorrectionReview";
+import QAHoursTracker from "./QAHoursTracker";
 import { useRoutedDashboardTab } from "../../hooks/useRoutedDashboardTab";
 import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
 
@@ -447,7 +448,9 @@ const QAAgentDashboard = ({ embedded = false }) => {
         )
       )}
       
-      {activeTab === 'billable_report' && <BillableReport />}
+      {activeTab === 'billable_report' && <BillableReport title="Agents Billable Report" />}
+      
+      {activeTab === 'my_hours' && <QAHoursTracker mode="self" />}
       
       {activeTab === 'audit_report' && <QAIndividualAuditReport />}
       

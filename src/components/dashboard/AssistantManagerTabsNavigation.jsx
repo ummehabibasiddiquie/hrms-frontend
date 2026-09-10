@@ -6,13 +6,14 @@ import {
   Briefcase,
   Users,
   FolderKanban,
-  DollarSign
+  Clock
 } from 'lucide-react';
 
 const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab, compact = false }) => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
+    { id: 'qa_hours', label: 'QA Report', icon: Clock },
     { id: 'user_monthly_report', label: 'User Monthly Goal', icon: Users },
     { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
   

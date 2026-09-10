@@ -20,7 +20,7 @@ import {
   getCurrentYyyyMm,
 } from "./CustomCalendar";
 
-const BillableReport = ({ userId }) => {
+const BillableReport = ({ userId, title = "Billable Report" }) => {
   // Device info (declare once at top)
   const { device_id, device_type } = useDeviceInfo();
 
@@ -720,7 +720,7 @@ const BillableReport = ({ userId }) => {
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
-          <h2 className="font-bold text-white text-2xl">Billable Report</h2>
+          <h2 className="font-bold text-white text-2xl">{title}</h2>
           <p className="text-blue-100 text-sm mt-1">
             View daily and monthly billable hours and performance metrics
           </p>
