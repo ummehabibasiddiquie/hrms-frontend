@@ -40,7 +40,8 @@ const UserMonthlyReport = () => {
   const isAssistantManager =
     roleId === 4 || normalizedRole.includes('assistant') || designation.includes('assistant');
   const canManageAssignedHours = isAssistantManager || isProjectManager || isAdmin || isSuperAdmin;
-  const canEditMonthlyBaseline = canManageAssignedHours;
+  // Monthly target is set by roster generate and is not edited afterwards.
+  const canEditMonthlyBaseline = false;
   const canEditExtraHours = canManageAssignedHours;
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
   const canViewTeamColumn = isAdmin || isSuperAdmin || isProjectManager;
@@ -272,7 +273,12 @@ const UserMonthlyReport = () => {
     }
     const extraHours = parseFloat(editData.extra_assign_hours);
     if (canEditExtraHours && Number.isNaN(extraHours)) {
-      toast.error('Enter valid extra assigned hours');
+      toast.error('Enter valid extra assigned hours (use a minus value to reduce the goal, e.g. -18)');
+      return;
+    }
+    const currentTarget = parseFloat(editData.monthly_target ?? 0);
+    if (canEditExtraHours && !Number.isNaN(currentTarget) && currentTarget + extraHours < 0) {
+      toast.error('Extra assigned hours cannot reduce the monthly goal below 0');
       return;
     }
 
@@ -786,7 +792,7 @@ const UserMonthlyReport = () => {
                               <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider border border-blue-500">Team</th>
                             )}
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Monthly Target</th>
-                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Extra Assign Hours</th>
+                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Extra Assign Hours<br /><span className="normal-case font-medium opacity-80">use minus to reduce, e.g. -18</span></th>
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Working Days</th>
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Actions</th>
                           </tr>
@@ -828,11 +834,12 @@ const UserMonthlyReport = () => {
                                     <td className="px-6 py-4 border border-slate-300">
                                       {canEditExtraHours ? (
                                         <input
-                                          type="text"
+                                          type="number"
                                           name="extra_assign_hours"
+                                          step="0.01"
                                           value={editData.extra_assign_hours}
                                           onChange={handleEditDataChange}
-                                          placeholder="Enter hours"
+                                          placeholder="-18 to reduce"
                                           className="w-full bg-white border-2 border-indigo-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
                                         />
                                       ) : (
