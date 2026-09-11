@@ -190,6 +190,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
   const [endDate, setEndDate] = useState(today);
   const [qaUserId, setQaUserId] = useState("");
   const [addQaUserId, setAddQaUserId] = useState("");
+  const [addWorkDate, setAddWorkDate] = useState(today);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -352,6 +353,12 @@ const QAHoursTracker = ({ mode = "self" }) => {
       toast.error("Select Feedback or Reporting");
       return;
     }
+    const entryDate = isManager ? (addWorkDate || today) : today;
+    const todayIso = todayISTISO() || today;
+    if (entryDate > todayIso) {
+      toast.error("Tracker cannot be added for a future date");
+      return;
+    }
     if (isManager && !addQaUserId) {
       toast.error("Select a QA to add hours for");
       return;
@@ -364,7 +371,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
     try {
       const res = await addQATrackerEntry({
         logged_in_user_id: userId,
-        work_date: today,
+        work_date: entryDate,
         qa_user_id: targetQaUserId,
         activity_type: entryType,
         hours,
@@ -377,8 +384,8 @@ const QAHoursTracker = ({ mode = "self" }) => {
       setEntryHours("");
       setEntryNotes("");
       toast.success("Hours added");
-      setStartDate((prev) => (today < prev ? today : prev));
-      setEndDate((prev) => (today > prev ? today : prev));
+      setStartDate((prev) => (entryDate < prev ? entryDate : prev));
+      setEndDate((prev) => (entryDate > prev ? entryDate : prev));
       loadEntries({ silent: true });
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err));
@@ -418,6 +425,11 @@ const QAHoursTracker = ({ mode = "self" }) => {
     }
     if (!Number.isFinite(hours) || hours <= 0) {
       toast.error("Enter hours greater than 0");
+      return;
+    }
+    const todayIso = todayISTISO() || today;
+    if (editEntry.work_date && editEntry.work_date > todayIso) {
+      toast.error("Tracker cannot be added for a future date");
       return;
     }
     setSaving(true);
@@ -530,7 +542,9 @@ const QAHoursTracker = ({ mode = "self" }) => {
                   : `${row.qa_user_id}-${row.month_year}`;
                 const open = expanded[key];
                 const weekend = showDate && isWeekendIso(row.work_date);
-                const selected = showDate && row.work_date === workDate;
+                // Self daily only: highlight the day whose details are open.
+                // Manager All QA must not paint every QA on that date a different color.
+                const selected = showDate && !showQaName && row.work_date === workDate;
                 return (
                   <React.Fragment key={key}>
                     <tr
@@ -561,7 +575,9 @@ const QAHoursTracker = ({ mode = "self" }) => {
                         <td className={`px-4 py-3 font-semibold whitespace-pre-line ${weekend ? "text-red-600 font-bold" : "text-slate-800"}`}>
                           <button
                             type="button"
-                            onClick={() => selectWorkDate(row.work_date, key)}
+                            onClick={() =>
+                              showQaName ? toggleExpand(key) : selectWorkDate(row.work_date, key)
+                            }
                             className="inline-flex items-center gap-1 text-left"
                           >
                             {!showQaName ? (open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />) : null}
@@ -696,16 +712,22 @@ const QAHoursTracker = ({ mode = "self" }) => {
             <div className="border-b border-slate-200 bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3">
               <h3 className="text-base font-bold text-white">Add Feedback / Reporting</h3>
               <p className="text-xs font-medium text-blue-100">
-                {isManager ? "Managers can edit any entry. QA can delete their own entry within 24 hours." : "You can delete your own entry within 24 hours."}
+                {isManager
+                  ? "You can add a past date for a QA. QA can delete their own entry within 24 hours."
+                  : "You can add for today only and delete your own entry within 24 hours."}
               </p>
             </div>
             <div className="px-4 py-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-                <div className="sm:w-44">
+                <div className="sm:w-48">
                   <label className="mb-1 block text-xs font-semibold text-slate-500">Date</label>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800">
-                    {formatISTDateMedium(today, today)}
-                  </div>
+                  {isManager ? (
+                    <SingleDatePicker value={addWorkDate} onChange={setAddWorkDate} />
+                  ) : (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800">
+                      {formatISTDateMedium(today, today)}
+                    </div>
+                  )}
                 </div>
                 {isManager ? (
                   <div className="w-full lg:w-56">

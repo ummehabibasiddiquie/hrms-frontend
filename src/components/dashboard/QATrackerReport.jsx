@@ -26,7 +26,7 @@ import {
 import TaskEODReport from "./TaskEODReport";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
 import SubTabsBar from "../common/SubTabsBar";
-import { formatISTDateTimeParts, getISTParts } from "../../utils/dateTimeIST";
+import { formatISTDateTimeParts, getISTParts, todayISTISO } from "../../utils/dateTimeIST";
 
 
 // Project 12: all current and future tasks can enter production above 2x base target
@@ -740,10 +740,10 @@ const QATrackerReport = () => {
       case 'tracker_datetime':
         if (!value) newErrors.tracker_datetime = 'Date & Time is required';
         else {
-          const selectedDate = new Date(value);
-          const now = new Date();
-          if (selectedDate > now) {
-            newErrors.tracker_datetime = 'Future date & time not allowed';
+          const selectedDay = String(value).slice(0, 10);
+          const today = todayISTISO() || getTodayDate();
+          if (selectedDay > today) {
+            newErrors.tracker_datetime = 'Future date not allowed';
           } else {
             delete newErrors.tracker_datetime;
           }
@@ -813,10 +813,10 @@ const QATrackerReport = () => {
     if (!addFormData.tracker_datetime) {
       errors.tracker_datetime = 'Date & Time is required';
     } else {
-      const selectedDate = new Date(addFormData.tracker_datetime);
-      const now = new Date();
-      if (selectedDate > now) {
-        errors.tracker_datetime = 'Future date & time not allowed';
+      const selectedDay = String(addFormData.tracker_datetime).slice(0, 10);
+      const today = todayISTISO() || getTodayDate();
+      if (selectedDay > today) {
+        errors.tracker_datetime = 'Future date not allowed';
       }
     }
     if (!addFormData.project_id) errors.project_id = 'Project is required';
@@ -1148,6 +1148,12 @@ const QATrackerReport = () => {
 
     if (!editFormData.tracker_datetime || !editFormData.project_id || !editFormData.task_id || !editFormData.production) {
       toast.error("Please fill all required fields");
+      return;
+    }
+    const editDay = String(editFormData.tracker_datetime).slice(0, 10);
+    const today = todayISTISO() || getTodayDate();
+    if (editDay > today) {
+      toast.error("Tracker cannot be added for a future date");
       return;
     }
 
