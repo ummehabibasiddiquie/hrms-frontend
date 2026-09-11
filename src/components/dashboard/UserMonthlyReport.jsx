@@ -37,10 +37,11 @@ const UserMonthlyReport = () => {
   const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === 'admin' || designation.includes('admin'));
   const isProjectManager =
     roleId === 3 || normalizedRole.includes('project manager') || designation.includes('project manager');
-  const isAssistantManager =
-    roleId === 4 || normalizedRole.includes('assistant') || designation.includes('assistant');
   const isTeamLeader =
     roleId === 7 || normalizedRole.includes('team leader') || designation.includes('team leader');
+  const isAssistantManager =
+    !isTeamLeader &&
+    (roleId === 4 || normalizedRole.includes('assistant') || designation.includes('assistant'));
   const canManageAssignedHours = (isAssistantManager || isProjectManager || isAdmin || isSuperAdmin) && !isTeamLeader;
   // Monthly target is set by roster generate and is not edited afterwards.
   const canEditMonthlyBaseline = false;

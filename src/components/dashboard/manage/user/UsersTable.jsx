@@ -154,7 +154,7 @@ const UsersTable = ({
                       return <span className="text-slate-400 text-xs italic">-</span>;
                     }
 
-                    if (["TEAM_LEADER", "TEAMLEADER", "TEAM LEADER"].includes(role.replace(/[_\s]/g, ''))) {
+                    if (role.replace(/[_\s]/g, '').includes("TEAMLEADER")) {
                       const names = [];
                       if (u.project_manager_names) {
                         names.push(...parseNamesString(u.project_manager_names));

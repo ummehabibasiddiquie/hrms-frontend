@@ -75,7 +75,7 @@ const UsersManagement = ({
                     const [rolesRes, asstMgrRes, teamLeaderRes, projectMgrRes, qaRes, teamRes, designationRes] = await Promise.all([
                          fetchDropdownOptions("user roles", userId),
                          fetchDropdownOptions("assistant manager", userId),
-                         fetchDropdownOptions("team leader", userId),
+                         fetchDropdownOptions("assistant team leader", userId),
                          fetchDropdownOptions("project manager", userId),
                          fetchDropdownOptions("qa", userId),
                          fetchDropdownOptions("teams", userId),

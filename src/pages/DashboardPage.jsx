@@ -93,8 +93,12 @@ const DashboardPage = ({
       designationText.includes('admin'));
   const isAgent = roleId === 6 || String(role).toLowerCase() === 'agent' || String(userRole).toUpperCase() === 'AGENT' || String(designation).toLowerCase() === 'agent';
   const isQA = roleId === 5 || String(currentUser?.user_designation).toLowerCase() === 'qa' || String(designation).toLowerCase() === 'qa' || String(role).toLowerCase().includes('qa');
-  const isAssistantManager = roleId === 4 || String(designation).toLowerCase() === 'assistant manager' || String(role).toLowerCase().includes('assistant');
   const isTeamLeader = roleId === 7 || String(role).toLowerCase().includes('team leader') || String(designation).toLowerCase().includes('team leader');
+  const isAssistantManager =
+    !isTeamLeader &&
+    (roleId === 4 ||
+      String(designation).toLowerCase() === 'assistant manager' ||
+      String(role).toLowerCase().includes('assistant'));
   const canViewAsAm = isAssistantManager || isTeamLeader;
   const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
   const canViewTrackerReport = isQA || canViewAsAm || isProjectManager;

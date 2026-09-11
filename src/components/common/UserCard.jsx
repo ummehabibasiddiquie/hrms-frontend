@@ -51,23 +51,24 @@ export default function UserCard({
     roleId === 3 ||
     normalizedRole.includes("PROJECT_MANAGER") ||
     normalizedRole.includes("PROJECT MANAGER");
-  const isAssistantManager =
-    roleId === 4 ||
-    normalizedRole.includes("ASSISTANT") ||
-    normalizedRole.includes("ASST") ||
-    normalizedDesignation.includes("ASSISTANT") ||
-    normalizedDesignation.includes("ASST");
   const isTeamLeader =
     roleId === 7 ||
     normalizedRole.includes("TEAM LEADER") ||
     normalizedDesignation.includes("TEAM LEADER");
+  const isAssistantManager =
+    !isTeamLeader &&
+    (roleId === 4 ||
+      normalizedRole.includes("ASSISTANT") ||
+      normalizedRole.includes("ASST") ||
+      normalizedDesignation.includes("ASSISTANT") ||
+      normalizedDesignation.includes("ASST"));
   
   const isQA =
     roleId === 5 ||
     normalizedRole.includes("QA") ||
     normalizedDesignation.includes("QA");
 
-  // Assigned hours edit: Super Admin, Admin, Project Manager, Assistant Manager only (not QA / Team Leader).
+  // Assigned hours edit: Super Admin, Admin, Project Manager, Assistant Manager only (not QA / Assistant Team Leader).
   const canSeeActions =
     !isQA && !isTeamLeader && (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager);
 

@@ -69,7 +69,7 @@ export const fetchUserDropdowns = async (userId = null) => {
                fetchDropdown("teams", userId),
                fetchDropdown("project manager", userId),
                fetchDropdown("assistant manager", userId),
-               fetchDropdown("team leader", userId),
+               fetchDropdown("assistant team leader", userId),
                fetchDropdown("qa", userId),
                fetchDropdown("agent", userId),
                fetchDropdown("project categories", userId),

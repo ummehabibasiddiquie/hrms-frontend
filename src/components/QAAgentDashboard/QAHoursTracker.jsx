@@ -1077,7 +1077,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
           </div>
           ) : isManager ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
-              View only — Team Leader cannot add or edit tracker hours.
+              View only — Assistant Team Leader cannot add or edit tracker hours.
             </div>
           ) : null}
 

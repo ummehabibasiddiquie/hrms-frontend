@@ -194,17 +194,20 @@ export const AuthProvider = ({ children }) => {
       roleName.includes('project manager') || 
       designation.includes('project manager');
     
-    const isAssistantManager = 
-      roleId === 4 || 
-      designation.includes('assistant') || 
-      designation.includes('asst') ||
-      roleName.includes('assistant') ||
-      roleName.includes('asst');
-
     const isTeamLeader =
       roleId === 7 ||
       roleName.includes('team leader') ||
       designation.includes('team leader');
+
+    // Must not treat "assistant team leader" as Assistant Manager
+    const isAssistantManager =
+      !isTeamLeader && (
+        roleId === 4 ||
+        designation.includes('assistant') ||
+        designation.includes('asst') ||
+        roleName.includes('assistant') ||
+        roleName.includes('asst')
+      );
 
     // Calculate permissions
     const calculatedPermissions = {

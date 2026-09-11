@@ -15,10 +15,11 @@ export function useRosterRoles() {
       !isSuperAdmin && (roleId === 2 || role === "admin" || designation.includes("admin"));
     const isProjectManager =
       roleId === 3 || role.includes("project manager") || designation.includes("project manager");
-    const isAssistantManager =
-      roleId === 4 || role.includes("assistant") || designation.includes("assistant");
     const isTeamLeader =
       roleId === 7 || role.includes("team leader") || designation.includes("team leader");
+    const isAssistantManager =
+      !isTeamLeader &&
+      (roleId === 4 || role.includes("assistant") || designation.includes("assistant"));
     const isQA =
       roleId === 5 || role.includes("qa") || designation === "qa";
     const isAgent =

@@ -81,7 +81,7 @@ const AddUserFormModal = ({
      /**
       * Role-based field visibility configuration
       * Role IDs: 1=Super Admin, 2=Admin, 3=Project Manager, 4=Assistant Manager,
-      * 5=QA, 6=Agent, 7=Team Leader
+      * 5=QA, 6=Agent, 7=Assistant Team Leader
       */
      const getFieldVisibility = (selectedRoleId) => {
           const roleId = Number(selectedRoleId);
@@ -114,7 +114,7 @@ const AddUserFormModal = ({
                };
           }
 
-          // Assistant Manager (4): optional PM, no AM/TL/QA
+          // Assistant Manager (4)
           if (roleId === 4) {
                return {
                     projectManager: optional,
@@ -127,7 +127,7 @@ const AddUserFormModal = ({
                };
           }
 
-          // Team Leader (7): optional PM and AM (not required)
+          // Assistant Team Leader (7): optional PM and AM (not required)
           if (roleId === 7) {
                return {
                     projectManager: optional,
@@ -355,7 +355,7 @@ const AddUserFormModal = ({
           // Validate teamLeaders (array - only if visible and required for this role)
           if (visibility.teamLeader?.visible && visibility.teamLeader.required) {
                if (!newUser.teamLeaders || newUser.teamLeaders.length === 0) {
-                    errors.teamLeaders = "Please select at least one Team Leader";
+                    errors.teamLeaders = "Please select at least one Assistant Team Leader";
                }
           }
 
@@ -748,11 +748,11 @@ const AddUserFormModal = ({
                                    </div>
                               )}
 
-                              {/* Team Leader Selection - Conditionally visible - MULTI SELECT */}
+                              {/* Assistant Team Leader Selection - Conditionally visible - MULTI SELECT */}
                               {fieldVisibility.teamLeader?.visible && (
                                    <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                             Team Leader {fieldVisibility.teamLeader.required && <span className="text-red-600">*</span>}
+                                             Assistant Team Leader {fieldVisibility.teamLeader.required && <span className="text-red-600">*</span>}
                                         </label>
                                         <MultiSelectWithCheckbox
                                              value={newUser.teamLeaders || []}
@@ -762,7 +762,7 @@ const AddUserFormModal = ({
                                              }}
                                              options={teamLeaders.map(tl => ({ value: String(tl.user_id), label: tl.label }))}
                                              icon={Users}
-                                             placeholder="Select Team Leaders"
+                                             placeholder="Select Assistant Team Leaders"
                                              disabled={isDropdownLoading}
                                              error={hasError("teamLeaders")}
                                              errorMessage={getErrorMessage("teamLeaders")}
