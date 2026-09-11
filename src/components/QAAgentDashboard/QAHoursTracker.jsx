@@ -146,6 +146,7 @@ const fillMonthDays = (rows, yyyyMm, todayIso, qaUserId) => {
         qc_records: 0,
         file_records: 0,
         projects: [],
+        manual_entries: [],
       }
     );
   }
@@ -604,38 +605,143 @@ const QAHoursTracker = ({ mode = "self" }) => {
                       <td className="px-4 py-3 text-right">{(row.qc_files || 0) + (row.rework_files || 0)}</td>
                       <td className="px-4 py-3 text-right">{row.qc_records || 0}</td>
                     </tr>
-                    {open && (row.projects || []).length > 0 && (
+                    {open && (() => {
+                      const projects = row.projects || [];
+                      const manuals = (row.manual_entries || [])
+                        .filter((e) => Number(e.hours) > 0)
+                        .slice()
+                        .sort((a, b) => String(a.work_date || "").localeCompare(String(b.work_date || "")));
+                      const fallbackManuals = [];
+                      if (manuals.length === 0) {
+                        if (Number(row.feedback_hours) > 0) {
+                          fallbackManuals.push({
+                            qa_tracker_id: `fb-${key}`,
+                            activity_type: "feedback",
+                            hours: row.feedback_hours,
+                            notes: "",
+                            work_date: row.work_date || "",
+                          });
+                        }
+                        if (Number(row.reporting_hours) > 0) {
+                          fallbackManuals.push({
+                            qa_tracker_id: `rp-${key}`,
+                            activity_type: "reporting",
+                            hours: row.reporting_hours,
+                            notes: "",
+                            work_date: row.work_date || "",
+                          });
+                        }
+                      }
+                      const manualRows = manuals.length > 0 ? manuals : fallbackManuals;
+                      if (projects.length === 0 && manualRows.length === 0) {
+                        return (
+                          <tr className="bg-slate-50">
+                            <td colSpan={14} className="px-6 py-3 text-sm text-slate-500">
+                              No QC, Feedback, or Reporting details for this {showMonth ? "month" : "day"}.
+                            </td>
+                          </tr>
+                        );
+                      }
+                      return (
                       <tr className="bg-slate-50">
-                        <td colSpan={14} className="px-6 py-3">
-                          <table className="min-w-full text-xs">
-                            <thead>
-                              <tr className="text-slate-500">
-                                <th className="py-1 text-left">Project</th>
-                                <th className="py-1 text-left">Task</th>
-                                <th className="py-1 text-right">QC Hours</th>
-                                <th className="py-1 text-right">Rework Hour</th>
-                                <th className="py-1 text-right">Files</th>
-                                <th className="py-1 text-right">File Record</th>
-                                <th className="py-1 text-right">QC Record</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {row.projects.map((p) => (
-                                <tr key={`${p.project_id}-${p.task_id}`}>
-                                  <td className="py-1">{p.project_name}</td>
-                                  <td className="py-1">{p.task_name}</td>
-                                  <td className="py-1 text-right">{fmt(p.qc_hours)}</td>
-                                  <td className="py-1 text-right">{fmt(p.rework_hours)}</td>
-                                  <td className="py-1 text-right">{p.files}</td>
-                                  <td className="py-1 text-right">{p.file_records}</td>
-                                  <td className="py-1 text-right">{p.qc_records}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        <td colSpan={14} className="px-6 py-3 space-y-4">
+                          {projects.length > 0 ? (
+                            <div>
+                              <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">QC work</p>
+                              <table className="min-w-full text-xs">
+                                <thead>
+                                  <tr className="text-slate-500">
+                                    <th className="py-1 text-left">Project</th>
+                                    <th className="py-1 text-left">Task</th>
+                                    <th className="py-1 text-right">QC Hours</th>
+                                    <th className="py-1 text-right">Rework Hour</th>
+                                    <th className="py-1 text-right">Files</th>
+                                    <th className="py-1 text-right">File Record</th>
+                                    <th className="py-1 text-right">QC Record</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {projects.map((p) => (
+                                    <tr key={`${p.project_id}-${p.task_id}`}>
+                                      <td className="py-1">{p.project_name}</td>
+                                      <td className="py-1">{p.task_name}</td>
+                                      <td className="py-1 text-right">{fmt(p.qc_hours)}</td>
+                                      <td className="py-1 text-right">{fmt(p.rework_hours)}</td>
+                                      <td className="py-1 text-right">{p.files}</td>
+                                      <td className="py-1 text-right">{p.file_records}</td>
+                                      <td className="py-1 text-right">{p.qc_records}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : null}
+                          {manualRows.length > 0 ? (
+                            <div>
+                              <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                                Feedback / Reporting
+                              </p>
+                              <table className="min-w-full text-xs">
+                                {showMonth ? (
+                                  <>
+                                    <thead>
+                                      <tr className="text-slate-500">
+                                        <th className="py-1 text-left">Type</th>
+                                        <th className="py-1 text-right">Hours</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {[
+                                        { key: "feedback", hours: row.feedback_hours },
+                                        { key: "reporting", hours: row.reporting_hours },
+                                      ]
+                                        .filter((item) => Number(item.hours) > 0)
+                                        .map((item) => (
+                                          <tr key={item.key}>
+                                            <td className="py-1 font-semibold text-slate-800">
+                                              {activityLabel(item.key)}
+                                            </td>
+                                            <td className="py-1 text-right font-bold">{fmt(item.hours)}h</td>
+                                          </tr>
+                                        ))}
+                                    </tbody>
+                                  </>
+                                ) : (
+                                  <>
+                                    <thead>
+                                      <tr className="text-slate-500">
+                                        <th className="py-1 text-left">Type</th>
+                                        <th className="py-1 text-right">Hours</th>
+                                        <th className="py-1 text-left">Note</th>
+                                        <th className="py-1 text-left">Added</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {manualRows.map((entry) => {
+                                        const added = formatISTDateTimeParts(entry.created_at);
+                                        return (
+                                          <tr key={entry.qa_tracker_id}>
+                                            <td className="py-1 font-semibold text-slate-800">
+                                              {activityLabel(entry.activity_type)}
+                                            </td>
+                                            <td className="py-1 text-right font-bold">{fmt(entry.hours)}h</td>
+                                            <td className="py-1 text-slate-600">{entry.notes || "—"}</td>
+                                            <td className="py-1 text-slate-500">
+                                              {added.time || "—"}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </>
+                                )}
+                              </table>
+                            </div>
+                          ) : null}
                         </td>
                       </tr>
-                    )}
+                      );
+                    })()}
                   </React.Fragment>
                 );
               })
