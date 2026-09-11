@@ -57,15 +57,19 @@ export default function UserCard({
     normalizedRole.includes("ASST") ||
     normalizedDesignation.includes("ASSISTANT") ||
     normalizedDesignation.includes("ASST");
+  const isTeamLeader =
+    roleId === 7 ||
+    normalizedRole.includes("TEAM LEADER") ||
+    normalizedDesignation.includes("TEAM LEADER");
   
   const isQA =
     roleId === 5 ||
     normalizedRole.includes("QA") ||
     normalizedDesignation.includes("QA");
 
-  // Assigned hours edit: Super Admin, Admin, Project Manager, Assistant Manager only (not QA).
+  // Assigned hours edit: Super Admin, Admin, Project Manager, Assistant Manager only (not QA / Team Leader).
   const canSeeActions =
-    !isQA && (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager);
+    !isQA && !isTeamLeader && (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager);
 
   const rowAllowsManualQc = (row) => {
     const v = row?.can_manual_qc ?? row?.canManualQc;

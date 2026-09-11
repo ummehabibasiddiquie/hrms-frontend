@@ -39,14 +39,67 @@ import {
   updateQATrackerEntry,
 } from "../../services/qaTrackerService";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { fetchDropdown } from "../../services/dropdownService";
 
-const ACTIVITY_OPTIONS = [
-  { value: "feedback", label: "Feedback & Training" },
-  { value: "reporting", label: "Reporting & Other" },
+const KIND_OPTIONS = [
+  { value: "feedback", label: "Feedback" },
+  { value: "training", label: "Training" },
+  { value: "reporting", label: "Reporting" },
+  { value: "other", label: "Other" },
 ];
 
-const activityLabel = (type) =>
-  ACTIVITY_OPTIONS.find((o) => o.value === type)?.label || type;
+const kindToActivity = (kind) =>
+  kind === "feedback" || kind === "training" ? "feedback" : "reporting";
+
+const kindLabel = (kind) =>
+  KIND_OPTIONS.find((o) => o.value === kind)?.label || kind || "—";
+
+const getEntryKind = (entry) => {
+  const sub = String(entry?.sub_activity || "").trim().toLowerCase();
+  if (["feedback", "training", "reporting", "other"].includes(sub)) return sub;
+  const type = String(entry?.activity_type || "").trim().toLowerCase();
+  if (["feedback", "training", "reporting", "other"].includes(type)) return type;
+  return "";
+};
+
+const entryDetail = (entry) => {
+  if (!entry) return "";
+  if (entry.detail) return entry.detail;
+  const kind = getEntryKind(entry);
+  if (kind === "feedback" || kind === "training") return entry.agent_name || "";
+  if (kind === "reporting") return entry.project_name || "";
+  if (kind === "other") return entry.notes || "";
+  return entry.notes || "";
+};
+
+const detailColumnLabel = (kind) => {
+  if (kind === "feedback" || kind === "training") return "Agent";
+  if (kind === "reporting") return "Project";
+  if (kind === "other") return "Work";
+  return "Detail";
+};
+
+const aggregateManualMonth = (manuals) => {
+  const map = new Map();
+  (manuals || []).forEach((e) => {
+    const kind = getEntryKind(e);
+    const detail = entryDetail(e);
+    const key = `${kind}|${String(e.agent_id || "")}|${String(e.project_id || "")}|${
+      kind === "other" ? String(detail).trim().toLowerCase() : ""
+    }`;
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        activity_type: kindToActivity(kind),
+        sub_activity: kind,
+        detail,
+        hours: 0,
+      });
+    }
+    map.get(key).hours += Number(e.hours) || 0;
+  });
+  return Array.from(map.values()).filter((r) => r.hours > 0);
+};
 
 const fmt = (value, digits = 2) => {
   const n = Number(value);
@@ -177,10 +230,11 @@ const clampDateToMonth = (dateStr, yyyyMm, fallback) => {
 };
 
 const QAHoursTracker = ({ mode = "self" }) => {
-  const { user } = useAuth();
+  const { user, isReadOnly } = useAuth();
   const userId = user?.user_id || user?.id;
   const today = useMemo(() => todayISTISO() || new Date().toISOString().slice(0, 10), []);
   const isManager = mode === "manager";
+  const canAddHours = isManager ? !isReadOnly : true;
   const currentMonth = getCurrentYyyyMm();
   const defaultMonth = currentMonth;
 
@@ -201,9 +255,14 @@ const QAHoursTracker = ({ mode = "self" }) => {
   const [entries, setEntries] = useState([]);
   const [monthYearLabel, setMonthYearLabel] = useState("");
   const [qaUsers, setQaUsers] = useState([]);
-  const [entryType, setEntryType] = useState("feedback");
+  const [entryKind, setEntryKind] = useState("feedback");
   const [entryHours, setEntryHours] = useState("");
   const [entryNotes, setEntryNotes] = useState("");
+  const [entryAgentId, setEntryAgentId] = useState("");
+  const [entryProjectId, setEntryProjectId] = useState("");
+  const [entryDetailText, setEntryDetailText] = useState("");
+  const [agentOptions, setAgentOptions] = useState([]);
+  const [projectOptions, setProjectOptions] = useState([]);
   const [expanded, setExpanded] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [editEntry, setEditEntry] = useState(null);
@@ -345,13 +404,60 @@ const QAHoursTracker = ({ mode = "self" }) => {
     loadDay();
   }, [userId, isManager, activeToggle, loadDay]);
 
+  useEffect(() => {
+    if (!userId) return;
+    const dropdownUserId = isManager
+      ? Number(editEntry?.qa_user_id || addQaUserId || 0)
+      : userId;
+    if (!dropdownUserId) {
+      setAgentOptions([]);
+      setProjectOptions([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const [agents, projects] = await Promise.all([
+        fetchDropdown("agent", dropdownUserId),
+        fetchDropdown("projects with tasks", dropdownUserId),
+      ]);
+      if (cancelled) return;
+      setAgentOptions(
+        (Array.isArray(agents) ? agents : []).map((a) => ({
+          value: String(a.user_id),
+          label: a.label || a.user_name,
+        }))
+      );
+      setProjectOptions(
+        (Array.isArray(projects) ? projects : []).map((p) => ({
+          value: String(p.project_id),
+          label: p.project_name || p.label,
+        }))
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, isManager, addQaUserId, editEntry?.qa_user_id]);
+
   const targetQaUserId = isManager ? Number(addQaUserId) : userId;
 
   const handleAddEntry = async () => {
-    if (!userId) return;
+    if (!userId || isReadOnly) return;
     const hours = Number(entryHours);
-    if (!entryType) {
-      toast.error("Select Feedback or Reporting");
+    if (!entryKind) {
+      toast.error("Select Feedback, Training, Reporting, or Other");
+      return;
+    }
+    if ((entryKind === "feedback" || entryKind === "training") && !entryAgentId) {
+      toast.error("Select an agent");
+      return;
+    }
+    if (entryKind === "reporting" && !entryProjectId) {
+      toast.error("Select a project");
+      return;
+    }
+    if (entryKind === "other" && !String(entryDetailText || "").trim()) {
+      toast.error("Enter what you did");
       return;
     }
     const entryDate = isManager ? (addWorkDate || today) : today;
@@ -374,9 +480,15 @@ const QAHoursTracker = ({ mode = "self" }) => {
         logged_in_user_id: userId,
         work_date: entryDate,
         qa_user_id: targetQaUserId,
-        activity_type: entryType,
+        activity_type: entryKind,
+        sub_activity: entryKind,
         hours,
-        notes: entryNotes,
+        notes: entryKind === "other" ? entryDetailText : entryNotes,
+        agent_id:
+          entryKind === "feedback" || entryKind === "training"
+            ? Number(entryAgentId)
+            : null,
+        project_id: entryKind === "reporting" ? Number(entryProjectId) : null,
       });
       if (res.status !== 200) {
         throw new Error(res.message || "Failed to add hours");
@@ -384,6 +496,9 @@ const QAHoursTracker = ({ mode = "self" }) => {
       if (res.data) setDayData(res.data);
       setEntryHours("");
       setEntryNotes("");
+      setEntryAgentId("");
+      setEntryProjectId("");
+      setEntryDetailText("");
       toast.success("Hours added");
       setStartDate((prev) => (entryDate < prev ? entryDate : prev));
       setEndDate((prev) => (entryDate > prev ? entryDate : prev));
@@ -420,8 +535,21 @@ const QAHoursTracker = ({ mode = "self" }) => {
   const handleUpdateEntry = async () => {
     if (!userId || !editEntry?.qa_tracker_id) return;
     const hours = Number(editEntry.hours);
-    if (!editEntry.activity_type) {
-      toast.error("Select Feedback or Reporting");
+    const kind = getEntryKind(editEntry) || editEntry.sub_activity || editEntry.activity_type;
+    if (!kind || !["feedback", "training", "reporting", "other"].includes(kind)) {
+      toast.error("Select Feedback, Training, Reporting, or Other");
+      return;
+    }
+    if ((kind === "feedback" || kind === "training") && !editEntry.agent_id) {
+      toast.error("Select an agent");
+      return;
+    }
+    if (kind === "reporting" && !editEntry.project_id) {
+      toast.error("Select a project");
+      return;
+    }
+    if (kind === "other" && !String(editEntry.notes || "").trim()) {
+      toast.error("Enter what you did");
       return;
     }
     if (!Number.isFinite(hours) || hours <= 0) {
@@ -439,9 +567,13 @@ const QAHoursTracker = ({ mode = "self" }) => {
         logged_in_user_id: userId,
         qa_tracker_id: editEntry.qa_tracker_id,
         work_date: editEntry.work_date,
-        activity_type: editEntry.activity_type,
+        activity_type: kind,
+        sub_activity: kind,
         hours,
         notes: editEntry.notes || "",
+        agent_id:
+          kind === "feedback" || kind === "training" ? Number(editEntry.agent_id) : null,
+        project_id: kind === "reporting" ? Number(editEntry.project_id) : null,
       });
       if (res.status !== 200) {
         throw new Error(res.message || "Failed to update");
@@ -633,6 +765,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                         }
                       }
                       const manualRows = manuals.length > 0 ? manuals : fallbackManuals;
+                      const monthManuals = showMonth ? aggregateManualMonth(manuals) : [];
                       if (projects.length === 0 && manualRows.length === 0) {
                         return (
                           <tr className="bg-slate-50">
@@ -682,59 +815,59 @@ const QAHoursTracker = ({ mode = "self" }) => {
                                 Feedback / Reporting
                               </p>
                               <table className="min-w-full text-xs">
-                                {showMonth ? (
-                                  <>
-                                    <thead>
-                                      <tr className="text-slate-500">
-                                        <th className="py-1 text-left">Type</th>
-                                        <th className="py-1 text-right">Hours</th>
+                                <thead>
+                                  <tr className="text-slate-500">
+                                    <th className="py-1 pr-4 text-left">Type</th>
+                                    <th className="py-1 pr-4 text-left">Detail</th>
+                                    <th className="py-1 px-4 text-right whitespace-nowrap">Hours</th>
+                                    {!showMonth ? (
+                                      <th className="py-1 pl-4 text-left whitespace-nowrap">Added</th>
+                                    ) : null}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(showMonth
+                                    ? monthManuals.length
+                                      ? monthManuals
+                                      : [
+                                          {
+                                            key: "feedback",
+                                            sub_activity: "feedback",
+                                            detail: "",
+                                            hours: row.feedback_hours,
+                                          },
+                                          {
+                                            key: "reporting",
+                                            sub_activity: "reporting",
+                                            detail: "",
+                                            hours: row.reporting_hours,
+                                          },
+                                        ].filter((item) => Number(item.hours) > 0)
+                                    : manualRows
+                                  ).map((item) => {
+                                    const kind = item.sub_activity || getEntryKind(item);
+                                    const detail = item.detail != null ? item.detail : entryDetail(item);
+                                    const added = !showMonth
+                                      ? formatISTDateTimeParts(item.created_at)
+                                      : null;
+                                    return (
+                                      <tr key={item.key || item.qa_tracker_id}>
+                                        <td className="py-1 pr-4 font-semibold text-slate-800">
+                                          {kindLabel(kind)}
+                                        </td>
+                                        <td className="py-1 pr-4 text-slate-600">{detail || "—"}</td>
+                                        <td className="py-1 px-4 text-right font-bold tabular-nums whitespace-nowrap">
+                                          {fmt(item.hours)}h
+                                        </td>
+                                        {!showMonth ? (
+                                          <td className="py-1 pl-4 text-slate-500 whitespace-nowrap">
+                                            {added?.time || "—"}
+                                          </td>
+                                        ) : null}
                                       </tr>
-                                    </thead>
-                                    <tbody>
-                                      {[
-                                        { key: "feedback", hours: row.feedback_hours },
-                                        { key: "reporting", hours: row.reporting_hours },
-                                      ]
-                                        .filter((item) => Number(item.hours) > 0)
-                                        .map((item) => (
-                                          <tr key={item.key}>
-                                            <td className="py-1 font-semibold text-slate-800">
-                                              {activityLabel(item.key)}
-                                            </td>
-                                            <td className="py-1 text-right font-bold">{fmt(item.hours)}h</td>
-                                          </tr>
-                                        ))}
-                                    </tbody>
-                                  </>
-                                ) : (
-                                  <>
-                                    <thead>
-                                      <tr className="text-slate-500">
-                                        <th className="py-1 text-left">Type</th>
-                                        <th className="py-1 text-right">Hours</th>
-                                        <th className="py-1 text-left">Note</th>
-                                        <th className="py-1 text-left">Added</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {manualRows.map((entry) => {
-                                        const added = formatISTDateTimeParts(entry.created_at);
-                                        return (
-                                          <tr key={entry.qa_tracker_id}>
-                                            <td className="py-1 font-semibold text-slate-800">
-                                              {activityLabel(entry.activity_type)}
-                                            </td>
-                                            <td className="py-1 text-right font-bold">{fmt(entry.hours)}h</td>
-                                            <td className="py-1 text-slate-600">{entry.notes || "—"}</td>
-                                            <td className="py-1 text-slate-500">
-                                              {added.time || "—"}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </>
-                                )}
+                                    );
+                                  })}
+                                </tbody>
                               </table>
                             </div>
                           ) : null}
@@ -814,6 +947,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
 
       {activeToggle === "tracker" ? (
         <>
+          {canAddHours ? (
           <div className="overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-lg">
             <div className="border-b border-slate-200 bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3">
               <h3 className="text-base font-bold text-white">Add Feedback / Reporting</h3>
@@ -824,7 +958,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
               </p>
             </div>
             <div className="px-4 py-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+              <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
                 <div className="sm:w-48">
                   <label className="mb-1 block text-xs font-semibold text-slate-500">Date</label>
                   {isManager ? (
@@ -850,18 +984,72 @@ const QAHoursTracker = ({ mode = "self" }) => {
                     </select>
                   </div>
                 ) : null}
-                <div className="sm:w-56">
+                <div className="sm:w-44">
                   <label className="mb-1 block text-xs font-semibold text-slate-500">Type</label>
                   <select
-                    value={entryType}
-                    onChange={(e) => setEntryType(e.target.value)}
+                    value={entryKind}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setEntryKind(next);
+                      setEntryAgentId("");
+                      setEntryProjectId("");
+                      setEntryDetailText("");
+                      setEntryNotes("");
+                    }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
                   >
-                    {ACTIVITY_OPTIONS.map((opt) => (
+                    {KIND_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
                 </div>
+                {entryKind === "feedback" || entryKind === "training" ? (
+                  <div className="w-full lg:w-64">
+                    <label className="mb-1 block text-xs font-semibold text-slate-500">Agent</label>
+                    <SearchableSelect
+                      value={entryAgentId}
+                      onChange={setEntryAgentId}
+                      options={agentOptions}
+                      placeholder={isManager && !addQaUserId ? "Select QA first" : "Select agent"}
+                      disabled={isManager && !addQaUserId}
+                    />
+                  </div>
+                ) : null}
+                {entryKind === "reporting" ? (
+                  <div className="w-full lg:w-64">
+                    <label className="mb-1 block text-xs font-semibold text-slate-500">Project</label>
+                    <SearchableSelect
+                      value={entryProjectId}
+                      onChange={setEntryProjectId}
+                      options={projectOptions}
+                      placeholder={isManager && !addQaUserId ? "Select QA first" : "Select project"}
+                      disabled={isManager && !addQaUserId}
+                    />
+                  </div>
+                ) : null}
+                {entryKind === "other" ? (
+                  <div className="min-w-0 flex-1">
+                    <label className="mb-1 block text-xs font-semibold text-slate-500">What did you do</label>
+                    <input
+                      type="text"
+                      value={entryDetailText}
+                      onChange={(e) => setEntryDetailText(e.target.value)}
+                      placeholder="Describe the work"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                ) : (
+                  <div className="min-w-0 flex-1">
+                    <label className="mb-1 block text-xs font-semibold text-slate-500">Note</label>
+                    <input
+                      type="text"
+                      value={entryNotes}
+                      onChange={(e) => setEntryNotes(e.target.value)}
+                      placeholder="Optional"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                )}
                 <div className="sm:w-28">
                   <label className="mb-1 block text-xs font-semibold text-slate-500">Hours</label>
                   <input
@@ -873,16 +1061,6 @@ const QAHoursTracker = ({ mode = "self" }) => {
                     onChange={(e) => setEntryHours(e.target.value)}
                     placeholder="1"
                     className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <label className="mb-1 block text-xs font-semibold text-slate-500">Note</label>
-                  <input
-                    type="text"
-                    value={entryNotes}
-                    onChange={(e) => setEntryNotes(e.target.value)}
-                    placeholder="Optional"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
                   />
                 </div>
                 <button
@@ -897,6 +1075,11 @@ const QAHoursTracker = ({ mode = "self" }) => {
               </div>
             </div>
           </div>
+          ) : isManager ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+              View only — Team Leader cannot add or edit tracker hours.
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-end gap-4">
@@ -950,12 +1133,13 @@ const QAHoursTracker = ({ mode = "self" }) => {
               </div>
             </div>
             <div className="max-h-[65vh] overflow-auto">
-              <table className="min-w-[900px] w-full text-sm">
+              <table className="min-w-[1100px] w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-blue-600 text-white">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase">Date / Time</th>
                     {isManager ? <th className="px-4 py-3 text-left text-xs font-bold uppercase">QA</th> : null}
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase">Detail</th>
                     <th className="px-4 py-3 text-right text-xs font-bold uppercase">Hours</th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase">Note</th>
                     <th className="px-4 py-3 text-center text-xs font-bold uppercase">Action</th>
@@ -964,7 +1148,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={isManager ? 6 : 5} className="px-4 py-16 text-center text-slate-500">
+                      <td colSpan={isManager ? 7 : 6} className="px-4 py-16 text-center text-slate-500">
                         <span className="inline-flex items-center gap-2 font-semibold">
                           <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
                           Loading tracker...
@@ -973,13 +1157,15 @@ const QAHoursTracker = ({ mode = "self" }) => {
                     </tr>
                   ) : entries.length === 0 ? (
                     <tr>
-                      <td colSpan={isManager ? 6 : 5} className="px-4 py-16 text-center text-slate-500">
+                      <td colSpan={isManager ? 7 : 6} className="px-4 py-16 text-center text-slate-500">
                         No Feedback or Reporting entries for this date range.
                       </td>
                     </tr>
                   ) : (
                     entries.map((entry) => {
                       const added = formatISTDateTimeParts(entry.created_at);
+                      const kind = getEntryKind(entry);
+                      const detail = entryDetail(entry);
                       return (
                         <tr key={entry.qa_tracker_id} className="border-t border-slate-100 hover:bg-slate-50">
                           <td className="px-4 py-3 font-medium text-slate-800">
@@ -991,22 +1177,40 @@ const QAHoursTracker = ({ mode = "self" }) => {
                           {isManager ? (
                             <td className="px-4 py-3 font-semibold text-slate-800">{entry.qa_user_name || "-"}</td>
                           ) : null}
-                          <td className="px-4 py-3 font-semibold text-slate-800">{activityLabel(entry.activity_type)}</td>
+                          <td className="px-4 py-3 font-semibold text-slate-800">{kindLabel(kind)}</td>
+                          <td className="px-4 py-3 text-slate-600">
+                            <div className="flex flex-col">
+                              <span className="text-[11px] font-semibold uppercase text-slate-400">
+                                {detailColumnLabel(kind)}
+                              </span>
+                              <span>{detail || "-"}</span>
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-right font-bold">{fmt(entry.hours)}h</td>
-                          <td className="px-4 py-3 text-slate-600">{entry.notes || "-"}</td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {kind === "other" ? "-" : entry.notes || "-"}
+                          </td>
                           <td className="px-4 py-3 text-center">
                             <div className="inline-flex items-center gap-1">
-                              {entry.can_edit ? (
+                              {entry.can_edit && !isReadOnly ? (
                                 <button
                                   type="button"
-                                  onClick={() => setEditEntry({ ...entry })}
+                                  onClick={() =>
+                                    setEditEntry({
+                                      ...entry,
+                                      sub_activity: kind || "feedback",
+                                      activity_type: kind || "feedback",
+                                      agent_id: entry.agent_id ? String(entry.agent_id) : "",
+                                      project_id: entry.project_id ? String(entry.project_id) : "",
+                                    })
+                                  }
                                   className="inline-flex items-center justify-center rounded-lg bg-blue-50 p-2 text-blue-600 hover:bg-blue-600 hover:text-white"
                                   title="Edit entry"
                                 >
                                   <Pencil className="h-4 w-4" />
                                 </button>
                               ) : null}
-                              {entry.can_delete ? (
+                              {entry.can_delete && !isReadOnly ? (
                                 <button
                                   type="button"
                                   onClick={() => setDeleteConfirm(entry.qa_tracker_id)}
@@ -1259,15 +1463,47 @@ const QAHoursTracker = ({ mode = "self" }) => {
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500">Type</label>
                 <select
-                  value={editEntry.activity_type}
-                  onChange={(e) => setEditEntry((prev) => ({ ...prev, activity_type: e.target.value }))}
+                  value={getEntryKind(editEntry) || "feedback"}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setEditEntry((prev) => ({
+                      ...prev,
+                      activity_type: next,
+                      sub_activity: next,
+                      agent_id: next === "feedback" || next === "training" ? prev.agent_id : "",
+                      project_id: next === "reporting" ? prev.project_id : "",
+                      notes: next === "other" ? prev.notes : prev.notes,
+                    }));
+                  }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
                 >
-                  {ACTIVITY_OPTIONS.map((opt) => (
+                  {KIND_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               </div>
+              {["feedback", "training"].includes(getEntryKind(editEntry)) ? (
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-500">Agent</label>
+                  <SearchableSelect
+                    value={String(editEntry.agent_id || "")}
+                    onChange={(value) => setEditEntry((prev) => ({ ...prev, agent_id: value }))}
+                    options={agentOptions}
+                    placeholder="Select agent"
+                  />
+                </div>
+              ) : null}
+              {getEntryKind(editEntry) === "reporting" ? (
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-500">Project</label>
+                  <SearchableSelect
+                    value={String(editEntry.project_id || "")}
+                    onChange={(value) => setEditEntry((prev) => ({ ...prev, project_id: value }))}
+                    options={projectOptions}
+                    placeholder="Select project"
+                  />
+                </div>
+              ) : null}
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-500">Hours</label>
                 <input
@@ -1281,11 +1517,14 @@ const QAHoursTracker = ({ mode = "self" }) => {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-500">Note</label>
+                <label className="mb-1 block text-xs font-semibold text-slate-500">
+                  {getEntryKind(editEntry) === "other" ? "What did you do" : "Note"}
+                </label>
                 <input
                   type="text"
                   value={editEntry.notes || ""}
                   onChange={(e) => setEditEntry((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder={getEntryKind(editEntry) === "other" ? "Describe the work" : "Optional"}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-800 focus:border-blue-500 focus:outline-none"
                 />
               </div>

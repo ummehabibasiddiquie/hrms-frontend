@@ -8,15 +8,18 @@ import {
   FolderKanban,
   Clock
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab, compact = false }) => {
+  const { isTeamLeader } = useAuth();
+
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'billable_report', label: 'Billable Report', icon: Briefcase },
-    { id: 'qa_hours', label: 'QA Report', icon: Clock },
+    // Team Leaders: view-only team data; no QA Report
+    ...(!isTeamLeader ? [{ id: 'qa_hours', label: 'QA Report', icon: Clock }] : []),
     { id: 'user_monthly_report', label: 'User Monthly Goal', icon: Users },
     { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
-  
   ];
 
   return (

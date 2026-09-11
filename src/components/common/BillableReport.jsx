@@ -36,7 +36,9 @@ const BillableReport = ({ userId, title = "Billable Report" }) => {
 
   // Check if user is Assistant Manager
   const isAssistantManager = user?.role_id === 4 || 
-    (user?.role_name || user?.role || '').toLowerCase().includes('assistant');
+    (user?.role_name || user?.role || '').toLowerCase().includes('assistant') ||
+    user?.role_id === 7 ||
+    (user?.role_name || user?.role || '').toLowerCase().includes('team leader');
 
   // Check if user can view team filter (Admin, Super Admin, Project Manager)
   const normalizedRole = (user?.role_name || user?.role || user?.user_role || '').toLowerCase();

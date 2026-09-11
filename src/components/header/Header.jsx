@@ -6,7 +6,8 @@ const ROLE_MAP = {
   3: "PROJECT_MANAGER",
   4: "ASSISTANT_MANAGER",
   5: "QA_AGENT",
-  6: "AGENT"
+  6: "AGENT",
+  7: "TEAM_LEADER"
 };
 import { ViewState } from "../../utils/constants";
 import { ROUTES, dashboardTabUrl } from "../../routes/paths";
@@ -237,6 +238,14 @@ const Header = ({
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
         }
+        if (roleId === 7) {
+          // Team Leader: no QA/QC report tabs
+          return [
+            { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+            { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
+          ];
+        }
         // All other role_ids (not admin/superadmin)
         return [
           { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
@@ -251,6 +260,14 @@ const Header = ({
         { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+      ];
+    }
+    if (role.includes('TEAM LEADER') || role.includes('TEAM_LEADER') || roleId === 7) {
+      // Team Leader: no QA/QC report tabs
+      return [
+        { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+        { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
     }
     if (role.includes('ASSISTANT') || role.includes('ASST')) {

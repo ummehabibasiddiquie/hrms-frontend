@@ -23,7 +23,8 @@ const ROLE_MAP = {
   3: "PROJECT_MANAGER",
   4: "ASSISTANT_MANAGER",
   5: "QA_AGENT",
-  6: "AGENT"
+  6: "AGENT",
+  7: "TEAM_LEADER"
 };
 
 // Email format checker

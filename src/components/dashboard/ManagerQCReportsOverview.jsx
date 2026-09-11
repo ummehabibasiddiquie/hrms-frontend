@@ -60,7 +60,10 @@ const ManagerQCReportsOverview = () => {
     designation.includes('assistant') || 
     designation.includes('asst') ||
     roleName.includes('assistant') ||
-    roleName.includes('asst');
+    roleName.includes('asst') ||
+    roleId === 7 ||
+    roleName.includes('team leader') ||
+    designation.includes('team leader');
   
   console.log('[ManagerQCReportsOverview] Role Check:', {
     roleId,

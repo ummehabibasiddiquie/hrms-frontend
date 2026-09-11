@@ -1,13 +1,13 @@
 import { toast } from "react-hot-toast";
-import { showConnectionIssue } from "./connectionStatus";
 
 const MSG_OFFLINE = "No internet. Check your connection.";
+const MSG_LOAD_FAILED = "Unable to load data. Please try again.";
 const MSG_TIMEOUT = "Request timed out. Try again.";
 const MSG_GENERIC = "Something went wrong. Try again.";
 
 const errorMap = {
-  NETWORK_ERROR: MSG_OFFLINE,
-  ERR_NETWORK: MSG_OFFLINE,
+  NETWORK_ERROR: MSG_LOAD_FAILED,
+  ERR_NETWORK: MSG_LOAD_FAILED,
   ERR_INTERNET_DISCONNECTED: MSG_OFFLINE,
   ECONNABORTED: MSG_TIMEOUT,
   INVALID_CREDENTIALS: "Wrong email or password.",
@@ -26,6 +26,10 @@ function asText(value) {
   return "";
 }
 
+function toastOnce(message) {
+  toast.error(message, { id: "app-load-error" });
+}
+
 export function isTimeoutError(error) {
   if (!error) return false;
   const code = String(error.code || "");
@@ -36,15 +40,12 @@ export function isTimeoutError(error) {
 
 export function isNetworkError(error) {
   if (isTimeoutError(error)) return false;
+  if (!error) return false;
+  const status = error.response?.status;
+  if (status) return false;
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return true;
   }
-  if (!error) return false;
-
-  if (error.response?.data?.code === "NETWORK_ERROR") return true;
-  const status = error.response?.status;
-  if (status === 0) return true;
-  if (status) return false;
 
   const code = String(
     (typeof error === "object" && (error.code || error.response?.data?.code)) || ""
@@ -85,11 +86,18 @@ function rawFromError(error) {
 export function getFriendlyErrorMessage(error) {
   if (!error) return MSG_GENERIC;
 
-  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+  const hasHttpResponse = Boolean(error.response?.status);
+  if (!hasHttpResponse && typeof navigator !== "undefined" && navigator.onLine === false) {
     return MSG_OFFLINE;
   }
   if (isTimeoutError(error)) return MSG_TIMEOUT;
-  if (isNetworkError(error)) return MSG_OFFLINE;
+  if (isNetworkError(error)) return MSG_LOAD_FAILED;
+  if (typeof error === "object" && Number(error.response?.status) >= 500) {
+    return MSG_LOAD_FAILED;
+  }
+  if (typeof error === "object" && Number(error.response?.status) >= 500) {
+    return MSG_LOAD_FAILED;
+  }
 
   const code =
     (typeof error === "object" &&
@@ -130,16 +138,14 @@ export function isConnectionIssue(error) {
 
 export function reportConnectionIssue(error) {
   if (!isConnectionIssue(error)) return false;
-  showConnectionIssue(
-    getFriendlyErrorMessage(error),
-    isTimeoutError(error) ? "timeout" : "offline"
-  );
+  toastOnce(getFriendlyErrorMessage(error));
   return true;
 }
 
 export function showApiError(error, fallback) {
   if (reportConnectionIssue(error)) return;
   toast.error(
-    getFriendlyErrorMessage(error) || fallback || MSG_GENERIC
+    getFriendlyErrorMessage(error) || fallback || MSG_GENERIC,
+    { id: "app-load-error" }
   );
 }

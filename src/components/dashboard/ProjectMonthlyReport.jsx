@@ -12,7 +12,9 @@ import { exportToCSV } from '../../utils/csvExport';
 import { getCurrentMonthYear, getDefaultRecentMonthYears } from '../../utils/rosterUtils';
 
 const ProjectMonthlyReport = () => {
-  const { user } = useAuth();
+  const { user, isTeamLeader, isReadOnly } = useAuth();
+  // Team Leader: view only (roster edits are separate)
+  const canMutate = !isTeamLeader && !isReadOnly;
   
   // State for projects dropdown
   const [projects, setProjects] = useState([]);
@@ -275,6 +277,7 @@ const ProjectMonthlyReport = () => {
 
   // Handle add mode - when clicking Add icon for a new project
   const handleAddClick = (project, monthYear) => {
+    if (!canMutate) return;
     setAddingProjectId(project.project_id);
     setAddingMonthYear(monthYear);
     setAddData({
@@ -293,6 +296,7 @@ const ProjectMonthlyReport = () => {
 
   // Handle add save
   const handleAddSave = async () => {
+    if (!canMutate) return;
     if (!addData.monthly_target || addData.monthly_target === '') {
       toast.error('Please enter monthly target');
       return;
@@ -316,7 +320,8 @@ const ProjectMonthlyReport = () => {
       const payload = {
         project_id: Number(addData.project_id),
         month_year: addData.month_year,
-        monthly_target: String(addData.monthly_target)
+        monthly_target: String(addData.monthly_target),
+        logged_in_user_id: user?.user_id
       };
       
       const response = await api.post('/project_monthly_tracker/add', payload);
@@ -354,6 +359,7 @@ const ProjectMonthlyReport = () => {
 
   // Handle edit click
   const handleEditClick = (record) => {
+    if (!canMutate) return;
     setEditingId(record.id);
     setEditData({
       project_id: record.project_id,
@@ -366,11 +372,13 @@ const ProjectMonthlyReport = () => {
 
   // Handle edit save
   const handleEditSave = async (id) => {
+    if (!canMutate) return;
     try {
       const payload = {
         project_monthly_tracker_id: id,
         month_year: editData.month_year,
-        monthly_target: String(editData.monthly_target)
+        monthly_target: String(editData.monthly_target),
+        logged_in_user_id: user?.user_id
       };
       
       const response = await api.post('/project_monthly_tracker/update', payload);
@@ -396,17 +404,19 @@ const ProjectMonthlyReport = () => {
 
   // Handle delete
   const handleDeleteClick = (record) => {
+    if (!canMutate) return;
     setRecordToDelete(record);
     setDeleteModalOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
-    if (!recordToDelete) return;
+    if (!recordToDelete || !canMutate) return;
 
     setIsDeleting(true);
     try {
       const payload = {
-        project_monthly_tracker_id: recordToDelete.id
+        project_monthly_tracker_id: recordToDelete.id,
+        logged_in_user_id: user?.user_id
       };
       
       const response = await api.post('/project_monthly_tracker/delete', payload);
@@ -685,16 +695,18 @@ const ProjectMonthlyReport = () => {
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">
                               Monthly Pending Target
                             </th>
+                            {canMutate && (
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">
                               Actions
                             </th>
+                            )}
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
                           {filteredMonthData.map((record) => (
                   <React.Fragment key={`${record.project_id}-${monthYear}`}>
                   <tr className="transition-all duration-200">
-                    {record.isNew && addingProjectId === record.project_id && addingMonthYear === monthYear ? (
+                    {record.isNew && canMutate && addingProjectId === record.project_id && addingMonthYear === monthYear ? (
                       // Add Mode - for new records
                       <>
                         <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
@@ -735,7 +747,7 @@ const ProjectMonthlyReport = () => {
                           </div>
                         </td>
                       </>
-                    ) : !record.isNew && editingId === record.id ? (
+                    ) : !record.isNew && canMutate && editingId === record.id ? (
                       // Edit Mode - Only Monthly Target is editable
                       <>
                         <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
@@ -776,7 +788,7 @@ const ProjectMonthlyReport = () => {
                         </td>
                       </>
                     ) : record.isNew ? (
-                      // View Mode for New Records - Show ADD icon
+                      // View Mode for New Records - Show ADD icon (managers only)
                       <>
                         <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
                           {renderProjectName(record, monthYear)}
@@ -790,6 +802,7 @@ const ProjectMonthlyReport = () => {
                         <td className="px-6 py-4 text-center text-slate-400 bg-slate-50 border border-slate-300">
                           -
                         </td>
+                        {canMutate && (
                         <td className="px-6 py-4 border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
                           <div className="flex items-center justify-center">
                             <button
@@ -801,9 +814,10 @@ const ProjectMonthlyReport = () => {
                             </button>
                           </div>
                         </td>
+                        )}
                       </>
                     ) : (
-                      // View Mode for Existing Records - Show EDIT/DELETE icons
+                      // View Mode for Existing Records - Show EDIT/DELETE icons (managers only)
                       <>
                         <td className="px-6 py-4 text-slate-800 font-medium border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
                           {renderProjectName(record, monthYear)}
@@ -817,6 +831,7 @@ const ProjectMonthlyReport = () => {
                         <td className="px-6 py-4 text-center text-slate-700 font-semibold bg-white border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
                           {Number(record.pending_monthly_target || 0).toFixed(2)}
                         </td>
+                        {canMutate && (
                         <td className="px-6 py-4 border border-slate-300 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50">
                           <div className="flex items-center justify-center gap-2">
                             <button
@@ -835,6 +850,7 @@ const ProjectMonthlyReport = () => {
                             </button>
                           </div>
                         </td>
+                        )}
                       </>
                     )}
                   </tr>
@@ -865,12 +881,12 @@ const ProjectMonthlyReport = () => {
                         .reduce((sum, r) => sum + (Number(r.pending_monthly_target) || 0), 0)
                         .toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 border border-slate-300"></td>
+                    {canMutate && <td className="px-6 py-4 border border-slate-300"></td>}
                   </tr>
                 )}
                 {filteredMonthData.length === 0 && (
                   <tr>
-                    <td colSpan="4" className="px-6 py-12 text-center">
+                    <td colSpan={canMutate ? 5 : 4} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <FileX className="w-16 h-16 text-slate-300" />
                         <div>

@@ -17,14 +17,18 @@ export function useRosterRoles() {
       roleId === 3 || role.includes("project manager") || designation.includes("project manager");
     const isAssistantManager =
       roleId === 4 || role.includes("assistant") || designation.includes("assistant");
+    const isTeamLeader =
+      roleId === 7 || role.includes("team leader") || designation.includes("team leader");
     const isQA =
       roleId === 5 || role.includes("qa") || designation === "qa";
     const isAgent =
       roleId === 6 || role === "agent" || designation === "agent";
 
     const canManageRoster =
-      isSuperAdmin || isAdmin || isProjectManager || isAssistantManager;
-    const canApproveRoster = isSuperAdmin || isAdmin || isProjectManager;
+      isSuperAdmin || isAdmin || isProjectManager || isAssistantManager || isTeamLeader;
+    const canViewRoster = canManageRoster;
+    // Approvals: Admin and Super Admin only
+    const canApproveRoster = isSuperAdmin || isAdmin;
     const canResetRegenerate = isSuperAdmin || isAdmin;
     const canModifyHolidayMaster = isSuperAdmin || isAdmin;
     const canViewMyRoster = isAgent || isQA;
@@ -36,9 +40,11 @@ export function useRosterRoles() {
       isAdmin,
       isProjectManager,
       isAssistantManager,
+      isTeamLeader,
       isQA,
       isAgent,
       canManageRoster,
+      canViewRoster,
       canApproveRoster,
       canResetRegenerate,
       canModifyHolidayMaster,

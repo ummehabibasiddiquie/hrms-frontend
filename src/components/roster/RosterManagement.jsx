@@ -97,6 +97,7 @@ const RosterManagement = () => {
     isAdmin,
     isProjectManager,
     isAssistantManager,
+    isTeamLeader,
     canApproveRoster,
     canResetRegenerate,
     canModifyHolidayMaster,
@@ -136,7 +137,7 @@ const RosterManagement = () => {
   );
 
   const filteredEmployees = useMemo(() => {
-    let list = isAssistantManager
+    let list = isAssistantManager || isTeamLeader
       ? employees
       : filterEmployeesByTeam(employees, selectedTeam, teams);
     if (employeeSearch.trim()) {
@@ -144,7 +145,7 @@ const RosterManagement = () => {
       list = list.filter((e) => (e.user_name || e.name || "").toLowerCase().includes(q));
     }
     return list;
-  }, [employees, selectedTeam, teams, employeeSearch, isAssistantManager]);
+  }, [employees, selectedTeam, teams, employeeSearch, isAssistantManager, isTeamLeader]);
 
   // Single-employee actions use the one person left after search (or explicit pick via 1 match)
   const actionUserId = useMemo(() => {
@@ -315,7 +316,7 @@ const RosterManagement = () => {
 
   // One-time / role bootstrap
   useEffect(() => {
-    if (!isAssistantManager) {
+    if (!isAssistantManager && !isTeamLeader) {
       api
         .post("/dropdown/get", {
           dropdown_type: "teams",
@@ -324,7 +325,7 @@ const RosterManagement = () => {
         .then((res) => setTeams(res.data?.data || []))
         .catch(() => setTeams([]));
     }
-  }, [user?.user_id, isAssistantManager]);
+  }, [user?.user_id, isAssistantManager, isTeamLeader]);
 
   const refreshNextMonthGenerateState = useCallback(async () => {
     try {
@@ -365,13 +366,13 @@ const RosterManagement = () => {
       if (!monthYear) return;
       try {
         const teamFilter =
-          isAssistantManager && user?.team_id
+          (isAssistantManager || isTeamLeader) && user?.team_id
             ? user.team_id
             : selectedTeam !== "all"
               ? selectedTeam
               : undefined;
 
-        if (isAssistantManager && !teamFilter) {
+        if ((isAssistantManager || isTeamLeader) && !teamFilter) {
           if (!cancelled) {
             setEmployees([]);
             setSelectedUserId("");

@@ -60,6 +60,7 @@ const UsersManagement = ({
      // Dropdown state for roles, designations, managers, QAs, teams
      const [roleOptions, setRoleOptions] = useState([]);
      const [asstManagerOptions, setAsstManagerOptions] = useState([]);
+     const [teamLeaderOptions, setTeamLeaderOptions] = useState([]);
      const [designationOptions, setDesignationOptions] = useState([]);
      const [projectManagerOptions, setProjectManagerOptions] = useState([]);
      const [qaOptions, setQaOptions] = useState([]);
@@ -71,9 +72,10 @@ const UsersManagement = ({
                setDropdownLoading(true);
                try {
                     const userId = authUser?.user_id;
-                    const [rolesRes, asstMgrRes, projectMgrRes, qaRes, teamRes, designationRes] = await Promise.all([
+                    const [rolesRes, asstMgrRes, teamLeaderRes, projectMgrRes, qaRes, teamRes, designationRes] = await Promise.all([
                          fetchDropdownOptions("user roles", userId),
                          fetchDropdownOptions("assistant manager", userId),
+                         fetchDropdownOptions("team leader", userId),
                          fetchDropdownOptions("project manager", userId),
                          fetchDropdownOptions("qa", userId),
                          fetchDropdownOptions("teams", userId),
@@ -81,6 +83,7 @@ const UsersManagement = ({
                     ]);
                     setRoleOptions(rolesRes?.data || []);
                     setAsstManagerOptions(asstMgrRes?.data || []);
+                    setTeamLeaderOptions(teamLeaderRes?.data || []);
                     setProjectManagerOptions(projectMgrRes?.data || []);
                     setQaOptions(qaRes?.data || []);
                     setTeamOptions(teamRes?.data || []);
@@ -114,9 +117,11 @@ const UsersManagement = ({
           designation: "",
           projectManager: "",
           assistantManager: "",
+          teamLeader: "",
           qualityAnalyst: "",
           projectManagers: [], // Array for multi-select
           assistantManagers: [], // Array for multi-select
+          teamLeaders: [], // Array for multi-select
           qualityAnalysts: [], // Array for multi-select
           team: "",
           email: "",
@@ -132,7 +137,7 @@ const UsersManagement = ({
           empId: "",
           name: "",
           email: "",
-          reportingManager: "",
+          team: "",
           role: "",
           assignedTasks: [],
      });
@@ -185,11 +190,24 @@ const UsersManagement = ({
                     ? u.email?.toLowerCase().includes(filterUser.email.toLowerCase())
                     : true;
 
-               // Filter by selected Assistant Manager (exact match by value or name)
-               const asstManagerValue = u.assistantManager || u.assistant_manager || u.project_manager_name || u.reportingManager || "";
-               const matchesManager = filterUser.reportingManager
-                    ? (asstManagerValue === filterUser.reportingManager || asstManagerValue === filterUser.reportingManager?.name)
-                    : true;
+               // Filter by selected Team (id or name)
+               const userTeamId = String(u.team_id ?? u.team ?? "").trim();
+               const userTeamName = String(u.team_name || "").trim().toLowerCase();
+               const selectedTeam = String(filterUser.team ?? "").trim();
+               const selectedTeamOpt = teamOptions.find(
+                    (t) => String(t.team_id ?? t.value ?? t.id) === selectedTeam
+               );
+               const selectedTeamName = String(
+                    selectedTeamOpt?.label || selectedTeamOpt?.team_name || ""
+               )
+                    .trim()
+                    .toLowerCase();
+               const matchesTeam = !selectedTeam
+                    ? true
+                    : userTeamId === selectedTeam ||
+                      (!!userTeamName &&
+                        !!selectedTeamName &&
+                        userTeamName === selectedTeamName);
 
                const selectedRole = String(filterUser.role ?? "").trim();
                const selectedOpt = roleOptions.find(
@@ -204,12 +222,12 @@ const UsersManagement = ({
                     : String(u.role_id ?? "") === selectedRole ||
                       (!!userName && userName === selectedName);
 
-               return matchesName && matchesEmail && matchesManager && matchesRole;
+               return matchesName && matchesEmail && matchesTeam && matchesRole;
           });
-     }, [users, filterUser, roleOptions]);
+     }, [users, filterUser, roleOptions, teamOptions]);
 
      const userPagination = useClientPagination(filteredUsers, {
-          resetKeys: [filterUser.name, filterUser.email, filterUser.reportingManager, filterUser.role],
+          resetKeys: [filterUser.name, filterUser.email, filterUser.team, filterUser.role],
      });
 
      const clearFieldError = (field) => {
@@ -331,17 +349,22 @@ const UsersManagement = ({
           const assistantManagers = Array.isArray(newUser.assistantManagers) && newUser.assistantManagers.length > 0
                ? newUser.assistantManagers
                : (newUser.assistantManager ? [newUser.assistantManager] : []);
+          const teamLeaders = Array.isArray(newUser.teamLeaders) && newUser.teamLeaders.length > 0
+               ? newUser.teamLeaders
+               : (newUser.teamLeader ? [newUser.teamLeader] : []);
           const qualityAnalysts = Array.isArray(newUser.qualityAnalysts) && newUser.qualityAnalysts.length > 0
                ? newUser.qualityAnalysts
                : (newUser.qualityAnalyst ? [newUser.qualityAnalyst] : []);
           
           log('[UsersManagement] Project Managers array:', projectManagers);
           log('[UsersManagement] Assistant Managers array:', assistantManagers);
+          log('[UsersManagement] Team Leaders array:', teamLeaders);
           log('[UsersManagement] Quality Analysts array:', qualityAnalysts);
           
           // Append arrays as JSON strings
           formData.append('project_manager', JSON.stringify(projectManagers));
           formData.append('assistant_manager', JSON.stringify(assistantManagers));
+          formData.append('team_leader', JSON.stringify(teamLeaders));
           formData.append('qa', JSON.stringify(qualityAnalysts));
           
           if (newUser.team !== "" && newUser.team != null) {
@@ -355,6 +378,9 @@ const UsersManagement = ({
           }
           formData.append('device_id', deviceInfo.device_id);
           formData.append('device_type', deviceInfo.device_type);
+          if (authUser?.user_id) {
+               formData.append('logged_in_user_id', String(authUser.user_id));
+          }
 
           // Add profile picture file if selected
           if (profilePictureFile) {
@@ -384,7 +410,7 @@ const UsersManagement = ({
                          empId: "",
                          name: "",
                          email: "",
-                         reportingManager: "",
+                         team: "",
                          role: "",
                          assignedTasks: [],
                     });
@@ -699,20 +725,20 @@ const UsersManagement = ({
                          </div>
                          <div className="col-span-1">
                               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                                   Assistant Manager
+                                   Team
                               </label>
                               <SearchableSelect
-                                   value={filterUser.reportingManager}
-                                   onChange={(value) => setFilterUser({ ...filterUser, reportingManager: value })}
+                                   value={filterUser.team}
+                                   onChange={(value) => setFilterUser({ ...filterUser, team: value })}
                                    options={[
-                                        { value: '', label: 'All Managers' },
-                                        ...asstManagerOptions.map((mgr, idx) => ({
-                                             value: mgr.value || mgr.name || mgr.id,
-                                             label: mgr.label || mgr.name || mgr.value
-                                        }))
+                                        { value: '', label: 'All Teams' },
+                                        ...teamOptions.map((team) => ({
+                                             value: String(team.team_id ?? team.value ?? team.id ?? ''),
+                                             label: team.label || team.team_name || team.name || String(team.team_id ?? '')
+                                        })).filter((opt) => opt.value)
                                    ]}
-                                   icon={Briefcase}
-                                   placeholder="Select Manager"
+                                   icon={Users}
+                                   placeholder="Select Team"
                               />
                          </div>
                          <div>
@@ -794,6 +820,7 @@ const UsersManagement = ({
                          roles={roleOptions}
                          projectManagers={projectManagerOptions}
                          assistantManagers={asstManagerOptions}
+                         teamLeaders={teamLeaderOptions}
                          qas={qaOptions}
                          teams={teamOptions}
                          designations={designationOptions}

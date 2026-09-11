@@ -63,6 +63,11 @@ const QATrackerReport = () => {
     roleId === 4 ||
     String(designation).toLowerCase() === 'assistant manager' ||
     String(role).toLowerCase().includes('assistant');
+  const isTeamLeader =
+    Number(roleId) === 7 ||
+    String(designation).toLowerCase().includes('team leader') ||
+    String(role).toLowerCase().includes('team leader');
+  const canMutateTracker = !isQAAgent && !isTeamLeader;
   
   // Check if user is PM, Admin, or Super Admin (for team filter visibility)
   const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
@@ -798,6 +803,7 @@ const QATrackerReport = () => {
   // Handle add form submit
   const handleAddSubmit = async (e) => {
     e.preventDefault();
+    if (!canMutateTracker) return;
     
     setAddTouched({
       agent_id: true,
@@ -844,6 +850,7 @@ const QATrackerReport = () => {
       const formattedDateTime = dateTimeValue.replace('T', ' ') + ':00';
       
       const formData = new FormData();  
+      formData.append('logged_in_user_id', user?.user_id);
       formData.append('user_id', Number(addFormData.agent_id));
       formData.append('date', formattedDateTime);
       formData.append('project_id', Number(addFormData.project_id));
@@ -1145,6 +1152,7 @@ const QATrackerReport = () => {
   // Handle edit form submit
   const handleEditSubmit = async (e) => {
     e.preventDefault();
+    if (!canMutateTracker) return;
 
     if (!editFormData.tracker_datetime || !editFormData.project_id || !editFormData.task_id || !editFormData.production) {
       toast.error("Please fill all required fields");
@@ -1171,6 +1179,7 @@ const QATrackerReport = () => {
 
     try {
       const formData = new FormData();
+      formData.append('logged_in_user_id', user?.user_id);
       formData.append('tracker_id', editingTracker.tracker_id);
       
       if (editFormData.tracker_datetime) {
@@ -1571,8 +1580,8 @@ const QATrackerReport = () => {
               />
             </div>
 
-            {/* Add Tracker Button - Only visible to AM, PM, Admin, Super Admin (not QA) */}
-            {!isQAAgent && (
+            {/* Add Tracker Button - Only visible to AM, PM, Admin, Super Admin (not QA / Team Leader) */}
+            {canMutateTracker && (
               <div className="flex items-end">
                 <button
                   onClick={handleOpenAddModal}
@@ -1641,7 +1650,7 @@ const QATrackerReport = () => {
                   <col style={{ width: isQAAgent ? '16%' : '14%' }}/>
                   <col style={{ width: isQAAgent ? '10%' : '8%' }}/>
                   <col style={{ width: isQAAgent ? '8%' : '7%' }}/>
-                  {!isQAAgent && <col style={{ width: '13%' }}/>}
+                  {canMutateTracker && <col style={{ width: '13%' }}/>}
                 </colgroup>
                 <thead className="bg-gradient-to-r from-blue-600 to-blue-700 sticky top-0 z-10">
                   <tr>
@@ -1655,7 +1664,7 @@ const QATrackerReport = () => {
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Notes</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">File</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Shift</th>
-                    {!isQAAgent && <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">Actions</th>}
+                    {canMutateTracker && <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -1802,7 +1811,7 @@ const QATrackerReport = () => {
                             {(tracker.shift || tracker.shift_type || '').toLowerCase() === 'day' || (tracker.shift || tracker.shift_type) === 'day_shift' ? 'Day' : (tracker.shift || tracker.shift_type || '').toLowerCase() === 'night' || (tracker.shift || tracker.shift_type) === 'night_shift' ? 'Night' : '—'}
                           </span>
                         </td>
-                        {!isQAAgent && (
+                        {canMutateTracker && (
                           <td className="px-5 py-3 align-middle">
                             <div className="flex items-center justify-center gap-2">
                               <button

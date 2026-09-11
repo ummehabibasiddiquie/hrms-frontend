@@ -16,7 +16,7 @@ const EditUserFormModal = ({
 }) => {
   const [userData, setUserData] = useState(null);
   const [originalUserData, setOriginalUserData] = useState(null); // Store original data to compare changes
-  const [dropdowns, setDropdowns] = useState({ roles: [], designations: [], projectManagers: [], assistantManagers: [], qas: [], teams: [] });
+  const [dropdowns, setDropdowns] = useState({ roles: [], designations: [], projectManagers: [], assistantManagers: [], teamLeaders: [], qas: [], teams: [] });
   const [isDropdownLoading, setIsDropdownLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState({});
@@ -95,6 +95,9 @@ const EditUserFormModal = ({
           
           // Extract asst_manager_id (could be "[111]" or "[111,113]" or array)
           const assistantManagerIds = extractAllIds(user.asst_manager_id);
+
+          // Extract team_leader_id (could be "[120]" or "[120,121]" or array)
+          const teamLeaderIds = extractAllIds(user.team_leader_id);
           
           // Extract qa_id (could be "[116]" or "[116,114]" or array)
           const qaIds = extractAllIds(user.qa_id);
@@ -103,6 +106,7 @@ const EditUserFormModal = ({
           log('[EditUserFormModal] Team mapping - input:', user.team_name, 'team_id:', user.team_id, 'mapped:', teamValue);
           log('[EditUserFormModal] Project Manager IDs extracted:', projectManagerIds, 'from:', user.project_manager_id);
           log('[EditUserFormModal] Assistant Manager IDs extracted:', assistantManagerIds, 'from:', user.asst_manager_id);
+          log('[EditUserFormModal] Team Leader IDs extracted:', teamLeaderIds, 'from:', user.team_leader_id);
           log('[EditUserFormModal] QA IDs extracted:', qaIds, 'from:', user.qa_id);
           log('[EditUserFormModal] Available roles:', dropdownData.roles);
           log('[EditUserFormModal] Available teams:', dropdownData.teams);
@@ -121,9 +125,11 @@ const EditUserFormModal = ({
             ),
             projectManager: projectManagerIds[0] || '', // Keep for backward compatibility
             assistantManager: assistantManagerIds[0] || '', // Keep for backward compatibility
+            teamLeader: teamLeaderIds[0] || '', // Keep for backward compatibility
             qualityAnalyst: qaIds[0] || '', // Keep for backward compatibility
             projectManagers: projectManagerIds, // Array for multi-select
             assistantManagers: assistantManagerIds, // Array for multi-select
+            teamLeaders: teamLeaderIds, // Array for multi-select
             qualityAnalysts: qaIds, // Array for multi-select
             team: String(teamValue || ''), // Convert to string for select element
             tenure: user.user_tenure || user.tenure || "",
@@ -136,6 +142,7 @@ const EditUserFormModal = ({
           log('[EditUserFormModal] userData.designation:', newUserData.designation);
           log('[EditUserFormModal] userData.projectManagers:', newUserData.projectManagers);
           log('[EditUserFormModal] userData.assistantManagers:', newUserData.assistantManagers);
+          log('[EditUserFormModal] userData.teamLeaders:', newUserData.teamLeaders);
           log('[EditUserFormModal] userData.qualityAnalysts:', newUserData.qualityAnalysts);
           log('[EditUserFormModal] userData.team:', newUserData.team, 'type:', typeof newUserData.team);
           
@@ -194,12 +201,13 @@ const EditUserFormModal = ({
         designation: 'designation_id',
         projectManagers: 'project_manager_id', // Array field
         assistantManagers: 'asst_manager_id',  // Array field
+        teamLeaders: 'team_leader_id', // Array field
         qualityAnalysts: 'qa_id', // Array field
         team: 'team_id'
       };
       
       // Fields that need to be sent as arrays
-      const arrayFields = ['project_manager_id', 'asst_manager_id', 'qa_id'];
+      const arrayFields = ['project_manager_id', 'asst_manager_id', 'team_leader_id', 'qa_id'];
       
       // Fields that should be converted to numbers
       const numberFields = ['role_id', 'designation_id', 'team_id', 'user_tenure'];
@@ -358,6 +366,7 @@ const EditUserFormModal = ({
       designations={dropdowns.designations}
       projectManagers={dropdowns.projectManagers}
       assistantManagers={dropdowns.assistantManagers}
+      teamLeaders={dropdowns.teamLeaders}
       qas={dropdowns.qas}
       teams={dropdowns.teams}
       isDropdownLoading={isDropdownLoading}

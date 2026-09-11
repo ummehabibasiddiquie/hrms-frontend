@@ -201,21 +201,31 @@ export const AuthProvider = ({ children }) => {
       roleName.includes('assistant') ||
       roleName.includes('asst');
 
+    const isTeamLeader =
+      roleId === 7 ||
+      roleName.includes('team leader') ||
+      designation.includes('team leader');
+
     // Calculate permissions
     const calculatedPermissions = {
+      isTeamLeader,
+      isReadOnly: isTeamLeader,
+      canViewAsAssistantManager: isAssistantManager || isTeamLeader,
       // Can create/manage users - based on user_creation_permission flag
       canManageUsers:
+        !isTeamLeader && (
         user.user_creation_permission === 1 ||
         user.user_creation_permission === "1" ||
         roleId === 1 ||
         roleId === 2 ||
         roleId === 3 ||
         isAdmin ||
-        isProjectManager,
+        isProjectManager),
 
       // Can create/manage projects - based on project_creation_permission flag OR role
       // Accessible to: Admin (1), Project Manager (3), Assistant Manager (4)
       canManageProjects:
+        !isTeamLeader && (
         user.project_creation_permission === 1 ||
         user.project_creation_permission === "1" ||
         roleId === 1 ||  // Admin
@@ -223,7 +233,7 @@ export const AuthProvider = ({ children }) => {
         roleId === 4 ||  // Assistant Manager - EXPLICIT CHECK
         isAdmin ||
         isProjectManager ||
-        isAssistantManager,
+        isAssistantManager),
 
       // Super Admin check - if user has both permissions, they're essentially a super admin
       isSuperAdmin:
@@ -247,6 +257,7 @@ export const AuthProvider = ({ children }) => {
       isAdmin,
       isProjectManager,
       isAssistantManager,
+      isTeamLeader,
       canManageProjects: calculatedPermissions.canManageProjects,
       project_creation_permission: user.project_creation_permission,
       roleIdType: typeof roleId

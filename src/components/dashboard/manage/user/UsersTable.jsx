@@ -153,16 +153,38 @@ const UsersTable = ({
                       }
                       return <span className="text-slate-400 text-xs italic">-</span>;
                     }
+
+                    if (["TEAM_LEADER", "TEAMLEADER", "TEAM LEADER"].includes(role.replace(/[_\s]/g, ''))) {
+                      const names = [];
+                      if (u.project_manager_names) {
+                        names.push(...parseNamesString(u.project_manager_names));
+                      } else if (u.project_managers && Array.isArray(u.project_managers) && u.project_managers.length > 0) {
+                        names.push(...u.project_managers.map(pm => pm.user_name || pm.name).filter(Boolean));
+                      }
+                      if (u.asst_manager_names) {
+                        names.push(...parseNamesString(u.asst_manager_names));
+                      } else if (u.asst_managers && Array.isArray(u.asst_managers) && u.asst_managers.length > 0) {
+                        names.push(...u.asst_managers.map(am => am.user_name || am.name).filter(Boolean));
+                      }
+                      const uniqueNames = [...new Set(names)];
+                      if (uniqueNames.length > 0) return renderNames(uniqueNames);
+                      return <span className="text-slate-400 text-xs italic">-</span>;
+                    }
                     
                     if (["QA", "QA_AGENT", "QAAGENT", "QA AGENT", "AGENT"].includes(role.replace(/[_\s]/g, ''))) {
+                      const names = [];
                       if (u.asst_manager_names) {
-                        const names = parseNamesString(u.asst_manager_names);
-                        if (names.length > 0) return renderNames(names);
+                        names.push(...parseNamesString(u.asst_manager_names));
+                      } else if (u.asst_managers && Array.isArray(u.asst_managers) && u.asst_managers.length > 0) {
+                        names.push(...u.asst_managers.map(am => am.user_name || am.name).filter(Boolean));
                       }
-                      if (u.asst_managers && Array.isArray(u.asst_managers) && u.asst_managers.length > 0) {
-                        const names = u.asst_managers.map(am => am.user_name || am.name).filter(Boolean);
-                        if (names.length > 0) return renderNames(names);
+                      if (u.team_leader_names) {
+                        names.push(...parseNamesString(u.team_leader_names));
+                      } else if (u.team_leaders && Array.isArray(u.team_leaders) && u.team_leaders.length > 0) {
+                        names.push(...u.team_leaders.map(tl => tl.user_name || tl.name).filter(Boolean));
                       }
+                      const uniqueNames = [...new Set(names)];
+                      if (uniqueNames.length > 0) return renderNames(uniqueNames);
                       return <span className="text-slate-400 text-xs italic">-</span>;
                     }
                     

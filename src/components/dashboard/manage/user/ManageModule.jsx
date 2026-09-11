@@ -72,6 +72,8 @@ const ManageModule = ({ activeTab }) => {
                               // Include manager fields for reporting hierarchy display
                               asst_manager_names: u.asst_manager_names || u.assistant_manager_names || "",
                               asst_managers: u.asst_managers || u.assistant_managers || [],
+                              team_leader_names: u.team_leader_names || "",
+                              team_leaders: u.team_leaders || [],
                               project_manager_names: u.project_manager_names || "",
                               project_managers: u.project_managers || [],
                               qa_names: u.qa_names || "",

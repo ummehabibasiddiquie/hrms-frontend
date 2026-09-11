@@ -53,6 +53,7 @@ const AddUserFormModal = ({
      designations = [],
      projectManagers = [],
      assistantManagers = [],
+     teamLeaders = [],
      qas = [],
      teams = [],
      isDropdownLoading,
@@ -79,7 +80,8 @@ const AddUserFormModal = ({
 
      /**
       * Role-based field visibility configuration
-      * Role IDs: 1=Super Admin, 2=Admin, 3=Project Manager, 4=Assistant Manager, 5=QA, 6=Agent
+      * Role IDs: 1=Super Admin, 2=Admin, 3=Project Manager, 4=Assistant Manager,
+      * 5=QA, 6=Agent, 7=Team Leader
       */
      const getFieldVisibility = (selectedRoleId) => {
           const roleId = Number(selectedRoleId);
@@ -92,6 +94,7 @@ const AddUserFormModal = ({
                return {
                     projectManager: hidden,
                     assistantManager: hidden,
+                    teamLeader: hidden,
                     qualityAnalyst: hidden,
                     team: hidden,
                     tenure: hidden,
@@ -103,6 +106,7 @@ const AddUserFormModal = ({
                return {
                     projectManager: hidden,
                     assistantManager: hidden,
+                    teamLeader: hidden,
                     qualityAnalyst: hidden,
                     team: optional,
                     tenure: hidden,
@@ -110,10 +114,25 @@ const AddUserFormModal = ({
                };
           }
 
+          // Assistant Manager (4): optional PM, no AM/TL/QA
           if (roleId === 4) {
                return {
                     projectManager: optional,
                     assistantManager: hidden,
+                    teamLeader: hidden,
+                    qualityAnalyst: hidden,
+                    team: required,
+                    tenure: hidden,
+                    joiningDate: optional,
+               };
+          }
+
+          // Team Leader (7): optional PM and AM (not required)
+          if (roleId === 7) {
+               return {
+                    projectManager: optional,
+                    assistantManager: optional,
+                    teamLeader: hidden,
                     qualityAnalyst: hidden,
                     team: required,
                     tenure: hidden,
@@ -124,7 +143,8 @@ const AddUserFormModal = ({
           if (roleId === 5) {
                return {
                     projectManager: optional,
-                    assistantManager: required,
+                    assistantManager: optional,
+                    teamLeader: optional,
                     qualityAnalyst: hidden,
                     team: required,
                     tenure: hidden,
@@ -135,7 +155,8 @@ const AddUserFormModal = ({
           if (roleId === 6) {
                return {
                     projectManager: optional,
-                    assistantManager: required,
+                    assistantManager: optional,
+                    teamLeader: optional,
                     qualityAnalyst: required,
                     team: required,
                     tenure: required,
@@ -145,7 +166,8 @@ const AddUserFormModal = ({
 
           return {
                projectManager: optional,
-               assistantManager: required,
+               assistantManager: optional,
+               teamLeader: optional,
                qualityAnalyst: required,
                team: required,
                tenure: hidden,
@@ -330,6 +352,13 @@ const AddUserFormModal = ({
                }
           }
 
+          // Validate teamLeaders (array - only if visible and required for this role)
+          if (visibility.teamLeader?.visible && visibility.teamLeader.required) {
+               if (!newUser.teamLeaders || newUser.teamLeaders.length === 0) {
+                    errors.teamLeaders = "Please select at least one Team Leader";
+               }
+          }
+
           // Validate qualityAnalysts (array - only if visible and required for this role)
           if (visibility.qualityAnalyst.visible && visibility.qualityAnalyst.required) {
                if (!newUser.qualityAnalysts || newUser.qualityAnalysts.length === 0) {
@@ -365,6 +394,7 @@ const AddUserFormModal = ({
                const next = { ...newUser, role: value };
                if (!vis.projectManager.visible) next.projectManagers = [];
                if (!vis.assistantManager.visible) next.assistantManagers = [];
+               if (!vis.teamLeader?.visible) next.teamLeaders = [];
                if (!vis.qualityAnalyst.visible) next.qualityAnalysts = [];
                if (!vis.team?.visible) next.team = "";
                if (!vis.tenure?.visible) next.tenure = "";
@@ -713,6 +743,29 @@ const AddUserFormModal = ({
                                              disabled={isDropdownLoading}
                                              error={hasError("assistantManagers")}
                                              errorMessage={getErrorMessage("assistantManagers")}
+                                             maxDisplayCount={2}
+                                        />
+                                   </div>
+                              )}
+
+                              {/* Team Leader Selection - Conditionally visible - MULTI SELECT */}
+                              {fieldVisibility.teamLeader?.visible && (
+                                   <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                             Team Leader {fieldVisibility.teamLeader.required && <span className="text-red-600">*</span>}
+                                        </label>
+                                        <MultiSelectWithCheckbox
+                                             value={newUser.teamLeaders || []}
+                                             onChange={(val) => {
+                                                  setNewUser({ ...newUser, teamLeaders: val });
+                                                  clearFieldError && clearFieldError("teamLeaders");
+                                             }}
+                                             options={teamLeaders.map(tl => ({ value: String(tl.user_id), label: tl.label }))}
+                                             icon={Users}
+                                             placeholder="Select Team Leaders"
+                                             disabled={isDropdownLoading}
+                                             error={hasError("teamLeaders")}
+                                             errorMessage={getErrorMessage("teamLeaders")}
                                              maxDisplayCount={2}
                                         />
                                    </div>
