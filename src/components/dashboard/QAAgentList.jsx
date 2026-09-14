@@ -54,6 +54,119 @@ const isAgentVisibleInListing = (isActive, deactivatedAt) => {
   return left >= cutoff;
 };
 
+const QC_FORM_EFFECTIVE_FROM = "2026-09-01";
+const QC_SLA_WORKING_HOURS = 24;
+const URGENT_HOURS_THRESHOLD = 4;
+
+const parseTrackerDate = (value) => {
+  if (!value) return null;
+  const text = String(value).trim().replace("T", " ").slice(0, 19);
+  const d = new Date(text.includes(" ") ? text.replace(" ", "T") : text);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const isWeekend = (d) => {
+  const day = d.getDay();
+  return day === 0 || day === 6;
+};
+
+/** Advance by working hours (pauses Sat/Sun). Holidays ignored client-side. */
+const addWorkingHoursClient = (start, hours = QC_SLA_WORKING_HOURS) => {
+  if (!start) return null;
+  let current = new Date(start.getTime());
+  let remainingMs = hours * 3600 * 1000;
+  // If start is weekend, jump to next Monday 00:00
+  while (isWeekend(current)) {
+    current.setDate(current.getDate() + 1);
+    current.setHours(0, 0, 0, 0);
+  }
+  for (let i = 0; i < 10000 && remainingMs > 0; i += 1) {
+    if (isWeekend(current)) {
+      current.setDate(current.getDate() + 1);
+      current.setHours(0, 0, 0, 0);
+      continue;
+    }
+    const nextMidnight = new Date(current);
+    nextMidnight.setDate(nextMidnight.getDate() + 1);
+    nextMidnight.setHours(0, 0, 0, 0);
+    const available = nextMidnight.getTime() - current.getTime();
+    if (remainingMs <= available) {
+      return new Date(current.getTime() + remainingMs);
+    }
+    remainingMs -= available;
+    current = nextMidnight;
+  }
+  return current;
+};
+
+const workingHoursBetweenClient = (from, to) => {
+  if (!from || !to) return null;
+  let start = new Date(from.getTime());
+  let end = new Date(to.getTime());
+  let sign = 1;
+  if (end < start) {
+    const tmp = start;
+    start = end;
+    end = tmp;
+    sign = -1;
+  }
+  let totalMs = 0;
+  let current = new Date(start.getTime());
+  while (isWeekend(current) && current < end) {
+    current.setDate(current.getDate() + 1);
+    current.setHours(0, 0, 0, 0);
+  }
+  for (let i = 0; i < 10000 && current < end; i += 1) {
+    if (isWeekend(current)) {
+      current.setDate(current.getDate() + 1);
+      current.setHours(0, 0, 0, 0);
+      continue;
+    }
+    const nextMidnight = new Date(current);
+    nextMidnight.setDate(nextMidnight.getDate() + 1);
+    nextMidnight.setHours(0, 0, 0, 0);
+    const sliceEnd = end < nextMidnight ? end : nextMidnight;
+    if (sliceEnd > current) totalMs += sliceEnd.getTime() - current.getTime();
+    current = sliceEnd < nextMidnight ? sliceEnd : nextMidnight;
+  }
+  return sign * Math.round((totalMs / 3600000) * 100) / 100;
+};
+
+/** Resolve SLA for urgent queue — prefer API fields, else compute locally. */
+const resolveTrackerSla = (tracker) => {
+  const submittedRaw = tracker.date_time || tracker.file_submitted_at;
+  const submittedStr = String(submittedRaw || "").slice(0, 10);
+  if (tracker.sla_applies === false) {
+    return { slaApplies: false, hours: null, overdue: false };
+  }
+  if (submittedStr && submittedStr < QC_FORM_EFFECTIVE_FROM) {
+    return { slaApplies: false, hours: null, overdue: false };
+  }
+
+  if (tracker.hours_remaining != null && tracker.hours_remaining !== "") {
+    const hours = Number(tracker.hours_remaining);
+    if (!Number.isNaN(hours)) {
+      return {
+        slaApplies: true,
+        hours,
+        overdue: Boolean(tracker.is_overdue) || hours < 0,
+      };
+    }
+  }
+
+  const submitted = parseTrackerDate(submittedRaw);
+  if (!submitted) {
+    return { slaApplies: false, hours: null, overdue: false };
+  }
+  const deadline = addWorkingHoursClient(submitted, QC_SLA_WORKING_HOURS);
+  const hours = workingHoursBetweenClient(new Date(), deadline);
+  return {
+    slaApplies: true,
+    hours,
+    overdue: hours != null && hours < 0,
+  };
+};
+
 const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedAgentId, getTodayDate, fetchReworkTrackers }) => {
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
   const trackerPagination = useClientPagination(trackers, { resetKeys: [selectedAgentId, trackers.length] });
@@ -755,28 +868,19 @@ const QAAgentList = () => {
     });
   }, [agents, searchQuery]);
 
-  const URGENT_HOURS_THRESHOLD = 4;
-  // Per-file QC form era — before this, scores were daily averages in temp_qc
-  const QC_FORM_EFFECTIVE_FROM = "2026-06-01";
-
   const urgentPendingFiles = useMemo(() => {
     const rows = (allPendingTrackers || [])
       .filter((t) => t?.tracker_file)
-      .filter((t) => {
-        // Old temp_qc months: not for per-file QC / urgent queue
-        if (t.sla_applies === false) return false;
-        const submitted = String(t.date_time || t.file_submitted_at || "").slice(0, 10);
-        if (!submitted || submitted < QC_FORM_EFFECTIVE_FROM) return false;
-        return true;
-      })
       .map((t) => {
-        const hours =
-          t.hours_remaining != null && t.hours_remaining !== ""
-            ? Number(t.hours_remaining)
-            : null;
-        const overdue = Boolean(t.is_overdue) || (hours != null && hours < 0);
-        return { ...t, _hours: hours, _overdue: overdue };
+        const sla = resolveTrackerSla(t);
+        return {
+          ...t,
+          _hours: sla.hours,
+          _overdue: sla.overdue,
+          _slaApplies: sla.slaApplies,
+        };
       })
+      .filter((t) => t._slaApplies)
       // Only overdue or ≤ 4 working hours left
       .filter((t) => {
         if (t._overdue) return true;
@@ -1154,7 +1258,7 @@ const QAAgentList = () => {
         </div>
 
         {/* Urgent pending QC — all agents, least time remaining first */}
-        {activeTab === 'agent_files' && !loading && urgentPendingFiles.length > 0 && (
+        {activeTab === 'agent_files' && !loading && (
           <div className="bg-white rounded-2xl shadow-xl border border-red-100 mb-6 overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-red-50 bg-gradient-to-r from-red-50 to-amber-50">
               <div className="flex items-center gap-3">
@@ -1164,7 +1268,7 @@ const QAAgentList = () => {
                 <div>
                   <h3 className="text-base font-bold text-slate-800">Urgent Files — do these first</h3>
                   <p className="text-xs font-medium text-slate-500">
-                    Only files from Jun 2026 onward with ≤4 hours left or overdue. Pre-June temp_qc days are excluded.
+                    Only files from Sep 2026 onward with ≤4 working hours left or overdue. Pre-September pending files are excluded.
                   </p>
                 </div>
               </div>
@@ -1177,6 +1281,12 @@ const QAAgentList = () => {
                 </span>
               </div>
             </div>
+            {urgentPendingFiles.length === 0 ? (
+              <div className="px-5 py-6 text-sm font-medium text-slate-500">
+                No urgent pending files right now. Files appear here when they are overdue or have ≤4 working hours left on the 24h QC SLA.
+              </div>
+            ) : (
+              <>
             <div className="overflow-x-auto max-h-[280px]">
               <table className="min-w-full text-sm">
                 <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
@@ -1267,6 +1377,8 @@ const QAAgentList = () => {
                 </button>
               </div>
             ) : null}
+              </>
+            )}
           </div>
         )}
 
