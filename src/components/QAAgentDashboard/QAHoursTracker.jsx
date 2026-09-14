@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  Download,
   FileText,
   Loader2,
   Pencil,
@@ -40,6 +41,7 @@ import {
 } from "../../services/qaTrackerService";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
 import { fetchDropdown } from "../../services/dropdownService";
+import { exportToCSV } from "../../utils/csvExport";
 
 const KIND_OPTIONS = [
   { value: "feedback", label: "Feedback" },
@@ -169,11 +171,10 @@ const addDaysIso = (iso, days) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 };
 
-const fillMonthDays = (rows, yyyyMm, todayIso, qaUserId) => {
-  const { start, end } = monthBounds(yyyyMm);
+const fillDateRangeDays = (rows, start, end, todayIso, qaUserId) => {
   if (!start || !end) return Array.isArray(rows) ? rows : [];
-  const monthOfToday = String(todayIso || "").slice(0, 7);
-  const cap = yyyyMm === monthOfToday ? todayIso : end;
+  const todayCap = String(todayIso || "").slice(0, 10);
+  const cap = todayCap && todayCap < end ? todayCap : end;
   if (!cap || cap < start) return [];
   const byDate = {};
   (rows || []).forEach((row) => {
@@ -205,6 +206,17 @@ const fillMonthDays = (rows, yyyyMm, todayIso, qaUserId) => {
   }
   filled.reverse();
   return filled;
+};
+
+const clampDateToRange = (dateStr, start, end, fallback) => {
+  if (dateStr && start && end && dateStr >= start && dateStr <= end) return dateStr;
+  if (fallback && start && end && fallback >= start && fallback <= end) return fallback;
+  return end || start || dateStr || fallback;
+};
+
+const monthFromDate = (dateStr) => {
+  if (!dateStr || !String(dateStr).includes("-")) return "";
+  return String(dateStr).slice(0, 7);
 };
 
 const monthBounds = (yyyyMm) => {
@@ -240,6 +252,8 @@ const QAHoursTracker = ({ mode = "self" }) => {
 
   const [activeToggle, setActiveToggle] = useState(mode === "manager" ? "daily" : "tracker");
   const [monthFilter, setMonthFilter] = useState(defaultMonth);
+  const [dailyStart, setDailyStart] = useState(() => monthBounds(defaultMonth).start);
+  const [dailyEnd, setDailyEnd] = useState(() => monthBounds(defaultMonth).end);
   const [workDate, setWorkDate] = useState(() => clampDateToMonth(today, defaultMonth, today));
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
@@ -286,6 +300,37 @@ const QAHoursTracker = ({ mode = "self" }) => {
     }
   }, [userId, workDate, isManager, qaUserId]);
 
+  const handleDailyMonthChange = (my) => {
+    const yyyyMm = monthYearToYyyyMm(my);
+    if (!yyyyMm) return;
+    const range = monthBounds(yyyyMm);
+    setMonthFilter(yyyyMm);
+    setDailyStart(range.start);
+    setDailyEnd(range.end);
+  };
+
+  const handleDailyStartChange = (next) => {
+    setDailyStart(next);
+    if (dailyEnd && next > dailyEnd) setDailyEnd(next);
+    const nextMonth = monthFromDate(next);
+    if (nextMonth) setMonthFilter(nextMonth);
+  };
+
+  const handleDailyEndChange = (next) => {
+    setDailyEnd(next);
+    if (dailyStart && next < dailyStart) {
+      setDailyStart(next);
+      const nextMonth = monthFromDate(next);
+      if (nextMonth) setMonthFilter(nextMonth);
+      return;
+    }
+    const startMonth = monthFromDate(dailyStart);
+    const endMonth = monthFromDate(next);
+    if (startMonth && endMonth && startMonth === endMonth) {
+      setMonthFilter(endMonth);
+    }
+  };
+
   const loadList = useCallback(async (opts = {}) => {
     if (!userId) {
       setLoading(false);
@@ -297,9 +342,12 @@ const QAHoursTracker = ({ mode = "self" }) => {
       setError("");
     }
     try {
+      // Prefer start_date/end_date (Billable-style). Do not send month_year —
+      // backend would ignore the day range when month_year is present.
       const payload = {
         logged_in_user_id: userId,
-        month_year: monthFilter,
+        start_date: dailyStart || monthBounds(monthFilter).start,
+        end_date: dailyEnd || monthBounds(monthFilter).end,
       };
       if (qaUserId) payload.qa_user_id = Number(qaUserId);
       const res = await fetchQATrackerList(payload);
@@ -316,7 +364,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [userId, monthFilter, qaUserId]);
+  }, [userId, dailyStart, dailyEnd, monthFilter, qaUserId]);
 
   const loadMonthly = useCallback(async () => {
     if (!userId) {
@@ -381,8 +429,12 @@ const QAHoursTracker = ({ mode = "self" }) => {
   }, [userId, startDate, endDate, qaUserId]);
 
   useEffect(() => {
-    setWorkDate((prev) => clampDateToMonth(prev, monthFilter, today));
-  }, [monthFilter, today]);
+    if (activeToggle === "daily") {
+      setWorkDate((prev) => clampDateToRange(prev, dailyStart, dailyEnd, today));
+    } else {
+      setWorkDate((prev) => clampDateToMonth(prev, monthFilter, today));
+    }
+  }, [activeToggle, dailyStart, dailyEnd, monthFilter, today]);
 
   useEffect(() => {
     if (!userId) {
@@ -620,14 +672,312 @@ const QAHoursTracker = ({ mode = "self" }) => {
   };
 
   const selfDailyRows = useMemo(
-    () => fillMonthDays(listRows, monthFilter, today, userId),
-    [listRows, monthFilter, today, userId]
+    () =>
+      fillDateRangeDays(
+        listRows,
+        dailyStart || monthBounds(monthFilter).start,
+        dailyEnd || monthBounds(monthFilter).end,
+        today,
+        userId
+      ),
+    [listRows, dailyStart, dailyEnd, monthFilter, today, userId]
   );
 
   const managerDailyRows = useMemo(
     () => (listRows || []).filter((row) => !isWeekendIso(row.work_date) || dayHasWork(row)),
     [listRows]
   );
+
+  const dailyExportRows = isManager ? managerDailyRows : selfDailyRows;
+
+  const handleExportDaily = () => {
+    try {
+      if (!dailyExportRows.length) {
+        toast.error("No data to export.");
+        return;
+      }
+
+      const exportData = [];
+      const pushBase = (row, extra) => {
+        const out = {};
+        if (isManager) out["QA"] = row.qa_user_name || row.qa_user_id || "-";
+        out["Date"] = row.work_date || "-";
+        Object.assign(out, extra);
+        exportData.push(out);
+      };
+
+      dailyExportRows.forEach((row) => {
+        const files = (row.qc_files || 0) + (row.rework_files || 0);
+        pushBase(row, {
+          Section: "Day Summary",
+          Project: "",
+          Task: "",
+          Type: "",
+          Detail: "",
+          "QC Hours": fmt(row.qc_hours),
+          "Rework Hour": fmt(row.rework_hours),
+          Feedback: fmt(row.feedback_hours),
+          Reporting: fmt(row.reporting_hours),
+          "Total Hours": fmt(row.total_hours),
+          "Expected Hours": fmt(row.expected_total || 9),
+          Files: files,
+          "File Record": row.file_records || 0,
+          "QC Record": row.qc_records || 0,
+        });
+
+        const projects = Array.isArray(row.projects) ? row.projects : [];
+        projects.forEach((p) => {
+          pushBase(row, {
+            Section: "QC Work",
+            Project: p.project_name || "-",
+            Task: p.task_name || "-",
+            Type: "",
+            Detail: "",
+            "QC Hours": fmt(p.qc_hours),
+            "Rework Hour": fmt(p.rework_hours),
+            Feedback: "",
+            Reporting: "",
+            "Total Hours": fmt((Number(p.qc_hours) || 0) + (Number(p.rework_hours) || 0)),
+            "Expected Hours": "",
+            Files: p.files || 0,
+            "File Record": p.file_records || 0,
+            "QC Record": p.qc_records || 0,
+          });
+        });
+
+        const manuals = (row.manual_entries || [])
+          .filter((e) => Number(e.hours) > 0)
+          .slice()
+          .sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+
+        let detailManuals = manuals;
+        if (detailManuals.length === 0) {
+          detailManuals = [];
+          if (Number(row.feedback_hours) > 0) {
+            detailManuals.push({
+              sub_activity: "feedback",
+              hours: row.feedback_hours,
+              detail: "",
+            });
+          }
+          if (Number(row.reporting_hours) > 0) {
+            detailManuals.push({
+              sub_activity: "reporting",
+              hours: row.reporting_hours,
+              detail: "",
+            });
+          }
+        }
+
+        detailManuals.forEach((item) => {
+          const kind = item.sub_activity || getEntryKind(item) || item.activity_type || "";
+          const detail = item.detail != null ? item.detail : entryDetail(item);
+          const hours = Number(item.hours) || 0;
+          const isFeedbackLike = ["feedback", "training"].includes(String(kind).toLowerCase());
+          pushBase(row, {
+            Section: "Feedback / Reporting",
+            Project: "",
+            Task: "",
+            Type: kindLabel(kind) || kind || "-",
+            Detail: detail || "-",
+            "QC Hours": "",
+            "Rework Hour": "",
+            Feedback: isFeedbackLike ? fmt(hours) : "",
+            Reporting: isFeedbackLike ? "" : fmt(hours),
+            "Total Hours": fmt(hours),
+            "Expected Hours": "",
+            Files: "",
+            "File Record": "",
+            "QC Record": "",
+          });
+        });
+      });
+
+      // TOTAL only from Day Summary rows
+      const summaryRows = exportData.filter((r) => r.Section === "Day Summary");
+      if (summaryRows.length > 0) {
+        const sum = (key) =>
+          summaryRows.reduce((acc, r) => acc + (parseFloat(r[key]) || 0), 0);
+        const totalRow = {};
+        if (isManager) totalRow["QA"] = "TOTAL";
+        totalRow["Date"] = "";
+        totalRow["Section"] = "";
+        totalRow["Project"] = "";
+        totalRow["Task"] = "";
+        totalRow["Type"] = "";
+        totalRow["Detail"] = "";
+        totalRow["QC Hours"] = sum("QC Hours").toFixed(2);
+        totalRow["Rework Hour"] = sum("Rework Hour").toFixed(2);
+        totalRow["Feedback"] = sum("Feedback").toFixed(2);
+        totalRow["Reporting"] = sum("Reporting").toFixed(2);
+        totalRow["Total Hours"] = sum("Total Hours").toFixed(2);
+        totalRow["Expected Hours"] = "";
+        totalRow["Files"] = summaryRows.reduce((acc, r) => acc + (Number(r.Files) || 0), 0);
+        totalRow["File Record"] = summaryRows.reduce(
+          (acc, r) => acc + (Number(r["File Record"]) || 0),
+          0
+        );
+        totalRow["QC Record"] = summaryRows.reduce(
+          (acc, r) => acc + (Number(r["QC Record"]) || 0),
+          0
+        );
+        exportData.push(totalRow);
+      }
+
+      const rangeLabel = `${dailyStart || "start"}_to_${dailyEnd || "end"}`;
+      const ok = exportToCSV(exportData, `QA_Daily_Report_${rangeLabel}.csv`);
+      if (!ok) {
+        toast.error("Failed to export daily report");
+        return;
+      }
+      toast.success("Daily report exported with details!");
+    } catch {
+      toast.error("Failed to export daily report");
+    }
+  };
+
+  const handleExportMonthly = () => {
+    try {
+      const rows = Array.isArray(monthlyRows) ? monthlyRows : [];
+      if (!rows.length) {
+        toast.error("No data to export.");
+        return;
+      }
+
+      const exportData = [];
+      const pushBase = (row, extra) => {
+        exportData.push({
+          QA: row.qa_user_name || row.qa_user_id || "-",
+          "Month Year": row.month_year || monthYearLabel || yyyyMmToMonthYear(monthFilter),
+          ...extra,
+        });
+      };
+
+      rows.forEach((row) => {
+        const files = (row.qc_files || 0) + (row.rework_files || 0);
+        pushBase(row, {
+          Section: "Month Summary",
+          Days: row.days_worked || 0,
+          Project: "",
+          Task: "",
+          Type: "",
+          Detail: "",
+          "QC Hours": fmt(row.qc_hours),
+          "Rework Hour": fmt(row.rework_hours),
+          Feedback: fmt(row.feedback_hours),
+          Reporting: fmt(row.reporting_hours),
+          "Total Hours": fmt(row.total_hours),
+          Expected: fmt(row.expected_hours),
+          Pending: fmt(row.pending_hours),
+          Files: files,
+          "File Record": row.file_records || 0,
+          "QC Record": row.qc_records || 0,
+        });
+
+        const projects = Array.isArray(row.projects) ? row.projects : [];
+        projects.forEach((p) => {
+          pushBase(row, {
+            Section: "QC Work",
+            Days: "",
+            Project: p.project_name || "-",
+            Task: p.task_name || "-",
+            Type: "",
+            Detail: "",
+            "QC Hours": fmt(p.qc_hours),
+            "Rework Hour": fmt(p.rework_hours),
+            Feedback: "",
+            Reporting: "",
+            "Total Hours": fmt((Number(p.qc_hours) || 0) + (Number(p.rework_hours) || 0)),
+            Expected: "",
+            Pending: "",
+            Files: p.files || 0,
+            "File Record": p.file_records || 0,
+            "QC Record": p.qc_records || 0,
+          });
+        });
+
+        const manuals = (row.manual_entries || []).filter((e) => Number(e.hours) > 0);
+        let monthManuals = aggregateManualMonth(manuals);
+        if (monthManuals.length === 0) {
+          monthManuals = [
+            Number(row.feedback_hours) > 0
+              ? { sub_activity: "feedback", detail: "", hours: row.feedback_hours }
+              : null,
+            Number(row.reporting_hours) > 0
+              ? { sub_activity: "reporting", detail: "", hours: row.reporting_hours }
+              : null,
+          ].filter(Boolean);
+        }
+
+        monthManuals.forEach((item) => {
+          const kind = item.sub_activity || getEntryKind(item) || "";
+          const detail = item.detail != null ? item.detail : entryDetail(item);
+          const hours = Number(item.hours) || 0;
+          const isFeedbackLike = ["feedback", "training"].includes(String(kind).toLowerCase());
+          pushBase(row, {
+            Section: "Feedback / Reporting",
+            Days: "",
+            Project: "",
+            Task: "",
+            Type: kindLabel(kind) || kind || "-",
+            Detail: detail || "-",
+            "QC Hours": "",
+            "Rework Hour": "",
+            Feedback: isFeedbackLike ? fmt(hours) : "",
+            Reporting: isFeedbackLike ? "" : fmt(hours),
+            "Total Hours": fmt(hours),
+            Expected: "",
+            Pending: "",
+            Files: "",
+            "File Record": "",
+            "QC Record": "",
+          });
+        });
+      });
+
+      const summaryRows = exportData.filter((r) => r.Section === "Month Summary");
+      if (summaryRows.length > 0) {
+        const sum = (key) =>
+          summaryRows.reduce((acc, r) => acc + (parseFloat(r[key]) || 0), 0);
+        exportData.push({
+          QA: "TOTAL",
+          "Month Year": "",
+          Section: "",
+          Days: summaryRows.reduce((acc, r) => acc + (Number(r.Days) || 0), 0),
+          Project: "",
+          Task: "",
+          Type: "",
+          Detail: "",
+          "QC Hours": sum("QC Hours").toFixed(2),
+          "Rework Hour": sum("Rework Hour").toFixed(2),
+          Feedback: sum("Feedback").toFixed(2),
+          Reporting: sum("Reporting").toFixed(2),
+          "Total Hours": sum("Total Hours").toFixed(2),
+          Expected: sum("Expected").toFixed(2),
+          Pending: sum("Pending").toFixed(2),
+          Files: summaryRows.reduce((acc, r) => acc + (Number(r.Files) || 0), 0),
+          "File Record": summaryRows.reduce(
+            (acc, r) => acc + (Number(r["File Record"]) || 0),
+            0
+          ),
+          "QC Record": summaryRows.reduce(
+            (acc, r) => acc + (Number(r["QC Record"]) || 0),
+            0
+          ),
+        });
+      }
+
+      const monthLabel = yyyyMmToMonthYear(monthFilter) || monthFilter || "month";
+      const ok = exportToCSV(exportData, `QA_Monthly_Report_${monthLabel}.csv`);
+      if (!ok) {
+        toast.error("Failed to export monthly report");
+        return;
+      }
+      toast.success("Monthly report exported with details!");
+    } catch {
+      toast.error("Failed to export monthly report");
+    }
+  };
 
   const selectWorkDate = (dateStr, key) => {
     if (dateStr) setWorkDate(dateStr);
@@ -665,7 +1015,9 @@ const QAHoursTracker = ({ mode = "self" }) => {
             {safeRows.length === 0 ? (
               <tr>
                 <td colSpan={14} className="px-4 py-12 text-center text-slate-500">
-                  No QA hours for {yyyyMmToMonthYear(monthFilter)}. Change Month Year to see other months.
+                  {showDate
+                    ? `No QA hours for ${dailyStart || "—"} to ${dailyEnd || "—"}. Try another date range.`
+                    : `No QA hours for ${yyyyMmToMonthYear(monthFilter)}. Change Month Year to see other months.`}
                 </td>
               </tr>
             ) : (
@@ -1237,12 +1589,29 @@ const QAHoursTracker = ({ mode = "self" }) => {
       ) : (
         <>
           <div className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+            <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
+              {activeToggle === "daily" ? (
+                <div className="relative min-w-[300px] shrink-0 flex-1">
+                  <DateRangePicker
+                    startDate={dailyStart}
+                    endDate={dailyEnd}
+                    onStartDateChange={handleDailyStartChange}
+                    onEndDateChange={handleDailyEndChange}
+                    noWrapper
+                    showClearButton={false}
+                    fieldWidth="155px"
+                  />
+                </div>
+              ) : null}
               <MonthYearPicker
                 compact
-                label="Month Year"
+                label={activeToggle === "daily" ? "Select Month" : "Month Year"}
                 selectedMonthYear={yyyyMmToMonthYear(monthFilter)}
                 onMonthYearChange={(my) => {
+                  if (activeToggle === "daily") {
+                    handleDailyMonthChange(my);
+                    return;
+                  }
                   const yyyyMm = monthYearToYyyyMm(my);
                   if (yyyyMm) setMonthFilter(yyyyMm);
                 }}
@@ -1258,18 +1627,32 @@ const QAHoursTracker = ({ mode = "self" }) => {
                   />
                 </div>
               ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  setMonthFilter(defaultMonth);
-                  setQaUserId("");
-                  setWorkDate(clampDateToMonth(today, defaultMonth, today));
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset
-              </button>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const range = monthBounds(defaultMonth);
+                    setMonthFilter(defaultMonth);
+                    setDailyStart(range.start);
+                    setDailyEnd(range.end);
+                    setQaUserId("");
+                    setWorkDate(clampDateToMonth(today, defaultMonth, today));
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset
+                </button>
+                <button
+                  type="button"
+                  onClick={activeToggle === "monthly" ? handleExportMonthly : handleExportDaily}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-md hover:from-green-700 hover:to-emerald-700 hover:shadow-lg"
+                  title={activeToggle === "monthly" ? "Export monthly report" : "Export daily report"}
+                >
+                  <Download className="h-4 w-4" />
+                  {activeToggle === "monthly" ? "Export Month" : "Export"}
+                </button>
+              </div>
             </div>
           </div>
 
