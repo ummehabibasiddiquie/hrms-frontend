@@ -71,36 +71,32 @@ const DashboardPage = ({
   const [comparisonMode, setComparisonMode] = useState('previous_period');
   const role = currentUser?.role_name || '';
   const userRole = currentUser?.user_role || '';
-  const designation = currentUser?.designation || currentUser?.user_designation || '';
   const roleId = Number(currentUser?.role_id ?? currentUser?.user_role_id ?? 0);
-  const designationId = Number(currentUser?.designation_id ?? currentUser?.user_designation_id ?? 0);
 
   const roleText = String(role).trim().toLowerCase();
   const userRoleText = String(userRole).trim().toLowerCase();
-  const designationText = String(designation).trim().toLowerCase();
 
+  // Role-based only — designation is never used for access
   const isSuperAdmin =
     roleId === 1 ||
     roleText.includes('super') ||
-    userRoleText.includes('super') ||
-    designationText.includes('super');
+    userRoleText.includes('super');
 
   const isAdmin =
     !isSuperAdmin &&
     (roleId === 2 ||
-      roleText.includes('admin') ||
-      userRoleText === 'admin' ||
-      designationText.includes('admin'));
-  const isAgent = roleId === 6 || String(role).toLowerCase() === 'agent' || String(userRole).toUpperCase() === 'AGENT' || String(designation).toLowerCase() === 'agent';
-  const isQA = roleId === 5 || String(currentUser?.user_designation).toLowerCase() === 'qa' || String(designation).toLowerCase() === 'qa' || String(role).toLowerCase().includes('qa');
-  const isTeamLeader = roleId === 7 || String(role).toLowerCase().includes('team leader') || String(designation).toLowerCase().includes('team leader');
+      roleText === 'admin' ||
+      userRoleText === 'admin');
+  const isAgent = roleId === 6 || roleText === 'agent' || userRoleText === 'agent';
+  const isQA = roleId === 5 || roleText === 'qa' || roleText.includes('qa');
+  const isTeamLeader = roleId === 7 || roleText.includes('team leader');
   const isAssistantManager =
     !isTeamLeader &&
     (roleId === 4 ||
-      String(designation).toLowerCase() === 'assistant manager' ||
-      String(role).toLowerCase().includes('assistant'));
+      roleText === 'assistant manager' ||
+      (roleText.includes('assistant') && !roleText.includes('team leader')));
   const canViewAsAm = isAssistantManager || isTeamLeader;
-  const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
+  const isProjectManager = roleId === 3 || roleText.includes('project manager');
   const canViewTrackerReport = isQA || canViewAsAm || isProjectManager;
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
   const [adminRequests, setAdminRequests] = useState([]);

@@ -52,31 +52,22 @@ const QATrackerReport = () => {
     parentTab: 'tracker_report',
   });
   
-  // Check if user is QA agent (QA agents should not see edit/delete actions)
-  const roleId = user?.role_id;
-  const role = user?.role_name || user?.role || '';
-  const designation = user?.designation || user?.user_designation || '';
-  const isQAAgent = roleId === 5 || 
-                    String(designation).toLowerCase() === 'qa' || 
-                    String(role).toLowerCase().includes('qa');
+  // Role-based only — designation is never used for access
+  const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
+  const role = String(user?.role_name || user?.role || '').toLowerCase().trim();
+  const isQAAgent = roleId === 5 || role === 'qa' || role.includes('qa');
+  const isTeamLeader = roleId === 7 || role.includes('team leader');
   const isAssistantManager =
-    roleId === 4 ||
-    String(designation).toLowerCase() === 'assistant manager' ||
-    String(role).toLowerCase().includes('assistant');
-  const isTeamLeader =
-    Number(roleId) === 7 ||
-    String(designation).toLowerCase().includes('team leader') ||
-    String(role).toLowerCase().includes('team leader');
+    !isTeamLeader &&
+    (roleId === 4 || role === 'assistant manager' || (role.includes('assistant') && !role.includes('team leader')));
   const canMutateTracker = !isQAAgent && !isTeamLeader;
   
   // Check if user is PM, Admin, or Super Admin (for team filter visibility)
-  const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
-  const isAdmin = roleId === 1 || roleId === 2 || String(role).toLowerCase() === 'admin' || String(designation).toLowerCase() === 'admin';
-  const isSuperAdmin = String(role).toLowerCase().includes('super') || String(designation).toLowerCase().includes('super');
+  const isProjectManager = roleId === 3 || role.includes('project manager');
+  const isAdmin = roleId === 1 || roleId === 2 || role === 'admin' || role === 'super admin';
+  const isSuperAdmin = roleId === 1 || role.includes('super');
   const canViewTeamFilter = isProjectManager || isAdmin || isSuperAdmin;
-  const isAgent =
-    String(role).toLowerCase() === 'agent' ||
-    String(designation).toLowerCase() === 'agent';
+  const isAgent = roleId === 6 || role === 'agent';
   const canAccessTaskEODReport = !isAgent;
   
   const [trackers, setTrackers] = useState([]);

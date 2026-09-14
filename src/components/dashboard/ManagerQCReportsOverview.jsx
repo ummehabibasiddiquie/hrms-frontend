@@ -50,26 +50,22 @@ const getDefaultDateRange = () => {
 const ManagerQCReportsOverview = () => {
   const { user } = useAuth();
   
-  // Check if user is Assistant Manager (hide team column/filter)
+  // Role-based only — designation is never used for access
   const roleId = Number(user?.role_id || user?.user_role_id || 0);
-  const designation = String(user?.designation || user?.user_designation || '').toLowerCase().trim();
   const roleName = String(user?.role_name || user?.user_role || '').toLowerCase().trim();
   
-  const isAssistantManager = 
-    roleId === 4 || 
-    designation.includes('assistant') || 
-    designation.includes('asst') ||
-    roleName.includes('assistant') ||
-    roleName.includes('asst') ||
-    roleId === 7 ||
-    roleName.includes('team leader') ||
-    designation.includes('team leader');
+  const isTeamLeader = roleId === 7 || roleName.includes('team leader');
+  const isAssistantManager =
+    isTeamLeader ||
+    roleId === 4 ||
+    roleName === 'assistant manager' ||
+    (roleName.includes('assistant') && !roleName.includes('team leader'));
   
   console.log('[ManagerQCReportsOverview] Role Check:', {
     roleId,
-    designation,
     roleName,
-    isAssistantManager
+    isAssistantManager,
+    isTeamLeader
   });
   
   // State management

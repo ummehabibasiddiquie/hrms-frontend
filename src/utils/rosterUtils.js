@@ -500,13 +500,10 @@ export function filterEmployeesByTeam(employees, teamId, teams = []) {
 export function isAgentOrQA(user) {
   if (!user) return false;
   const roleName = String(user.role_name || user.role || "").trim().toLowerCase();
-  const designation = String(user.designation || user.designation_name || "").trim().toLowerCase();
   const roleId = Number(user.role_id);
   return (
     roleName === "agent" ||
     roleName === "qa" ||
-    designation === "agent" ||
-    designation === "qa" ||
     roleId === 5 ||
     roleId === 6
   );

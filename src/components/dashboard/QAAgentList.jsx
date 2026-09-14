@@ -279,8 +279,7 @@ const QAAgentList = () => {
   const { device_id, device_type } = useDeviceInfo();
   const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
   const roleText = String(user?.role_name || user?.role || user?.user_role || '').trim().toLowerCase();
-  const designationText = String(user?.designation || user?.user_designation || '').trim().toLowerCase();
-  const isQA = roleId === 5 || designationText === 'qa' || roleText.includes('qa');
+  const isQA = roleId === 5 || roleText === 'qa' || roleText.includes('qa');
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);

@@ -34,17 +34,12 @@ export default function UserCard({
   const normalizedRole = String(
     role || currentUser?.role || currentUser?.role_name || currentUser?.user_role || ''
   ).toUpperCase();
-  const normalizedDesignation = String(
-    currentUser?.designation || currentUser?.user_designation || ''
-  ).toUpperCase();
 
-  // IMPORTANT: In this app, Super Admin vs Admin must be decided by role (not by permission flags),
-  // because Admin users can also have both permissions enabled.
+  // Role-based only — designation is never used for access
   const isSuperAdmin =
     roleId === 1 ||
     normalizedRole.includes("SUPER_ADMIN") ||
-    normalizedRole.includes("SUPER ADMIN") ||
-    normalizedDesignation.includes("SUPER");
+    normalizedRole.includes("SUPER ADMIN");
 
   const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === "ADMIN");
   const isProjectManager =
@@ -53,20 +48,18 @@ export default function UserCard({
     normalizedRole.includes("PROJECT MANAGER");
   const isTeamLeader =
     roleId === 7 ||
-    normalizedRole.includes("TEAM LEADER") ||
-    normalizedDesignation.includes("TEAM LEADER");
+    normalizedRole.includes("TEAM LEADER");
   const isAssistantManager =
     !isTeamLeader &&
     (roleId === 4 ||
-      normalizedRole.includes("ASSISTANT") ||
-      normalizedRole.includes("ASST") ||
-      normalizedDesignation.includes("ASSISTANT") ||
-      normalizedDesignation.includes("ASST"));
+      normalizedRole.includes("ASSISTANT MANAGER") ||
+      ((normalizedRole.includes("ASSISTANT") || normalizedRole.includes("ASST")) &&
+        !normalizedRole.includes("TEAM LEADER")));
   
   const isQA =
     roleId === 5 ||
-    normalizedRole.includes("QA") ||
-    normalizedDesignation.includes("QA");
+    normalizedRole === "QA" ||
+    (normalizedRole.includes("QA") && !normalizedRole.includes("TEAM"));
 
   // Assigned hours edit: Super Admin, Admin, Project Manager, Assistant Manager only (not QA / Assistant Team Leader).
   const canSeeActions =

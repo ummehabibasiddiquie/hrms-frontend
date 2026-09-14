@@ -20,8 +20,10 @@ const QCFormReportView = () => {
   const fetchReports = React.useCallback(async () => {
     try {
       setLoading(true);
-      // If user is Agent (and not QA/Admin), API will filter for their own records
-      const isAgentView = user?.designation?.toLowerCase().includes('agent') && !user?.designation?.toLowerCase().includes('qa');
+      // If user is Agent (role_id 6), API will filter for their own records
+      const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
+      const roleName = String(user?.role_name || user?.role || '').toLowerCase().trim();
+      const isAgentView = roleId === 6 || roleName === 'agent';
       const userIdToPass = isAgentView ? user?.user_id : null;
       
       const response = await getQCRecordsList(userIdToPass);

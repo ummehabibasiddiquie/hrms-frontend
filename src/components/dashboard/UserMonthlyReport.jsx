@@ -28,20 +28,21 @@ const sortTeamWise = (a, b) => {
 const UserMonthlyReport = () => {
   const { user } = useAuth();
   
-  // Role checking — coerce role_id (API may return string) and check designation fallbacks
+  // Role-based only — designation is never used for access
   const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
   const role = user?.role || user?.role_name || user?.user_role || '';
-  const designation = String(user?.designation || user?.user_designation || '').toLowerCase();
-  const normalizedRole = String(role).toLowerCase();
-  const isSuperAdmin = roleId === 1 || normalizedRole.includes('super') || designation.includes('super');
-  const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === 'admin' || designation.includes('admin'));
+  const normalizedRole = String(role).toLowerCase().trim();
+  const isSuperAdmin = roleId === 1 || normalizedRole.includes('super');
+  const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === 'admin');
   const isProjectManager =
-    roleId === 3 || normalizedRole.includes('project manager') || designation.includes('project manager');
+    roleId === 3 || normalizedRole.includes('project manager');
   const isTeamLeader =
-    roleId === 7 || normalizedRole.includes('team leader') || designation.includes('team leader');
+    roleId === 7 || normalizedRole.includes('team leader');
   const isAssistantManager =
     !isTeamLeader &&
-    (roleId === 4 || normalizedRole.includes('assistant') || designation.includes('assistant'));
+    (roleId === 4 ||
+      normalizedRole === 'assistant manager' ||
+      (normalizedRole.includes('assistant') && !normalizedRole.includes('team leader')));
   const canManageAssignedHours = (isAssistantManager || isProjectManager || isAdmin || isSuperAdmin) && !isTeamLeader;
   // Monthly target is set by roster generate and is not edited afterwards.
   const canEditMonthlyBaseline = false;

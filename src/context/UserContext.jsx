@@ -22,11 +22,8 @@ export const UserProvider = ({ children }) => {
   const value = useMemo(() => {
     const isAgent = currentUser.role === "AGENT";
     const canAccessManage = ["ADMIN", "PROJECT_MANAGER", "FINANCE_HR"].includes(currentUser.role);
-    const canAccessQuality = ["ADMIN", "PROJECT_MANAGER"].includes(currentUser.role) || 
-                            currentUser.designation === "QA";
-    const canAccessEntry = isAgent || 
-                          (["ADMIN", "PROJECT_MANAGER"].includes(currentUser.role) && 
-                           currentUser.designation !== "QA");
+    const canAccessQuality = ["ADMIN", "PROJECT_MANAGER", "QA"].includes(currentUser.role);
+    const canAccessEntry = isAgent || ["ADMIN", "PROJECT_MANAGER"].includes(currentUser.role);
 
     return {
       currentUser,

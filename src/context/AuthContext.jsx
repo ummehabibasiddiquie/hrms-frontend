@@ -176,37 +176,31 @@ export const AuthProvider = ({ children }) => {
   const permissions = useMemo(() => {
     if (!user) return {};
 
-    // Get role_id for role-based checks - ensure proper type conversion
+    // Role-based only (role_id / role_name). Designation is display-only — never used for access.
     const roleId = Number(user.role_id || user.user_role_id || 0);
-    const designation = String(user.designation || user.user_designation || '').toLowerCase().trim();
     const roleName = String(user.role_name || user.user_role || '').toLowerCase().trim();
 
-    // Check if user is Admin, Project Manager, or Assistant Manager
-    // PRIORITY: roleId check first (most reliable), then fallback to name checks
     const isAdmin =
       roleId === 1 ||
       roleId === 2 ||
       roleName === 'admin' ||
-      designation === 'admin';
+      roleName === 'super admin';
     
     const isProjectManager = 
       roleId === 3 || 
-      roleName.includes('project manager') || 
-      designation.includes('project manager');
+      roleName.includes('project manager');
     
     const isTeamLeader =
       roleId === 7 ||
-      roleName.includes('team leader') ||
-      designation.includes('team leader');
+      roleName.includes('team leader');
 
     // Must not treat "assistant team leader" as Assistant Manager
     const isAssistantManager =
       !isTeamLeader && (
         roleId === 4 ||
-        designation.includes('assistant') ||
-        designation.includes('asst') ||
-        roleName.includes('assistant') ||
-        roleName.includes('asst')
+        roleName === 'assistant manager' ||
+        (roleName.includes('assistant') && !roleName.includes('team leader')) ||
+        (roleName.includes('asst') && !roleName.includes('team leader'))
       );
 
     // Calculate permissions
@@ -255,7 +249,6 @@ export const AuthProvider = ({ children }) => {
     console.log('[AuthContext] Permission Check:', {
       userId: user.user_id,
       roleId,
-      designation,
       roleName,
       isAdmin,
       isProjectManager,
