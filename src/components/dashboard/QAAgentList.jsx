@@ -6,7 +6,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
-import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2, RefreshCw, AlertTriangle, XCircle, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2, RefreshCw, AlertTriangle, XCircle, AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
 import nodeApi from "../../services/nodeApi";
@@ -31,7 +31,29 @@ const getTodayDate = () => {
   return today.toISOString().split('T')[0];
 };
 
-// Pending QC Files Table Component
+const formatSlaRemaining = (hoursRemaining, isOverdue) => {
+  if (hoursRemaining == null || Number.isNaN(Number(hoursRemaining))) return "—";
+  const abs = Math.abs(Number(hoursRemaining));
+  const h = Math.floor(abs);
+  const m = Math.round((abs - h) * 60);
+  const label = h > 0 ? `${h}h ${m}m` : `${m}m`;
+  if (isOverdue || Number(hoursRemaining) < 0) return `Overdue ${label}`;
+  return `${label} left`;
+};
+
+/** Agent list pages: active, or deactivated within last 3 months. */
+const isAgentVisibleInListing = (isActive, deactivatedAt) => {
+  const active = Number(isActive) === 1;
+  if (active) return true;
+  if (!deactivatedAt) return false;
+  const left = new Date(String(deactivatedAt).slice(0, 10));
+  if (Number.isNaN(left.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setMonth(cutoff.getMonth() - 3);
+  return left >= cutoff;
+};
+
 const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedAgentId, getTodayDate, fetchReworkTrackers }) => {
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
   const trackerPagination = useClientPagination(trackers, { resetKeys: [selectedAgentId, trackers.length] });
@@ -285,6 +307,8 @@ const QAAgentList = () => {
   const [agentLoading, setAgentLoading] = useState(false);
   const [qcFormLoading, setQcFormLoading] = useState(null); // Track specific tracker_id that's loading
   const [agentTrackers, setAgentTrackers] = useState({});
+  const [allPendingTrackers, setAllPendingTrackers] = useState([]);
+  const [showAllUrgent, setShowAllUrgent] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   
   // Tab state - synced to ?subtab= (e.g. /dashboard?tab=agent_file_report&subtab=rework_review)
@@ -338,7 +362,22 @@ const QAAgentList = () => {
         setProjectNameMap(pMap);
         setTaskNameMap(tMap);
 
-        // 2. Fetch ALL tracker data (no date filter) to get all agents assigned to this QA
+        // 2. Visible agent IDs (active + deactivated within last 3 months)
+        let listingAgentIds = null;
+        try {
+          const listingRes = await api.post("/dropdown/get", {
+            logged_in_user_id: user?.user_id,
+            dropdown_type: "agent",
+          });
+          const listingAgents = listingRes.data?.data || [];
+          listingAgentIds = new Set(
+            listingAgents.map((a) => String(a.user_id)).filter(Boolean)
+          );
+        } catch (err) {
+          logError('[QAAgentList] Error fetching listing agents:', err);
+        }
+
+        // 3. Fetch ALL pending QC trackers (agent sidebar uses 3-month listing filter)
         const allTrackersRes = await api.post("/tracker/view", {
           logged_in_user_id: user?.user_id,
           device_id: device_id,
@@ -351,8 +390,23 @@ const QAAgentList = () => {
         if (myTrackers.some(t => t.qa_agent_id !== undefined)) {
           myTrackers = myTrackers.filter(t => String(t.qa_agent_id) === String(user?.user_id));
         }
+
+        const trackerVisibleInListing = (tracker) => {
+          const uid = String(tracker.user_id);
+          if (listingAgentIds && listingAgentIds.size > 0) {
+            return listingAgentIds.has(uid);
+          }
+          const isActive = tracker.user_is_active ?? tracker.is_active;
+          const deactivatedAt = tracker.user_deactivated_at ?? tracker.deactivated_at;
+          // If status fields missing, keep visible (avoid wiping list before backend deploy)
+          if (isActive === undefined && deactivatedAt === undefined) return true;
+          return isAgentVisibleInListing(isActive, deactivatedAt);
+        };
+
+        myTrackers = myTrackers.filter(trackerVisibleInListing);
+        setAllPendingTrackers(myTrackers);
         
-        // Build agents list from ALL tracker data (to get all agents ever assigned)
+        // Build agents list from pending trackers (already 3-month filtered)
         const agentsMap = {};
         myTrackers.forEach(tracker => {
           if (!agentsMap[String(tracker.user_id)]) {
@@ -368,13 +422,24 @@ const QAAgentList = () => {
           const pendingQCRes = await api.post('/qc_rework/view_pending_qc_files', {});
           const pendingRecords = pendingQCRes.data?.data?.record || [];
           
-          // Add agents from pending QC files to agents map
+          // Add agents from pending QC files to agents map (only if still in 3-month listing)
           pendingRecords.forEach(record => {
             const agentName = record.agent_name;
-            // Try to find matching agent by name
+            const agentUserId = record.user_id ?? record.agent_id;
+            if (agentUserId != null) {
+              if (listingAgentIds && listingAgentIds.size > 0 && !listingAgentIds.has(String(agentUserId))) {
+                return;
+              }
+              if (!agentsMap[String(agentUserId)]) {
+                agentsMap[String(agentUserId)] = {
+                  user_id: agentUserId,
+                  user_name: agentName || '-',
+                };
+              }
+              return;
+            }
             const existingAgent = Object.values(agentsMap).find(a => a.user_name === agentName);
             if (!existingAgent && agentName) {
-              // Create a new agent entry with name only (we'll use name for matching later)
               const tempId = `temp_${agentName.replace(/\s+/g, '_')}`;
               agentsMap[tempId] = {
                 user_id: tempId,
@@ -389,7 +454,7 @@ const QAAgentList = () => {
         
         const allAgents = Object.values(agentsMap);
         
-        // 3. Fetch today's tracker data to get initial file counts
+        // 4. Fetch today's tracker data to get initial file counts
         const today = getTodayDate();
         const todayTrackersRes = await api.post("/tracker/view", {
           logged_in_user_id: user?.user_id,
@@ -405,6 +470,7 @@ const QAAgentList = () => {
         if (myTodayTrackers.some(t => t.qa_agent_id !== undefined)) {
           myTodayTrackers = myTodayTrackers.filter(t => String(t.qa_agent_id) === String(user?.user_id));
         }
+        myTodayTrackers = myTodayTrackers.filter(trackerVisibleInListing);
         
         // Build initial trackers by agent for today (for file counts)
         const initialTrackersByAgent = {};
@@ -688,6 +754,48 @@ const QAAgentList = () => {
       return aName.localeCompare(bName);
     });
   }, [agents, searchQuery]);
+
+  const URGENT_HOURS_THRESHOLD = 4;
+  // Per-file QC form era — before this, scores were daily averages in temp_qc
+  const QC_FORM_EFFECTIVE_FROM = "2026-06-01";
+
+  const urgentPendingFiles = useMemo(() => {
+    const rows = (allPendingTrackers || [])
+      .filter((t) => t?.tracker_file)
+      .filter((t) => {
+        // Old temp_qc months: not for per-file QC / urgent queue
+        if (t.sla_applies === false) return false;
+        const submitted = String(t.date_time || t.file_submitted_at || "").slice(0, 10);
+        if (!submitted || submitted < QC_FORM_EFFECTIVE_FROM) return false;
+        return true;
+      })
+      .map((t) => {
+        const hours =
+          t.hours_remaining != null && t.hours_remaining !== ""
+            ? Number(t.hours_remaining)
+            : null;
+        const overdue = Boolean(t.is_overdue) || (hours != null && hours < 0);
+        return { ...t, _hours: hours, _overdue: overdue };
+      })
+      // Only overdue or ≤ 4 working hours left
+      .filter((t) => {
+        if (t._overdue) return true;
+        if (t._hours == null || Number.isNaN(t._hours)) return false;
+        return t._hours <= URGENT_HOURS_THRESHOLD;
+      })
+      // Most urgent first: deepest overdue, then smallest time remaining
+      .sort((a, b) => {
+        const ah = a._hours == null ? Number.POSITIVE_INFINITY : a._hours;
+        const bh = b._hours == null ? Number.POSITIVE_INFINITY : b._hours;
+        return ah - bh;
+      });
+    return rows;
+  }, [allPendingTrackers]);
+
+  const visibleUrgentFiles = useMemo(
+    () => (showAllUrgent ? urgentPendingFiles : urgentPendingFiles.slice(0, 15)),
+    [urgentPendingFiles, showAllUrgent]
+  );
 
   const selectedAgentTrackers = useMemo(() => {
     if (!selectedAgentId) return [];
@@ -1044,6 +1152,123 @@ const QAAgentList = () => {
             </div>
           )}
         </div>
+
+        {/* Urgent pending QC — all agents, least time remaining first */}
+        {activeTab === 'agent_files' && !loading && urgentPendingFiles.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-xl border border-red-100 mb-6 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-red-50 bg-gradient-to-r from-red-50 to-amber-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Urgent Files — do these first</h3>
+                  <p className="text-xs font-medium text-slate-500">
+                    Only files from Jun 2026 onward with ≤4 hours left or overdue. Pre-June temp_qc days are excluded.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-red-700 bg-red-100 px-2.5 py-1 rounded-full">
+                  {urgentPendingFiles.filter((t) => t._overdue).length} overdue
+                </span>
+                <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
+                  {urgentPendingFiles.length} urgent
+                </span>
+              </div>
+            </div>
+            <div className="overflow-x-auto max-h-[280px]">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-bold">Time left</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Agent</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Project</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Task</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Submitted</th>
+                    <th className="px-4 py-2.5 text-center font-bold">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleUrgentFiles.map((tracker) => {
+                    const hours = tracker._hours;
+                    const overdue = tracker._overdue;
+                    const soon = !overdue && hours != null && hours < 4;
+                    const timeClass = overdue
+                      ? "text-red-700 font-bold"
+                      : soon
+                        ? "text-amber-700 font-bold"
+                        : "text-slate-700 font-semibold";
+                    const rowClass = overdue
+                      ? "bg-red-50/80"
+                      : soon
+                        ? "bg-amber-50/60"
+                        : "hover:bg-slate-50";
+                    const projectName =
+                      projectNameMap[String(tracker.project_id)] || tracker.project_name || "-";
+                    const taskName =
+                      taskNameMap[String(tracker.task_id)] || tracker.task_name || "-";
+                    return (
+                      <tr
+                        key={tracker.tracker_id}
+                        className={`border-t border-slate-100 cursor-pointer ${rowClass}`}
+                        onClick={() => {
+                          if (tracker.user_id) setSelectedAgentId(tracker.user_id);
+                        }}
+                      >
+                        <td className={`px-4 py-2.5 whitespace-nowrap ${timeClass}`}>
+                          {formatSlaRemaining(hours, overdue)}
+                        </td>
+                        <td className="px-4 py-2.5 font-semibold text-slate-800">
+                          {tracker.user_name || "-"}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-700">{projectName}</td>
+                        <td className="px-4 py-2.5 text-slate-600">{taskName}</td>
+                        <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap text-xs">
+                          {formatISTDateTimeLong(tracker.date_time || tracker.file_submitted_at) ||
+                            tracker.date_time ||
+                            "-"}
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (tracker.user_id) setSelectedAgentId(tracker.user_id);
+                              handleQCForm(tracker);
+                            }}
+                            disabled={qcFormLoading === tracker.tracker_id}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+                          >
+                            {qcFormLoading === tracker.tracker_id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <FileCheck className="w-3.5 h-3.5" />
+                            )}
+                            QC Form
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {urgentPendingFiles.length > 15 ? (
+              <div className="border-t border-slate-100 px-5 py-2.5 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowAllUrgent((v) => !v)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800"
+                >
+                  {showAllUrgent
+                    ? "Show top 15 only"
+                    : `View all ${urgentPendingFiles.length} urgent files`}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
 
         {/* Split View Layout - Agent Files */}
         {activeTab === 'agent_files' && (

@@ -228,6 +228,7 @@ const QATrackerReport = () => {
       setLoadingUsers(true);
       console.log('[QATrackerReport] fetchUsers called with teamId:', teamId);
       log('[QATrackerReport] Fetching agents list for agent filter');
+      // Agent list uses rolling 3-month leaver window (no date_from → listing mode).
       const payload = {
         logged_in_user_id: user?.user_id,
         dropdown_type: "agent"
@@ -425,7 +426,7 @@ const QATrackerReport = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id, device_id, device_type]);
 
-  // Refetch agents when team selection changes
+  // Refetch agents when team changes (3-month listing; not tied to report date range)
   useEffect(() => {
     if (!user?.user_id) return;
     

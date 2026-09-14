@@ -171,11 +171,17 @@ const LoginPage = () => {
         return;
       }
       
-      // Check if user account is active
-      if (userData.is_active === 0 || userData.is_active === false) {
-        setIsLoading(false);
-        toast.error("Account inactive. Contact admin.", { duration: 5000 });
-        return;
+      // Inactive: allow only through leave day (deactivated_at date inclusive)
+      const isInactive = userData.is_active === 0 || userData.is_active === false;
+      if (isInactive) {
+        const leaveDay = String(userData.deactivated_at || "").slice(0, 10);
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        if (!leaveDay || leaveDay < todayStr) {
+          setIsLoading(false);
+          toast.error("Account inactive. Contact admin.", { duration: 5000 });
+          return;
+        }
       }
       
       const roleId = Number(userData.role_id);

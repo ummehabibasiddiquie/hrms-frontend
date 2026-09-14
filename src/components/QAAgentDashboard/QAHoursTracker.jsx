@@ -721,6 +721,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
           "Total Hours": fmt(row.total_hours),
           "Expected Hours": fmt(row.expected_total || 9),
           Files: files,
+          "Late Files": row.late_files || 0,
           "File Record": row.file_records || 0,
           "QC Record": row.qc_records || 0,
         });
@@ -740,6 +741,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
             "Total Hours": fmt((Number(p.qc_hours) || 0) + (Number(p.rework_hours) || 0)),
             "Expected Hours": "",
             Files: p.files || 0,
+            "Late Files": p.late_files || 0,
             "File Record": p.file_records || 0,
             "QC Record": p.qc_records || 0,
           });
@@ -787,6 +789,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
             "Total Hours": fmt(hours),
             "Expected Hours": "",
             Files: "",
+            "Late Files": "",
             "File Record": "",
             "QC Record": "",
           });
@@ -813,6 +816,10 @@ const QAHoursTracker = ({ mode = "self" }) => {
         totalRow["Total Hours"] = sum("Total Hours").toFixed(2);
         totalRow["Expected Hours"] = "";
         totalRow["Files"] = summaryRows.reduce((acc, r) => acc + (Number(r.Files) || 0), 0);
+        totalRow["Late Files"] = summaryRows.reduce(
+          (acc, r) => acc + (Number(r["Late Files"]) || 0),
+          0
+        );
         totalRow["File Record"] = summaryRows.reduce(
           (acc, r) => acc + (Number(r["File Record"]) || 0),
           0
@@ -870,6 +877,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
           Expected: fmt(row.expected_hours),
           Pending: fmt(row.pending_hours),
           Files: files,
+          "Late Files": row.late_files || 0,
           "File Record": row.file_records || 0,
           "QC Record": row.qc_records || 0,
         });
@@ -891,6 +899,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
             Expected: "",
             Pending: "",
             Files: p.files || 0,
+            "Late Files": p.late_files || 0,
             "File Record": p.file_records || 0,
             "QC Record": p.qc_records || 0,
           });
@@ -929,6 +938,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
             Expected: "",
             Pending: "",
             Files: "",
+            "Late Files": "",
             "File Record": "",
             "QC Record": "",
           });
@@ -956,6 +966,10 @@ const QAHoursTracker = ({ mode = "self" }) => {
           Expected: sum("Expected").toFixed(2),
           Pending: sum("Pending").toFixed(2),
           Files: summaryRows.reduce((acc, r) => acc + (Number(r.Files) || 0), 0),
+          "Late Files": summaryRows.reduce(
+            (acc, r) => acc + (Number(r["Late Files"]) || 0),
+            0
+          ),
           "File Record": summaryRows.reduce(
             (acc, r) => acc + (Number(r["File Record"]) || 0),
             0
@@ -1008,6 +1022,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
               {!showDate ? <th className="px-4 py-3 text-right text-xs font-bold uppercase">Expected</th> : null}
               {!showDate ? <th className="px-4 py-3 text-right text-xs font-bold uppercase">Pending</th> : null}
               <th className="px-4 py-3 text-right text-xs font-bold uppercase">Files</th>
+              <th className="px-4 py-3 text-right text-xs font-bold uppercase">Late Files</th>
               <th className="px-4 py-3 text-right text-xs font-bold uppercase">QC Record</th>
             </tr>
           </thead>
@@ -1087,6 +1102,13 @@ const QAHoursTracker = ({ mode = "self" }) => {
                         <td className="px-4 py-3 text-right">{fmt(row.pending_hours)}</td>
                       ) : null}
                       <td className="px-4 py-3 text-right">{(row.qc_files || 0) + (row.rework_files || 0)}</td>
+                      <td
+                        className={`px-4 py-3 text-right font-semibold ${
+                          Number(row.late_files) > 0 ? "text-red-600" : "text-slate-800"
+                        }`}
+                      >
+                        {row.late_files || 0}
+                      </td>
                       <td className="px-4 py-3 text-right">{row.qc_records || 0}</td>
                     </tr>
                     {open && (() => {
@@ -1141,6 +1163,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                                     <th className="py-1 text-right">QC Hours</th>
                                     <th className="py-1 text-right">Rework Hour</th>
                                     <th className="py-1 text-right">Files</th>
+                                    <th className="py-1 text-right">Late</th>
                                     <th className="py-1 text-right">File Record</th>
                                     <th className="py-1 text-right">QC Record</th>
                                   </tr>
@@ -1153,6 +1176,13 @@ const QAHoursTracker = ({ mode = "self" }) => {
                                       <td className="py-1 text-right">{fmt(p.qc_hours)}</td>
                                       <td className="py-1 text-right">{fmt(p.rework_hours)}</td>
                                       <td className="py-1 text-right">{p.files}</td>
+                                      <td
+                                        className={`py-1 text-right font-semibold ${
+                                          Number(p.late_files) > 0 ? "text-red-600" : ""
+                                        }`}
+                                      >
+                                        {p.late_files || 0}
+                                      </td>
                                       <td className="py-1 text-right">{p.file_records}</td>
                                       <td className="py-1 text-right">{p.qc_records}</td>
                                     </tr>
@@ -1712,6 +1742,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                         <th className="px-3 py-3 text-right">QC Hours</th>
                         <th className="px-3 py-3 text-right">Rework Hour</th>
                         <th className="px-3 py-3 text-right">Files</th>
+                        <th className="px-3 py-3 text-right">Late</th>
                         <th className="px-3 py-3 text-right">File Record</th>
                         <th className="px-3 py-3 text-right pr-6">QC Record</th>
                       </tr>
@@ -1719,7 +1750,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                     <tbody>
                       {(dayData?.projects || []).length === 0 ? (
                         <tr>
-                          <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                          <td colSpan={11} className="px-4 py-10 text-center text-slate-500">
                             No QC files for this date yet. Hours appear after you submit QC forms.
                           </td>
                         </tr>
@@ -1747,6 +1778,13 @@ const QAHoursTracker = ({ mode = "self" }) => {
                                 <td className="px-3 py-2.5 text-right tabular-nums">{fmt(p.qc_hours)}</td>
                                 <td className="px-3 py-2.5 text-right tabular-nums">{fmt(p.rework_hours)}</td>
                                 <td className="px-3 py-2.5 text-right tabular-nums">{(p.qc_files || 0) + (p.rework_files || 0)}</td>
+                                <td
+                                  className={`px-3 py-2.5 text-right tabular-nums font-semibold ${
+                                    Number(p.late_files) > 0 ? "text-red-600" : ""
+                                  }`}
+                                >
+                                  {p.late_files || 0}
+                                </td>
                                 <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{p.file_records || 0}</td>
                                 <td className="px-3 py-2.5 text-right tabular-nums font-semibold pr-6">{p.qc_records || 0}</td>
                               </tr>
@@ -1760,11 +1798,22 @@ const QAHoursTracker = ({ mode = "self" }) => {
                                         : f.qc_status || "QC";
                                   const fileTime = fmtTrackerTime(f.tracker_time);
                                   const fileLabel = [f.agent_name || "-", fileType, fileTime].filter(Boolean).join(" | ");
+                                  const late = Boolean(f.is_late);
                                   return (
-                                    <tr key={f.qa_tracker_id} className="border-t border-slate-100 bg-slate-50 text-xs text-slate-600">
-                                      <td className="px-3 py-2 pl-8 align-top break-words">{f.project_name || p.project_name}</td>
+                                    <tr
+                                      key={f.qa_tracker_id}
+                                      className={`border-t border-slate-100 text-xs ${
+                                        late ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-600"
+                                      }`}
+                                    >
+                                      <td className={`px-3 py-2 pl-8 align-top break-words ${late ? "font-semibold text-red-700" : ""}`}>
+                                        {f.project_name || p.project_name}
+                                      </td>
                                       <td className="px-3 py-2 align-top break-words">{f.task_name || p.task_name}</td>
-                                      <td className="px-3 py-2 align-top break-words font-medium text-slate-800">{fileLabel}</td>
+                                      <td className={`px-3 py-2 align-top break-words font-medium ${late ? "text-red-700" : "text-slate-800"}`}>
+                                        {fileLabel}
+                                        {late ? " · Late" : ""}
+                                      </td>
                                       <td className="px-3 py-2 text-right tabular-nums">{fmt(f.actual_target)}</td>
                                       <td className="px-3 py-2 text-right tabular-nums">{fmt(f.qa_target)}</td>
                                       <td className="px-3 py-2 text-right tabular-nums">
@@ -1774,6 +1823,9 @@ const QAHoursTracker = ({ mode = "self" }) => {
                                         {f.activity_type === "rework_qc" ? fmt(f.hours) : "-"}
                                       </td>
                                       <td className="px-3 py-2 text-right tabular-nums">1</td>
+                                      <td className={`px-3 py-2 text-right tabular-nums font-semibold ${late ? "text-red-700" : ""}`}>
+                                        {late ? "1" : "0"}
+                                      </td>
                                       <td className="px-3 py-2 text-right tabular-nums font-semibold">{f.file_record_count}</td>
                                       <td className="px-3 py-2 text-right tabular-nums font-semibold pr-6">{f.qc_generated_count}</td>
                                     </tr>
