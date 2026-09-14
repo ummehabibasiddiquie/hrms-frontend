@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { UserPlus, Key, Users, Plus, Search, Filter, Mail, Phone, Shield, Briefcase, Edit, Trash2 } from "lucide-react";
 import { useAuth } from "../../../../context/AuthContext";
 import AddUserFormModal, { joiningDateToIso } from "./AddUserFormModal";
+import { todayISTISO } from "../../../../utils/dateTimeIST";
 import EditUserFormModal from "./EditUserFormModal";
 import UsersTable from "./UsersTable";
 import TaskAssignmentModal from "./TaskAssignmentModal";
@@ -129,7 +130,7 @@ const UsersManagement = ({
           phone: "",
           address: "",
           tenure: "",
-          joining_date: "",
+          joining_date: todayISTISO(),
           profile_picture: null,
      };
 
@@ -315,7 +316,7 @@ const UsersManagement = ({
 
           const roleId = Number(newUser.role);
           if ((roleId === 5 || roleId === 6) && !newUser.joining_date?.trim()) {
-               errors.joining_date = "Joining date is required for Agent and QA";
+               errors.joining_date = "Tracker Joining Date is required for Agent and QA";
           }
 
           if (!newUser.password?.trim()) {

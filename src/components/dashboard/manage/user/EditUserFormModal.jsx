@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import AddUserFormModal, { joiningDateToIso } from "./AddUserFormModal";
+import { todayISTISO } from "../../../../utils/dateTimeIST";
 import { fetchUserDropdowns } from "../../../../services/dropdownService";
 import { fetchUserById, updateUser } from "../../../../services/userService";
 import { log, logError, logWarn } from "../../../../config/environment";
@@ -133,7 +134,9 @@ const EditUserFormModal = ({
             qualityAnalysts: qaIds, // Array for multi-select
             team: String(teamValue || ''), // Convert to string for select element
             tenure: user.user_tenure || user.tenure || "",
-            joining_date: user.joining_date ? String(user.joining_date).slice(0, 10) : "",
+            joining_date: user.joining_date
+              ? String(user.joining_date).slice(0, 10)
+              : todayISTISO(),
             address: user.user_address || user.address || "",
           };
           

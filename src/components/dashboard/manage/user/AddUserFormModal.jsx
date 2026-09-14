@@ -12,6 +12,7 @@ import { UserPlus, X, Upload, XCircle, User, Eye, EyeOff, ChevronDown, Users } f
 import SearchableSelect from "../../../common/SearchableSelect";
 import MultiSelectWithCheckbox from "../../../common/MultiSelectWithCheckbox";
 import { SingleDatePicker } from "../../../common/CustomCalendar";
+import { todayISTISO } from "../../../../utils/dateTimeIST";
 
 /** Show joining date as dd/mm/yyyy. Accepts YYYY-MM-DD from the API. */
 export function joiningDateToDisplay(value) {
@@ -147,7 +148,7 @@ const AddUserFormModal = ({
                     teamLeader: optional,
                     qualityAnalyst: hidden,
                     team: required,
-                    tenure: hidden,
+                    tenure: required,
                     joiningDate: required,
                };
           }
@@ -289,10 +290,10 @@ const AddUserFormModal = ({
 
      const validateJoiningDate = (value) => {
           if (!value || !String(value).trim()) {
-               return "Please enter joining date (dd/mm/yyyy)";
+               return "Please enter Tracker Joining Date";
           }
           if (!joiningDateToIso(value)) {
-               return "Use dd/mm/yyyy";
+               return "Use a valid date (past or future allowed)";
           }
           return "";
      };
@@ -398,6 +399,9 @@ const AddUserFormModal = ({
                if (!vis.qualityAnalyst.visible) next.qualityAnalysts = [];
                if (!vis.team?.visible) next.team = "";
                if (!vis.tenure?.visible) next.tenure = "";
+               if (vis.joiningDate?.visible && !String(next.joining_date || "").trim()) {
+                    next.joining_date = todayISTISO();
+               }
                setNewUser(next);
           } else {
                setNewUser({ ...newUser, [fieldName]: value });
@@ -854,7 +858,7 @@ const AddUserFormModal = ({
                               {fieldVisibility.joiningDate && fieldVisibility.joiningDate.visible && (
                                    <div className="md:col-span-1">
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                             Joining Date {fieldVisibility.joiningDate.required && <span className="text-red-600">*</span>}
+                                             Tracker Joining Date {fieldVisibility.joiningDate.required && <span className="text-red-600">*</span>}
                                         </label>
                                         <SingleDatePicker
                                              value={joiningDateToIso(newUser.joining_date) || newUser.joining_date}
@@ -865,7 +869,11 @@ const AddUserFormModal = ({
                                              )}
                                              placeholder="dd/mm/yyyy"
                                              hasError={hasError("joining_date")}
+                                             allowFuture
                                         />
+                                        <p className="mt-1 text-xs text-slate-500">
+                                             System date for roster / tracker (not org DOJ). Defaults to today; past or future is allowed.
+                                        </p>
                                         {getErrorMessage("joining_date") && (
                                              <p className="mt-1 text-xs text-red-600">{getErrorMessage("joining_date")}</p>
                                         )}

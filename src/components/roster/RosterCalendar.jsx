@@ -110,11 +110,7 @@ const RosterCalendar = ({
                     </p>
                   )}
                 </>
-              ) : (
-                <div className="text-xs text-slate-400 italic">
-                  {beforeJoining ? "Before joining" : "No data"}
-                </div>
-              )}
+              ) : null}
             </button>
           );
         })}

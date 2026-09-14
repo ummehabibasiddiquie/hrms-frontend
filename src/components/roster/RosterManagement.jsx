@@ -654,7 +654,20 @@ const RosterManagement = () => {
             month_year: monthYear,
             confirm_reset: true,
           });
-          toast.success(res.message || "Employee roster reset complete");
+          const r = res.data?.roster || {};
+          const start = r.roster_start_date || "";
+          const days = r.target_working_days;
+          const hours = r.monthly_target_hours;
+          const tenure = r.user_tenure;
+          const daily = r.daily_full_hours;
+          const detail =
+            start && days != null
+              ? ` From ${start}, ${days} working days, ${hours}h target` +
+                (tenure != null && tenure !== ""
+                  ? ` (tenure ${tenure} → ${daily}h/day)`
+                  : "")
+              : "";
+          toast.success(`${res.message || "Employee roster reset complete"}.${detail}`);
         }),
     });
   };
