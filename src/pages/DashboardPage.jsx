@@ -36,6 +36,7 @@ import AgentTabsNavigation from '../components/AgentDashboard/AgentTabsNavigatio
 import RosterManagement from '../components/roster/RosterManagement';
 import ReportEmails from '../components/dashboard/manage/ReportEmails';
 import MyRoster from '../components/roster/MyRoster';
+import QAHoursTracker from '../components/QAAgentDashboard/QAHoursTracker';
 import QATabsNavigation from '../components/QAAgentDashboard/QATabsNavigation';
 import SubTabsBar from '../components/common/SubTabsBar';
 import { dashboardTabUrl, isAnalyticsTab } from '../routes/paths';
@@ -382,8 +383,8 @@ const DashboardPage = ({
         } else if (canViewAsAm) {
           return <AssistantManagerDashboard />;
         } else if (isQA) {
-          // my_roster has a dedicated block below with MyRoster
-          if (activeTab === 'my_roster') return null;
+          // my_roster / my_hours have dedicated blocks below (main menu, not Analytics)
+          if (activeTab === 'my_roster' || activeTab === 'my_hours') return null;
           return <QAAgentDashboard embedded={true} />;
         } else if (isAgent) {
           if (activeTab === 'billable_report') {
@@ -602,6 +603,12 @@ const DashboardPage = ({
       {activeTab === 'my_roster' && (isAgent || isQA) && (
         <div className="max-w-7xl mx-auto mt-2">
           <MyRoster />
+        </div>
+      )}
+
+      {activeTab === 'my_hours' && isQA && (
+        <div className="max-w-7xl mx-auto mt-2">
+          <QAHoursTracker mode="self" />
         </div>
       )}
 
