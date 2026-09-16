@@ -30,7 +30,8 @@ import {
   BarChart3,
   CheckCircle2,
   CalendarDays,
-  Mail
+  Mail,
+  Clock
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import GeminiKeyModal from "../GeminiKeyModal";
@@ -138,6 +139,11 @@ const Header = ({
       setIsMobileMenuOpen(false);
       return;
     }
+    if (view === 'MY_REPORT') {
+      navigate(dashboardTabUrl('my_hours'));
+      setIsMobileMenuOpen(false);
+      return;
+    }
     if (view === 'REPORT_EMAILS') {
       navigate(dashboardTabUrl('report_emails'));
       setIsMobileMenuOpen(false);
@@ -214,6 +220,7 @@ const Header = ({
         if (roleId === 5) {
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+            { view: "MY_REPORT", label: "My Report", icon: Clock },
             { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
@@ -257,6 +264,7 @@ const Header = ({
     if (role.includes('QA')) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+        { view: "MY_REPORT", label: "My Report", icon: Clock },
         { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
@@ -307,7 +315,7 @@ const Header = ({
 
     // Check for Analytics/Dashboard
     if (view === ViewState.DASHBOARD || view === 'Analytics') {
-      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report', 'my_hours', 'qa_hours'];
+      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report', 'qa_hours'];
       return currentPath === '/dashboard' && (!currentTab || analyticsTabs.includes(currentTab));
     }
 
@@ -333,6 +341,10 @@ const Header = ({
 
     if (view === 'MY_ROSTER') {
       return currentPath === '/dashboard' && currentTab === 'my_roster';
+    }
+
+    if (view === 'MY_REPORT') {
+      return currentPath === '/dashboard' && currentTab === 'my_hours';
     }
 
     if (view === 'REPORT_EMAILS') {

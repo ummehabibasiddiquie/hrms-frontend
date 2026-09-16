@@ -392,7 +392,7 @@ const ProjectsManagement = ({
         )}
 
         <div ref={shellRef} className="flex flex-col min-h-0 overflow-hidden">
-          {loading ? (
+          {loading && filteredProjects.length === 0 ? (
             <div className="h-full min-h-[480px] flex flex-col items-center justify-center bg-white rounded-xl shadow-md border border-blue-100">
               <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent mb-3" />
               <p className="text-slate-600 text-sm font-medium">Loading projects...</p>

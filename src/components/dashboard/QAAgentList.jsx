@@ -1296,6 +1296,7 @@ const QAAgentList = () => {
                     <th className="px-4 py-2.5 text-left font-bold">Project</th>
                     <th className="px-4 py-2.5 text-left font-bold">Task</th>
                     <th className="px-4 py-2.5 text-left font-bold">Submitted</th>
+                    <th className="px-4 py-2.5 text-center font-bold">File</th>
                     <th className="px-4 py-2.5 text-center font-bold">Action</th>
                   </tr>
                 </thead>
@@ -1338,6 +1339,22 @@ const QAAgentList = () => {
                           {formatISTDateTimeLong(tracker.date_time || tracker.file_submitted_at) ||
                             tracker.date_time ||
                             "-"}
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          {tracker.tracker_file ? (
+                            <a
+                              href={tracker.tracker_file}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-600 transition-colors"
+                              title="Download File"
+                            >
+                              <Download className="w-4 h-4" />
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 text-xs">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-2.5 text-center">
                           <button

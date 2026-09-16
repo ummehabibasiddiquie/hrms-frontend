@@ -7,6 +7,8 @@ import { useAuth } from '../../../../context/AuthContext';
 import MultiSelectWithCheckbox from '../../../common/MultiSelectWithCheckbox';
 import * as XLSX from 'xlsx';
 import SearchableSelect from '../../../common/SearchableSelect';
+import QaTargetFieldsEditor from './QaTargetFieldsEditor';
+import { emptyQaTargetFields, parseQaTargetFieldsFromTask, serializeQaTargetPayload } from './qaTargetFields';
 
 const EditTaskModal = ({
   open,
@@ -25,6 +27,7 @@ const EditTaskModal = ({
     existingFileUrl: '',
     importantColumns: [],
     qcPercentage: '',
+    ...emptyQaTargetFields(),
   });
   const [formErrors, setFormErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -90,6 +93,7 @@ const EditTaskModal = ({
                 existingFileUrl: fileUrl,
                 importantColumns: importantColumns.filter(col => fileColumns.includes(col)),
                 qcPercentage: task.qc_percentage !== undefined && task.qc_percentage !== null ? String(task.qc_percentage) : '',
+                ...parseQaTargetFieldsFromTask(task),
               });
             } catch (err) {
               // fallback to just importantColumns
@@ -103,6 +107,7 @@ const EditTaskModal = ({
                 existingFileUrl: fileUrl,
                 importantColumns,
                 qcPercentage: task.qc_percentage !== undefined && task.qc_percentage !== null ? String(task.qc_percentage) : '',
+                ...parseQaTargetFieldsFromTask(task),
               });
             }
           })
@@ -118,6 +123,7 @@ const EditTaskModal = ({
               existingFileUrl: fileUrl,
               importantColumns,
               qcPercentage: task.qc_percentage !== undefined && task.qc_percentage !== null ? String(task.qc_percentage) : '',
+                ...parseQaTargetFieldsFromTask(task),
             });
           });
       } else {
@@ -132,6 +138,7 @@ const EditTaskModal = ({
           existingFileUrl: fileUrl,
           importantColumns,
           qcPercentage: task.qc_percentage !== undefined && task.qc_percentage !== null ? String(task.qc_percentage) : '',
+                ...parseQaTargetFieldsFromTask(task),
         });
       }
     } else if (!open) {
@@ -145,6 +152,7 @@ const EditTaskModal = ({
         existingFileUrl: '',
         importantColumns: [],
         qcPercentage: '',
+        ...emptyQaTargetFields(),
       });
       setExcelColumnHeaders([]);
     }
@@ -377,15 +385,19 @@ const EditTaskModal = ({
       file: formData.file, // New file if uploaded
       importantColumns: formData.importantColumns,
       qcPercentage: formData.qcPercentage, // FIX: use camelCase key
+      ...serializeQaTargetPayload(formData),
     };
     
     try {
-      // Call the parent's onTaskUpdated callback
+      // Parent returns false on API failure (and usually toasts already)
       if (onTaskUpdated) {
-        await onTaskUpdated(projectId, task.task_id || task.id, taskPayload);
+        const ok = await onTaskUpdated(projectId, task.task_id || task.id, taskPayload);
+        if (ok === false) {
+          setIsSubmitting(false);
+          return;
+        }
       }
       setIsSubmitting(false);
-      toast.success('Task updated successfully');
       onClose();
     } catch (err) {
       setIsSubmitting(false);
@@ -535,6 +547,13 @@ const EditTaskModal = ({
                 </div>
               </div>
               
+              <QaTargetFieldsEditor
+                formData={formData}
+                setFormData={setFormData}
+                excelColumnHeaders={excelColumnHeaders}
+                disabled={isSubmitting}
+              />
+
               {/* Important Columns Dropdown - Populated from Excel */}
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-slate-500 mb-1 text-left">Important Columns</label>

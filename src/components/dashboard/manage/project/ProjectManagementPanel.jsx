@@ -60,7 +60,12 @@ export default function ProjectManagementPanel({
   );
   useEffect(() => {
     if (!prepared.length) {
-      setSelectedProjectId(null);
+      // Keep prior selection while list is empty (e.g. brief reload) so we
+      // don't jump back to the first project when data returns.
+      return;
+    }
+    if (selectedProjectId == null || selectedProjectId === "") {
+      setSelectedProjectId(prepared[0].id);
       return;
     }
     const stillVisible = prepared.some((p) => p.id === String(selectedProjectId));

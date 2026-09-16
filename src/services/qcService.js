@@ -94,11 +94,15 @@ export const generateQCSample = async (
       `[QC Service] Generating sample for tracker ${tracker_id} with sampling percentage ${sampling_percentage}%`,
     );
 
-    const response = await nodeApi.post("/qc-records/generate-sample", {
-      tracker_id,
-      logged_in_user_id,
-      sampling_percentage,
-    });
+    const response = await nodeApi.post(
+      "/qc-records/generate-sample",
+      {
+        tracker_id,
+        logged_in_user_id,
+        sampling_percentage,
+      },
+      { timeout: 180000 },
+    );
 
     log(`[QC Service] Sample generated successfully:`, response.data);
     log(

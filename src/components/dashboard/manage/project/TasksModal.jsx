@@ -7,6 +7,8 @@ import { useAuth } from '../../../../context/AuthContext';
 import MultiSelectWithCheckbox from '../../../common/MultiSelectWithCheckbox';
 import * as XLSX from 'xlsx';
 import SearchableSelect from '../../../common/SearchableSelect';
+import QaTargetFieldsEditor from './QaTargetFieldsEditor';
+import { emptyQaTargetFields, serializeQaTargetPayload } from './qaTargetFields';
 
 const TasksModal = ({
   project,
@@ -47,6 +49,7 @@ const TasksModal = ({
     file: null,
     importantColumns: [],
     qcPercentage: '',
+    ...emptyQaTargetFields(),
   });
   const [formErrors, setFormErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -192,11 +195,13 @@ const TasksModal = ({
   const handleAddTask = async () => {
     if (!validateForm()) return;
     setIsSubmitting(true);
-    // Pass formData object - the hook will create FormData with correct field names
-    const success = await onAddTask(formData);
+    const success = await onAddTask({
+      ...formData,
+      ...serializeQaTargetPayload(formData),
+    });
     setIsSubmitting(false);
     if (success) {
-      setFormData({ name: '', description: '', target: '', teamIds: [], file: null, importantColumns: [], qcPercentage: '' });
+      setFormData({ name: '', description: '', target: '', teamIds: [], file: null, importantColumns: [], qcPercentage: '', ...emptyQaTargetFields() });
       setExcelColumnHeaders([]);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -422,6 +427,13 @@ const TasksModal = ({
                     </div>
                   </div>
                 </div>
+                <QaTargetFieldsEditor
+                  formData={formData}
+                  setFormData={setFormData}
+                  excelColumnHeaders={excelColumnHeaders}
+                  disabled={isSubmitting}
+                />
+
                 {/* Important Columns Dropdown - Populated from Excel */}
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-slate-500 mb-1">Important Columns</label>
