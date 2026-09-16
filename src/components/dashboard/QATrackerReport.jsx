@@ -89,7 +89,7 @@ const QATrackerReport = () => {
   const [selectedAgents, setSelectedAgents] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
-  const [selectedTask, setSelectedTask] = useState('');
+  const [selectedTasks, setSelectedTasks] = useState([]);
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getTodayDate());
   const [_summary, setSummary] = useState([]);
@@ -336,8 +336,14 @@ const QATrackerReport = () => {
       payload.project_id = Number(selectedProject);
     }
 
-    if (selectedTask) {
-      payload.task_id = Number(selectedTask);
+    if (selectedTasks.length > 0) {
+      const taskIds = selectedTasks
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+      if (taskIds.length > 0) {
+        payload.task_ids = taskIds;
+        payload.task_id = taskIds;
+      }
     }
 
     if (includePagination) {
@@ -398,7 +404,7 @@ const QATrackerReport = () => {
       log('[QATrackerReport] Fetched trackers:', fetchedTrackers.length, 'totals:', data.totals);
     } catch (err) {
       logError('[QATrackerReport] Error fetching tracker/view:', err);
-      toast.error("Failed to load tracker data");
+      toast.error(err.response?.data?.message || "Failed to load tracker data");
       setTrackers([]);
       setSummary([]);
       setApiTotals(null);
@@ -450,7 +456,7 @@ const QATrackerReport = () => {
       fetchData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTask, currentPage, itemsPerPage]);
+  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTasks, currentPage, itemsPerPage]);
 
   // Filter tasks based on selected project for cascading dropdown
   const filteredTasksList = useMemo(() => {
@@ -537,7 +543,7 @@ const QATrackerReport = () => {
     setSelectedAgents([]);
     setSelectedTeams('');
     setSelectedProject('');
-    setSelectedTask('');
+    setSelectedTasks([]);
     setStartDate(today);
     setEndDate(today);
     setCurrentPage(1);
@@ -566,12 +572,20 @@ const QATrackerReport = () => {
   const handleProjectChange = (value) => {
     setCurrentPage(1);
     setSelectedProject(value);
-    setSelectedTask('');
+    setSelectedTasks((prev) => {
+      if (!value) return [];
+      const allowed = new Set(
+        tasksList
+          .filter((task) => String(task.project_id) === String(value))
+          .map((task) => String(task.task_id))
+      );
+      return prev.filter((id) => allowed.has(String(id)));
+    });
   };
 
   const handleTaskChange = (value) => {
     setCurrentPage(1);
-    setSelectedTask(value);
+    setSelectedTasks(Array.isArray(value) ? value : value ? [value] : []);
   };
 
   const handlePageChange = (page) => {
@@ -1552,22 +1566,23 @@ const QATrackerReport = () => {
               />
             </div>
 
-            {/* Task Dropdown */}
+            {/* Task Multi-Select Dropdown */}
             <div style={{ width: '182px' }}>
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
                 <ListTodo className="w-3.5 h-3.5 text-blue-600" />
                 Task
               </label>
-              <SearchableSelect
+              <MultiSelectWithCheckbox
                 icon={ListTodo}
-                value={selectedTask}
+                value={selectedTasks}
                 onChange={handleTaskChange}
                 options={filteredTasksList.map(task => ({ 
                   value: String(task.task_id), 
                   label: task.task_name 
                 }))}
-                placeholder="Select Task"
-                isClearable={true}
+                placeholder="Select Tasks"
+                showSelectAll={true}
+                maxDisplayCount={1}
                 disabled={loadingTasks}
               />
             </div>
