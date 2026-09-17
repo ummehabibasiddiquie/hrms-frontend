@@ -221,6 +221,7 @@ const addDaysIso = (iso, days) => {
 };
 
 const QA_TRACKER_GO_LIVE = "2026-09-16";
+const QA_TRACKER_GO_LIVE_MONTH = QA_TRACKER_GO_LIVE.slice(0, 7);
 const EXPECTED_HOURS_PER_DAY = 9;
 
 const roundHours = (value) => Math.round((Number(value) || 0) * 10000) / 10000;
@@ -321,6 +322,7 @@ const aggregateMonthlyFromDays = (dayRows, monthLabel) => {
 const fillDateRangeDays = (rows, start, end, todayIso, qaUserId) => {
   if (!start || !end) return Array.isArray(rows) ? rows : [];
   const todayCap = String(todayIso || "").slice(0, 10);
+  if (end < QA_TRACKER_GO_LIVE) return [];
   let rangeStart = start < QA_TRACKER_GO_LIVE ? QA_TRACKER_GO_LIVE : start;
   const cap = todayCap && todayCap < end ? todayCap : end;
   if (!cap || rangeStart > cap) return [];
@@ -453,6 +455,13 @@ const QAHoursTracker = ({ mode = "self" }) => {
   const handleDailyMonthChange = (my) => {
     const yyyyMm = monthYearToYyyyMm(my);
     if (!yyyyMm) return;
+    if (yyyyMm < QA_TRACKER_GO_LIVE_MONTH) {
+      setMonthFilter(QA_TRACKER_GO_LIVE_MONTH);
+      setDailyStart(QA_TRACKER_GO_LIVE);
+      setDailyEnd(today);
+      toast.error("QA report starts from 16 Sep 2026");
+      return;
+    }
     const range = monthBounds(yyyyMm);
     const liveStart = range.start < QA_TRACKER_GO_LIVE ? QA_TRACKER_GO_LIVE : range.start;
     const liveEnd = today < range.end ? today : range.end;
@@ -471,20 +480,21 @@ const QAHoursTracker = ({ mode = "self" }) => {
     setDailyStart(clamped);
     if (dailyEnd && clamped > dailyEnd) setDailyEnd(clamped);
     const nextMonth = monthFromDate(clamped);
-    if (nextMonth) setMonthFilter(nextMonth);
+    if (nextMonth && nextMonth >= QA_TRACKER_GO_LIVE_MONTH) setMonthFilter(nextMonth);
   };
 
   const handleDailyEndChange = (next) => {
-    setDailyEnd(next);
-    if (dailyStart && next < dailyStart) {
-      setDailyStart(next);
-      const nextMonth = monthFromDate(next);
-      if (nextMonth) setMonthFilter(nextMonth);
+    const clamped = next && next < QA_TRACKER_GO_LIVE ? QA_TRACKER_GO_LIVE : next;
+    setDailyEnd(clamped);
+    if (dailyStart && clamped < dailyStart) {
+      setDailyStart(clamped);
+      const nextMonth = monthFromDate(clamped);
+      if (nextMonth && nextMonth >= QA_TRACKER_GO_LIVE_MONTH) setMonthFilter(nextMonth);
       return;
     }
     const startMonth = monthFromDate(dailyStart);
-    const endMonth = monthFromDate(next);
-    if (startMonth && endMonth && startMonth === endMonth) {
+    const endMonth = monthFromDate(clamped);
+    if (startMonth && endMonth && startMonth === endMonth && endMonth >= QA_TRACKER_GO_LIVE_MONTH) {
       setMonthFilter(endMonth);
     }
   };
@@ -500,12 +510,22 @@ const QAHoursTracker = ({ mode = "self" }) => {
       setError("");
     }
     try {
-      // Prefer start_date/end_date (Billable-style). Do not send month_year —
-      // backend would ignore the day range when month_year is present.
+      let start = dailyStart || QA_TRACKER_GO_LIVE;
+      let end = dailyEnd || start;
+      if (end < start) {
+        const swapped = start;
+        start = end;
+        end = swapped;
+      }
+      if (end < QA_TRACKER_GO_LIVE) {
+        setListRows([]);
+        return;
+      }
+      if (start < QA_TRACKER_GO_LIVE) start = QA_TRACKER_GO_LIVE;
       const payload = {
         logged_in_user_id: userId,
-        start_date: dailyStart && dailyStart > QA_TRACKER_GO_LIVE ? dailyStart : QA_TRACKER_GO_LIVE,
-        end_date: dailyEnd || monthBounds(monthFilter).end,
+        start_date: start,
+        end_date: end,
       };
       if (qaUserId) payload.qa_user_id = Number(qaUserId);
       const res = await fetchQATrackerList(payload);
@@ -533,10 +553,15 @@ const QAHoursTracker = ({ mode = "self" }) => {
     setError("");
     try {
       const bounds = monthBounds(monthFilter);
+      if (!bounds.end || bounds.end < QA_TRACKER_GO_LIVE) {
+        setMonthlyRows([]);
+        setMonthYearLabel(yyyyMmToMonthYear(monthFilter));
+        return;
+      }
       const payload = {
         logged_in_user_id: userId,
         start_date: trackerStartForMonth(monthFilter),
-        end_date: bounds.end || QA_TRACKER_GO_LIVE,
+        end_date: bounds.end,
       };
       if (qaUserId) payload.qa_user_id = Number(qaUserId);
       const res = await fetchQATrackerList(payload);
@@ -567,10 +592,22 @@ const QAHoursTracker = ({ mode = "self" }) => {
       setError("");
     }
     try {
+      let start = startDate || QA_TRACKER_GO_LIVE;
+      let end = endDate || start;
+      if (end < start) {
+        const swapped = start;
+        start = end;
+        end = swapped;
+      }
+      if (end < QA_TRACKER_GO_LIVE) {
+        setEntries([]);
+        return;
+      }
+      if (start < QA_TRACKER_GO_LIVE) start = QA_TRACKER_GO_LIVE;
       const payload = {
         logged_in_user_id: userId,
-        start_date: clampToGoLive(startDate),
-        end_date: clampToGoLive(endDate, clampToGoLive(startDate)),
+        start_date: start,
+        end_date: end,
       };
       if (qaUserId) payload.qa_user_id = Number(qaUserId);
       const res = await fetchQATrackerEntries(payload);
@@ -594,6 +631,14 @@ const QAHoursTracker = ({ mode = "self" }) => {
       if (!silent) setLoading(false);
     }
   }, [userId, startDate, endDate, qaUserId]);
+
+  useEffect(() => {
+    if (dailyStart && dailyStart < QA_TRACKER_GO_LIVE) setDailyStart(QA_TRACKER_GO_LIVE);
+    if (dailyEnd && dailyEnd < QA_TRACKER_GO_LIVE) setDailyEnd(QA_TRACKER_GO_LIVE);
+    if (startDate && startDate < QA_TRACKER_GO_LIVE) setStartDate(QA_TRACKER_GO_LIVE);
+    if (endDate && endDate < QA_TRACKER_GO_LIVE) setEndDate(QA_TRACKER_GO_LIVE);
+    if (monthFilter && monthFilter < QA_TRACKER_GO_LIVE_MONTH) setMonthFilter(QA_TRACKER_GO_LIVE_MONTH);
+  }, []);
 
   useEffect(() => {
     if (activeToggle === "daily") {
@@ -1541,6 +1586,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                   endDate={endDate}
                   onStartDateChange={(next) => setStartDate(clampToGoLive(next))}
                   onEndDateChange={(next) => setEndDate(clampToGoLive(next))}
+                  minDate={QA_TRACKER_GO_LIVE}
                   label=""
                   description={null}
                   showClearButton={false}
@@ -1712,6 +1758,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                     endDate={dailyEnd}
                     onStartDateChange={handleDailyStartChange}
                     onEndDateChange={handleDailyEndChange}
+                    minDate={QA_TRACKER_GO_LIVE}
                     noWrapper
                     showClearButton={false}
                     fieldWidth="155px"
@@ -1722,6 +1769,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                 compact
                 label={activeToggle === "daily" ? "Select Month" : "Month Year"}
                 selectedMonthYear={yyyyMmToMonthYear(monthFilter)}
+                minMonthYear={QA_TRACKER_GO_LIVE_MONTH}
                 onMonthYearChange={(my) => {
                   if (activeToggle === "daily") {
                     handleDailyMonthChange(my);
@@ -1883,6 +1931,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                   <SingleDatePicker
                     value={addWorkDate}
                     onChange={(next) => setAddWorkDate(clampToGoLive(next, today))}
+                    minDate={QA_TRACKER_GO_LIVE}
                   />
                 ) : (
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800">
@@ -2040,6 +2089,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                   onChange={(value) =>
                     setEditEntry((prev) => ({ ...prev, work_date: clampToGoLive(value, prev?.work_date) }))
                   }
+                  minDate={QA_TRACKER_GO_LIVE}
                 />
               </div>
               <div>
