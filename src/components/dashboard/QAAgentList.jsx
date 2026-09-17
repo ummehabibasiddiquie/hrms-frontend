@@ -56,6 +56,17 @@ const isAgentVisibleInListing = (isActive, deactivatedAt) => {
 
 const QC_FORM_EFFECTIVE_FROM = "2026-09-01";
 const QC_SLA_WORKING_HOURS = 24;
+const NIGHT_SHIFT_SLA_WORKING_HOURS = 48;
+
+const slaHoursForTracker = (tracker) => {
+  const shift = String(tracker.shift || tracker.shift_type || tracker.tracker_shift || "")
+    .toUpperCase()
+    .replace(/\s+/g, "_");
+  if (shift !== "NIGHT" && shift !== "NIGHT_SHIFT") return QC_SLA_WORKING_HOURS;
+  const submitted = parseTrackerDate(tracker.date_time || tracker.file_submitted_at);
+  if (submitted && submitted.getHours() < 9) return NIGHT_SHIFT_SLA_WORKING_HOURS;
+  return QC_SLA_WORKING_HOURS;
+};
 const URGENT_HOURS_THRESHOLD = 4;
 
 const parseTrackerDate = (value) => {
@@ -158,7 +169,7 @@ const resolveTrackerSla = (tracker) => {
   if (!submitted) {
     return { slaApplies: false, hours: null, overdue: false };
   }
-  const deadline = addWorkingHoursClient(submitted, QC_SLA_WORKING_HOURS);
+  const deadline = addWorkingHoursClient(submitted, slaHoursForTracker(tracker));
   const hours = workingHoursBetweenClient(new Date(), deadline);
   return {
     slaApplies: true,
@@ -1283,7 +1294,7 @@ const QAAgentList = () => {
             </div>
             {urgentPendingFiles.length === 0 ? (
               <div className="px-5 py-6 text-sm font-medium text-slate-500">
-                No urgent pending files right now. Files appear here when they are overdue or have ≤4 working hours left on the 24h QC SLA.
+                No urgent pending files right now. Files appear here when they are overdue or have ≤4 working hours left on the QC SLA. Night files added after midnight get 48 working hours; others get 24.
               </div>
             ) : (
               <>
