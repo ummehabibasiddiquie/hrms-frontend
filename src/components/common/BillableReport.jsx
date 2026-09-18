@@ -20,7 +20,7 @@ import {
   getCurrentYyyyMm,
 } from "./CustomCalendar";
 
-const BillableReport = ({ userId }) => {
+const BillableReport = ({ userId, title = "Billable Report" }) => {
   // Device info (declare once at top)
   const { device_id, device_type } = useDeviceInfo();
 
@@ -36,7 +36,9 @@ const BillableReport = ({ userId }) => {
 
   // Check if user is Assistant Manager
   const isAssistantManager = user?.role_id === 4 || 
-    (user?.role_name || user?.role || '').toLowerCase().includes('assistant');
+    (user?.role_name || user?.role || '').toLowerCase().includes('assistant') ||
+    user?.role_id === 7 ||
+    (user?.role_name || user?.role || '').toLowerCase().includes('team leader');
 
   // Check if user can view team filter (Admin, Super Admin, Project Manager)
   const normalizedRole = (user?.role_name || user?.role || user?.user_role || '').toLowerCase();
@@ -191,7 +193,6 @@ const BillableReport = ({ userId }) => {
         const totalBillable = exportData.reduce((sum, r) => sum + (parseFloat(r['Billable Hour Delivered']) || 0), 0);
         const totalGoal = exportData.reduce((sum, r) => sum + (parseFloat(r['Monthly Goal']) || 0), 0);
         const totalPending = exportData.reduce((sum, r) => sum + (parseFloat(r['Pending Target']) || 0), 0);
-        // For Avg. QC Score, show average if all are numbers (exclude null, empty, undefined)
         const qcScores = exportData
           .filter(r => r['Avg. QC Score'] !== null && r['Avg. QC Score'] !== undefined && r['Avg. QC Score'] !== '' && r['Avg. QC Score'] !== '-')
           .map(r => parseFloat(r['Avg. QC Score']))
@@ -580,9 +581,16 @@ const BillableReport = ({ userId }) => {
       if (r.daily_required_hours !== null && r.daily_required_hours !== undefined && !isNaN(Number(r.daily_required_hours))) {
         daily_required_hours = Number(r.daily_required_hours).toFixed(2);
       }
-      const assigned_hours = r.assigned_hours !== null && r.assigned_hours !== undefined ? r.assigned_hours : null;
+      const isTeamAgent =
+        String(r.user_name || "").trim().toLowerCase() === String(r.team_name || "").trim().toLowerCase()
+        && Boolean(String(r.user_name || "").trim());
+      const assigned_hours = isTeamAgent
+        ? null
+        : (r.assigned_hours !== null && r.assigned_hours !== undefined ? r.assigned_hours : null);
       const qc_score = r.qc_score !== null && r.qc_score !== undefined ? r.qc_score : null;
       const trackers_count_day = r.trackers_count_day !== null && r.trackers_count_day !== undefined ? r.trackers_count_day : null;
+
+      const can_manual_qc = r.can_manual_qc === true || Number(r.can_manual_qc) === 1;
 
       return {
         date,
@@ -600,6 +608,7 @@ const BillableReport = ({ userId }) => {
         total_billable_hours_day: r.total_billable_hours_day,
         qc_score,
         qcScore: qc_score,
+        can_manual_qc,
         trackers_count_day,
         daily_required_hours,
         dailyRequiredHours: daily_required_hours,
@@ -713,7 +722,7 @@ const BillableReport = ({ userId }) => {
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
-          <h2 className="font-bold text-white text-2xl">Billable Report</h2>
+          <h2 className="font-bold text-white text-2xl">{title}</h2>
           <p className="text-blue-100 text-sm mt-1">
             View daily and monthly billable hours and performance metrics
           </p>

@@ -587,7 +587,8 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
           setIsDeleting(true);
 
           try {
-               const response = await deleteProject(deletingProject.id);
+               const projectId = deletingProject.id || deletingProject.project_id;
+               const response = await deleteProject(projectId);
 
                if (response?.status === 200 || response?.status === 201) {
                     toast.success("Project deleted successfully!", {
@@ -677,6 +678,19 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
           if (taskPayload?.importantColumns && taskPayload.importantColumns.length > 0) {
                formData.append('important_columns', JSON.stringify(taskPayload.importantColumns));
           }
+
+          if (taskPayload?.qaCountColumn !== undefined) {
+               formData.append('qa_count_column', taskPayload.qaCountColumn || '');
+          }
+          if (taskPayload?.qaTargetRanges !== undefined) {
+               formData.append('qa_target_ranges', JSON.stringify(taskPayload.qaTargetRanges || []));
+          }
+          if (taskPayload?.qaMinutesPerFile !== undefined) {
+               formData.append('qa_minutes_per_file', String(taskPayload.qaMinutesPerFile ?? ''));
+          }
+          if (taskPayload?.qaMinutesPerRecord !== undefined) {
+               formData.append('qa_minutes_per_record', String(taskPayload.qaMinutesPerRecord ?? ''));
+          }
           
           // Append file if provided
           if (taskPayload?.file) {
@@ -691,11 +705,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                          className: "toast-success toast-animate",
                          duration: 4000,
                     });
-
-                    if (loadProjects) {
-                         await loadProjects();
-                    }
-
+                    // Keep current project selected; TaskTable / task counts refresh locally.
                     return true;
                }
 
@@ -757,6 +767,18 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
           if (taskPayload?.importantColumns !== undefined && taskPayload.importantColumns.length > 0) {
                formData.append('important_columns', JSON.stringify(taskPayload.importantColumns));
           }
+          if (taskPayload?.qaCountColumn !== undefined) {
+               formData.append('qa_count_column', taskPayload.qaCountColumn || '');
+          }
+          if (taskPayload?.qaTargetRanges !== undefined) {
+               formData.append('qa_target_ranges', JSON.stringify(taskPayload.qaTargetRanges || []));
+          }
+          if (taskPayload?.qaMinutesPerFile !== undefined) {
+               formData.append('qa_minutes_per_file', String(taskPayload.qaMinutesPerFile ?? ''));
+          }
+          if (taskPayload?.qaMinutesPerRecord !== undefined) {
+               formData.append('qa_minutes_per_record', String(taskPayload.qaMinutesPerRecord ?? ''));
+          }
           if (taskPayload?.file !== undefined) {
                formData.append('task_file', taskPayload.file);
           }
@@ -769,11 +791,8 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                          className: "toast-success toast-animate",
                          duration: 4000,
                     });
-
-                    if (loadProjects) {
-                         await loadProjects();
-                    }
-
+                    // Do not reload the full project list — that remounts the panel and
+                    // resets selection to the first project. TaskTable refreshes itself.
                     return true;
                }
 
@@ -799,11 +818,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                          className: "toast-success toast-animate",
                          duration: 4000,
                     });
-
-                    if (loadProjects) {
-                         await loadProjects();
-                    }
-
+                    // Keep current project selected; task list/count refresh locally.
                     return true;
                }
 

@@ -176,41 +176,53 @@ export const AuthProvider = ({ children }) => {
   const permissions = useMemo(() => {
     if (!user) return {};
 
-    // Get role_id for role-based checks - ensure proper type conversion
+    // Role-based only (role_id / role_name). Designation is display-only — never used for access.
     const roleId = Number(user.role_id || user.user_role_id || 0);
-    const designation = String(user.designation || user.user_designation || '').toLowerCase().trim();
     const roleName = String(user.role_name || user.user_role || '').toLowerCase().trim();
 
-    // Check if user is Admin, Project Manager, or Assistant Manager
-    // PRIORITY: roleId check first (most reliable), then fallback to name checks
     const isAdmin =
       roleId === 1 ||
       roleId === 2 ||
       roleName === 'admin' ||
-      designation === 'admin';
+      roleName === 'super admin';
     
     const isProjectManager = 
       roleId === 3 || 
-      roleName.includes('project manager') || 
-      designation.includes('project manager');
+      roleName.includes('project manager');
     
-    const isAssistantManager = 
-      roleId === 4 || 
-      designation.includes('assistant') || 
-      designation.includes('asst') ||
-      roleName.includes('assistant') ||
-      roleName.includes('asst');
+    const isTeamLeader =
+      roleId === 7 ||
+      roleName.includes('team leader');
+
+    // Must not treat "assistant team leader" as Assistant Manager
+    const isAssistantManager =
+      !isTeamLeader && (
+        roleId === 4 ||
+        roleName === 'assistant manager' ||
+        (roleName.includes('assistant') && !roleName.includes('team leader')) ||
+        (roleName.includes('asst') && !roleName.includes('team leader'))
+      );
 
     // Calculate permissions
     const calculatedPermissions = {
+      isTeamLeader,
+      isReadOnly: isTeamLeader,
+      canViewAsAssistantManager: isAssistantManager || isTeamLeader,
       // Can create/manage users - based on user_creation_permission flag
       canManageUsers:
+        !isTeamLeader && (
         user.user_creation_permission === 1 ||
-        user.user_creation_permission === "1",
+        user.user_creation_permission === "1" ||
+        roleId === 1 ||
+        roleId === 2 ||
+        roleId === 3 ||
+        isAdmin ||
+        isProjectManager),
 
       // Can create/manage projects - based on project_creation_permission flag OR role
       // Accessible to: Admin (1), Project Manager (3), Assistant Manager (4)
       canManageProjects:
+        !isTeamLeader && (
         user.project_creation_permission === 1 ||
         user.project_creation_permission === "1" ||
         roleId === 1 ||  // Admin
@@ -218,7 +230,7 @@ export const AuthProvider = ({ children }) => {
         roleId === 4 ||  // Assistant Manager - EXPLICIT CHECK
         isAdmin ||
         isProjectManager ||
-        isAssistantManager,
+        isAssistantManager),
 
       // Super Admin check - if user has both permissions, they're essentially a super admin
       isSuperAdmin:
@@ -228,6 +240,8 @@ export const AuthProvider = ({ children }) => {
       // Can view salary details
       canViewSalary:
         String(user.role_name || "").toLowerCase() === "admin" ||
+        String(user.role_name || "").toLowerCase() === "super admin" ||
+        String(user.role_name || "").toLowerCase() === "project manager" ||
         String(user.user_role || "").toUpperCase() === "FINANCE_HR",
     };
 
@@ -235,11 +249,11 @@ export const AuthProvider = ({ children }) => {
     console.log('[AuthContext] Permission Check:', {
       userId: user.user_id,
       roleId,
-      designation,
       roleName,
       isAdmin,
       isProjectManager,
       isAssistantManager,
+      isTeamLeader,
       canManageProjects: calculatedPermissions.canManageProjects,
       project_creation_permission: user.project_creation_permission,
       roleIdType: typeof roleId

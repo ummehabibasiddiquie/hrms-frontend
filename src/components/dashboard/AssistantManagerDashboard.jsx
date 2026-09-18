@@ -12,6 +12,7 @@ import BillableReport from "../common/BillableReport";
 import QATrackerReport from './QATrackerReport';
 import QAAgentList from './QAAgentList';
 import QAAgentAudit from './QAAgentAudit';
+import QAHoursTracker from "../QAAgentDashboard/QAHoursTracker";
 import { DateRangePicker } from '../common/CustomCalendar';
 import { formatISTDateTimeParts } from '../../utils/dateTimeIST';
 import { useRoutedDashboardTab } from '../../hooks/useRoutedDashboardTab';
@@ -65,7 +66,15 @@ const AssistantManagerDashboard = () => {
 
   // Tab state synced to ?tab= (same pattern as Manage → adminTab)
   const [activeTab, setActiveTab] = useRoutedDashboardTab('overview');
-  const { user } = useAuth();
+  const { user, isTeamLeader } = useAuth();
+
+  // Team Leaders should never land on QA Report
+  useEffect(() => {
+    if (isTeamLeader && activeTab === 'qa_hours') {
+      setActiveTab('overview');
+    }
+  }, [isTeamLeader, activeTab, setActiveTab]);
+
   // Project/task name mapping state
   const [projectNameMap, setProjectNameMap] = useState({});
   const [taskNameMap, setTaskNameMap] = useState({});
@@ -417,7 +426,12 @@ const AssistantManagerDashboard = () => {
           <QAAgentList />
         </div>
       )}
-      {activeTab === 'qa_agent_audit' && (
+      {activeTab === 'qa_hours' && !isTeamLeader && (
+        <div className="max-w-7xl mx-auto mt-6">
+          <QAHoursTracker mode="manager" />
+        </div>
+      )}
+      {activeTab === 'qa_agent_audit' && !isTeamLeader && (
         <div className="max-w-7xl mx-auto mt-6">
           <QAAgentAudit />
         </div>

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { listChangeRequests, listRosters } from "../../services/rosterService";
-import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { showApiError } from "../../utils/errorMessages";
 import {
   formatMonthYearLabel,
   getCurrentMonthYear,
@@ -52,7 +52,7 @@ const MyRoster = () => {
       const rosters = res.data?.rosters || [];
       setRoster(rosters[0] || null);
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
       setRoster(null);
     } finally {
       setLoading(false);

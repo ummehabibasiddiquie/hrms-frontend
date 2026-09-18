@@ -8,7 +8,6 @@ import {
   RotateCcw,
   Search,
   ChevronDown,
-  Mail,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
@@ -22,13 +21,15 @@ import {
   resetRegenerateRoster,
   resetRegenerateEmployeeRoster,
   lockRosterMonth,
+  lockRosterWeek,
   unlockRosterMonth,
   unlockRosterWeek,
   emailRosterWeek,
+  submitRosterBatch,
 } from "../../services/rosterService";
 import { useRosterRoles } from "../../hooks/useRosterRoles";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
-import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { showApiError } from "../../utils/errorMessages";
 import SubTabsBar from "../common/SubTabsBar";
 import {
   filterEmployeesByTeam,
@@ -39,10 +40,14 @@ import {
   getRosterLockDateHint,
   getWeekLockMessage,
   canLockRosterMonthByDate,
+  isRosterEditable,
+  isRosterLocked,
+  getRosterLockMessage,
 } from "../../utils/rosterUtils";
 import LoadingSpinner from "../common/LoadingSpinner";
 import { MonthYearPicker } from "../common/CustomCalendar";
 import RosterTeamWeekGrid from "./RosterTeamWeekGrid";
+import RosterDayEditor from "./RosterDayEditor";
 import RosterApprovalQueue from "./RosterApprovalQueue";
 import RosterSubmissionTracker from "./RosterSubmissionTracker";
 import HolidayMaster from "./HolidayMaster";
@@ -92,9 +97,11 @@ const RosterManagement = () => {
     isAdmin,
     isProjectManager,
     isAssistantManager,
+    isTeamLeader,
     canApproveRoster,
     canResetRegenerate,
     canModifyHolidayMaster,
+    canManageRoster,
   } = useRosterRoles();
 
   const [view, setView] = useRoutedSubTab("team_week", {
@@ -121,6 +128,8 @@ const RosterManagement = () => {
   const [confirmAction, setConfirmAction] = useState(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [showActions, setShowActions] = useState(true);
+  const [editorDay, setEditorDay] = useState(null);
+  const [editorRoster, setEditorRoster] = useState(null);
 
   const selectedRoster = useMemo(
     () => rosters.find((r) => String(r.user_id) === String(selectedUserId)) || null,
@@ -128,7 +137,7 @@ const RosterManagement = () => {
   );
 
   const filteredEmployees = useMemo(() => {
-    let list = isAssistantManager
+    let list = isAssistantManager || isTeamLeader
       ? employees
       : filterEmployeesByTeam(employees, selectedTeam, teams);
     if (employeeSearch.trim()) {
@@ -136,7 +145,7 @@ const RosterManagement = () => {
       list = list.filter((e) => (e.user_name || e.name || "").toLowerCase().includes(q));
     }
     return list;
-  }, [employees, selectedTeam, teams, employeeSearch, isAssistantManager]);
+  }, [employees, selectedTeam, teams, employeeSearch, isAssistantManager, isTeamLeader]);
 
   // Single-employee actions use the one person left after search (or explicit pick via 1 match)
   const actionUserId = useMemo(() => {
@@ -151,6 +160,13 @@ const RosterManagement = () => {
 
   const monthTotalPendingCount = useMemo(
     () => monthPendingAll.filter((r) => (r.status || "") === "Pending").length,
+    [monthPendingAll]
+  );
+  const draftPendingCount = useMemo(
+    () =>
+      monthPendingAll.filter(
+        (r) => (r.status || "") === "Pending" && !r.batch_id
+      ).length,
     [monthPendingAll]
   );
 
@@ -175,7 +191,7 @@ const RosterManagement = () => {
   }, []);
 
   const loadMonthSummary = useCallback(async () => {
-    if (!(isAdmin || isSuperAdmin)) {
+    if (!(isAdmin || isSuperAdmin || isProjectManager)) {
       setMonthStatusRosters([]);
       return null;
     }
@@ -198,7 +214,7 @@ const RosterManagement = () => {
       setMonthStatusRosters([]);
       return null;
     }
-  }, [monthYear, isAdmin, isSuperAdmin]);
+  }, [monthYear, isAdmin, isSuperAdmin, isProjectManager]);
 
   const loadPendingRequests = useCallback(async () => {
     try {
@@ -233,7 +249,7 @@ const RosterManagement = () => {
         setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
         return list;
       } catch (err) {
-        toast.error(getFriendlyErrorMessage(err));
+        showApiError(err);
         setRosters([]);
         setMonthCalendarLocked(false);
         setMonthLockInfo(null);
@@ -262,7 +278,7 @@ const RosterManagement = () => {
         setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
         return list;
       } catch (err) {
-        toast.error(getFriendlyErrorMessage(err));
+        showApiError(err);
         setTeamWeekRosters([]);
         setMonthCalendarLocked(false);
         setMonthLockInfo(null);
@@ -300,7 +316,7 @@ const RosterManagement = () => {
 
   // One-time / role bootstrap
   useEffect(() => {
-    if (!isAssistantManager) {
+    if (!isAssistantManager && !isTeamLeader) {
       api
         .post("/dropdown/get", {
           dropdown_type: "teams",
@@ -309,7 +325,7 @@ const RosterManagement = () => {
         .then((res) => setTeams(res.data?.data || []))
         .catch(() => setTeams([]));
     }
-  }, [user?.user_id, isAssistantManager]);
+  }, [user?.user_id, isAssistantManager, isTeamLeader]);
 
   const refreshNextMonthGenerateState = useCallback(async () => {
     try {
@@ -350,13 +366,13 @@ const RosterManagement = () => {
       if (!monthYear) return;
       try {
         const teamFilter =
-          isAssistantManager && user?.team_id
+          (isAssistantManager || isTeamLeader) && user?.team_id
             ? user.team_id
             : selectedTeam !== "all"
               ? selectedTeam
               : undefined;
 
-        if (isAssistantManager && !teamFilter) {
+        if ((isAssistantManager || isTeamLeader) && !teamFilter) {
           if (!cancelled) {
             setEmployees([]);
             setSelectedUserId("");
@@ -378,7 +394,7 @@ const RosterManagement = () => {
         });
       } catch (err) {
         if (!cancelled) {
-          toast.error(getFriendlyErrorMessage(err));
+          showApiError(err);
           setEmployees([]);
           setSelectedUserId("");
         }
@@ -458,7 +474,7 @@ const RosterManagement = () => {
         setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
       } catch (err) {
         if (!cancelled) {
-          toast.error(getFriendlyErrorMessage(err));
+          showApiError(err);
           setRosters([]);
           setMonthCalendarLocked(false);
           setMonthLockInfo(null);
@@ -491,7 +507,7 @@ const RosterManagement = () => {
         setWeekLocks(Array.isArray(res.data?.week_locks) ? res.data.week_locks : []);
       } catch (err) {
         if (!cancelled) {
-          toast.error(getFriendlyErrorMessage(err));
+          showApiError(err);
           setTeamWeekRosters([]);
           setMonthCalendarLocked(false);
           setMonthLockInfo(null);
@@ -531,7 +547,7 @@ const RosterManagement = () => {
       setActionLoading(key);
       await fn();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
       setActionLoading("");
       return;
     }
@@ -638,7 +654,20 @@ const RosterManagement = () => {
             month_year: monthYear,
             confirm_reset: true,
           });
-          toast.success(res.message || "Employee roster reset complete");
+          const r = res.data?.roster || {};
+          const start = r.roster_start_date || "";
+          const days = r.target_working_days;
+          const hours = r.monthly_target_hours;
+          const tenure = r.user_tenure;
+          const daily = r.daily_full_hours;
+          const detail =
+            start && days != null
+              ? ` From ${start}, ${days} working days, ${hours}h target` +
+                (tenure != null && tenure !== ""
+                  ? ` (tenure ${tenure} → ${daily}h/day)`
+                  : "")
+              : "";
+          toast.success(`${res.message || "Employee roster reset complete"}.${detail}`);
         }),
     });
   };
@@ -658,6 +687,25 @@ const RosterManagement = () => {
             week_number: wn,
           });
           toast.success(res.message || `Week ${wn} unlocked`);
+        }),
+    });
+  };
+
+  const handleLockWeek = (lockOrWeekNumber) => {
+    const wn =
+      typeof lockOrWeekNumber === "object"
+        ? lockOrWeekNumber.week_number
+        : lockOrWeekNumber;
+    setConfirmAction({
+      title: `Lock Week ${wn}`,
+      message: `Lock Week ${wn} for ${formatMonthYearLabel(monthYear)}? Managers and assistant managers will not be able to edit that week until you unlock it again.`,
+      onConfirm: () =>
+        runAction(`lock-week-${wn}`, async () => {
+          const res = await lockRosterWeek({
+            month_year: monthYear,
+            week_number: wn,
+          });
+          toast.success(res.message || `Week ${wn} locked`);
         }),
     });
   };
@@ -684,6 +732,48 @@ const RosterManagement = () => {
           toast.success(res.message || `${monthYear} unlocked`);
         }),
     });
+  };
+
+  const handleSubmitPendingEdits = () => {
+    if (!draftPendingCount) {
+      toast.error("No saved edits to submit");
+      return;
+    }
+    setConfirmAction({
+      title: "Submit roster edits for approval",
+      message: `Submit ${draftPendingCount} saved change(s) for ${formatMonthYearLabel(monthYear)}? Each week you edited will go for approval. After approve, only those weeks are mailed.`,
+      onConfirm: () =>
+        runAction("submit-edits", async () => {
+          const res = await submitRosterBatch({
+            month_year: monthYear,
+          });
+          toast.success(res.message || "Submitted for approval");
+        }),
+    });
+  };
+
+  const handleTeamCellClick = ({ roster, day }) => {
+    if (!canManageRoster || !roster) return;
+    if (monthCalendarLocked || isRosterLocked(roster)) {
+      toast.error(
+        monthCalendarLocked
+          ? getMonthCalendarLockMessage(monthYear, monthLockInfo)
+          : getRosterLockMessage(roster)
+      );
+      return;
+    }
+    if ((roster.status || "") === "Pending Approval") {
+      toast.error("This roster is pending approval and cannot be edited.");
+      return;
+    }
+    const rosterReadOnly =
+      roster.access_mode === "read_only" || !isRosterEditable(roster, false);
+    if (!isRosterEditable(roster, rosterReadOnly)) {
+      toast.error("This roster cannot be edited right now.");
+      return;
+    }
+    setEditorRoster(roster);
+    setEditorDay(day);
   };
 
   const handleEmailApprovedWeeks = (locks = weekLocks) => {
@@ -763,6 +853,7 @@ const RosterManagement = () => {
               variant="manager"
               monthYear={monthYear}
               onMonthYearChange={setMonthYear}
+              onActionComplete={() => refreshRosterViews({ silent: true })}
             />
           </div>
         )}
@@ -912,7 +1003,7 @@ const RosterManagement = () => {
                           onClick={handleUnlockMonth}
                           title={getMonthCalendarLockMessage(monthYear, monthLockInfo)}
                         >
-                          Unlock Calendar
+                          Unlock Month
                         </ActionBtn>
                       ) : (
                         <ActionBtn
@@ -922,62 +1013,20 @@ const RosterManagement = () => {
                           onClick={handleLockMonth}
                           title={
                             canLockThisMonth
-                              ? `Lock all rosters for ${formatMonthYearLabel(monthYear)}`
+                              ? `Lock the full ${formatMonthYearLabel(monthYear)} month (all weeks, all employees)`
                               : getRosterLockDateHint(monthYear)
                           }
                         >
-                          Lock Calendar
+                          Lock Month
                         </ActionBtn>
                       )}
-                      <ActionBtn
-                        icon={Mail}
-                        loading={actionLoading === "email-weeks"}
-                        disabled={isBusy || weekLocks.length === 0}
-                        onClick={() => handleEmailApprovedWeeks()}
-                        title={
-                          weekLocks.length
-                            ? `Email only the approved/locked week(s): ${weekLocks
-                                .map((l) => `Week ${l.week_number}`)
-                                .join(", ")}`
-                            : "Approve a roster request first. Only that week is emailed."
-                        }
-                      >
-                        Email approved week
-                      </ActionBtn>
-                      {weekLocks.length === 0 ? (
-                        <p className="w-full text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 mb-1">
-                          Weeks lock automatically when you approve submitted roster
-                          changes. Unlock a week here to allow edits again.
-                        </p>
-                      ) : (
-                        <p className="w-full text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-1">
-                          {weekLocks.length} locked week
-                          {weekLocks.length !== 1 ? "s" : ""} — other weeks stay
-                          editable.
-                        </p>
-                      )}
-                      {weekLocks.map((lock) => (
-                        <React.Fragment key={lock.week_number}>
-                          <ActionBtn
-                            icon={Unlock}
-                            loading={actionLoading === `unlock-week-${lock.week_number}`}
-                            disabled={isBusy}
-                            onClick={() => handleUnlockWeek(lock)}
-                            title={getWeekLockMessage(lock) || `Unlock Week ${lock.week_number}`}
-                          >
-                            Unlock Week {lock.week_number}
-                          </ActionBtn>
-                          <ActionBtn
-                            icon={Mail}
-                            loading={actionLoading === "email-weeks"}
-                            disabled={isBusy}
-                            onClick={() => handleEmailApprovedWeeks([lock])}
-                            title={`Email only Week ${lock.week_number} (the approved week)`}
-                          >
-                            Email Week {lock.week_number}
-                          </ActionBtn>
-                        </React.Fragment>
-                      ))}
+                      <p className="w-full text-[11px] text-slate-500">
+                        {monthCalendarLocked
+                          ? "The whole month is locked. Unlock Month to allow week edits again."
+                          : canLockThisMonth
+                            ? "Lock Month freezes every week. To lock one week only, open that week tab below."
+                            : getRosterLockDateHint(monthYear)}
+                      </p>
                       {canResetRegenerate && (
                         <>
                           <ActionBtn
@@ -1036,45 +1085,35 @@ const RosterManagement = () => {
             />
           )}
           {weekLocks.length > 0 && !monthCalendarLocked && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 space-y-2">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
               <p className="text-xs font-semibold text-amber-900">
-                Locked weeks (approved — edits blocked until admin unlock)
+                Locked weeks — open a week tab below to email or unlock it
               </p>
               {weekLocks.map((lock) => (
-                <div
-                  key={lock.week_number}
-                  className="flex flex-wrap items-center justify-between gap-2"
-                >
-                  <p className="text-xs text-amber-800">{getWeekLockMessage(lock)}</p>
-                  {canManageWeekLocks && (
-                    <div className="flex flex-wrap gap-1.5">
-                      <ActionBtn
-                        icon={Mail}
-                        loading={actionLoading === "email-weeks"}
-                        disabled={isBusy}
-                        onClick={() => handleEmailApprovedWeeks([lock])}
-                      >
-                        Email Week {lock.week_number}
-                      </ActionBtn>
-                      <ActionBtn
-                        icon={Unlock}
-                        loading={actionLoading === `unlock-week-${lock.week_number}`}
-                        disabled={isBusy}
-                        onClick={() => handleUnlockWeek(lock)}
-                      >
-                        Unlock Week {lock.week_number}
-                      </ActionBtn>
-                    </div>
-                  )}
-                </div>
+                <p key={lock.week_number} className="text-xs text-amber-800">
+                  {getWeekLockMessage(lock)}
+                </p>
               ))}
             </div>
           )}
           {monthTotalPendingCount > 0 && !monthCalendarLocked && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              {monthTotalPendingCount} change(s) pending approval — working days update after approval.
-              Use Excel Upload to apply and submit more changes.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p className="flex-1">
+                {draftPendingCount > 0
+                  ? `${draftPendingCount} saved change(s) are not submitted yet. Cells already show the pending leave/day preview.`
+                  : `${monthTotalPendingCount} change(s) pending approval — working days update after approval.`}
+              </p>
+              {draftPendingCount > 0 && canManageRoster && (
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={handleSubmitPendingEdits}
+                  className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-700 text-white font-semibold hover:bg-amber-800 disabled:opacity-50"
+                >
+                  {actionLoading === "submit-edits" ? "Submitting…" : "Submit for approval"}
+                </button>
+              )}
+            </div>
           )}
           {teamWeekLoading ? (
             <LoadingSpinner />
@@ -1086,16 +1125,49 @@ const RosterManagement = () => {
               pendingRequests={monthPendingAll}
               monthCalendarLocked={monthCalendarLocked}
               weekLocks={weekLocks}
-              readOnly
+              readOnly={!canManageRoster}
+              onCellClick={handleTeamCellClick}
               canUnlockWeeks={canManageWeekLocks}
               unlockingWeek={
-                String(actionLoading).startsWith("unlock-week-") ? actionLoading : ""
+                String(actionLoading).startsWith("unlock-week-") ||
+                String(actionLoading).startsWith("lock-week-")
+                  ? actionLoading
+                  : ""
               }
               onUnlockWeek={(weekNumber) => handleUnlockWeek(weekNumber)}
+              onLockWeek={(weekNumber) => handleLockWeek(weekNumber)}
+              emailingWeek={actionLoading === "email-weeks"}
+              onEmailWeek={(weekNumber) => {
+                const lock = weekLocks.find(
+                  (l) => Number(l.week_number) === Number(weekNumber)
+                );
+                if (lock) handleEmailApprovedWeeks([lock]);
+              }}
             />
           )}
         </div>
       )}
+
+      <RosterDayEditor
+        isOpen={!!editorDay}
+        day={editorDay}
+        roster={editorRoster || selectedRoster}
+        readOnly={
+          !canManageRoster ||
+          (editorRoster || selectedRoster)?.access_mode === "read_only" ||
+          !isRosterEditable(editorRoster || selectedRoster, false) ||
+          monthCalendarLocked ||
+          isRosterLocked(editorRoster || selectedRoster) ||
+          ((editorRoster || selectedRoster)?.status || "") === "Pending Approval"
+        }
+        onClose={() => {
+          setEditorDay(null);
+          setEditorRoster(null);
+        }}
+        onSaved={() => {
+          refreshRosterViews({ silent: true });
+        }}
+      />
 
       {confirmAction && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">

@@ -1,6 +1,7 @@
 import axios from "axios";
 import config, { log, logError } from "../config/environment";
-import { getFriendlyErrorMessage } from "../utils/errorMessages";
+import { applyFriendlyNetworkError, getFriendlyErrorMessage } from "../utils/errorMessages";
+import { hideConnectionIssue } from "../utils/connectionStatus";
 
 const api = axios.create({
   baseURL: config.apiBaseUrl,
@@ -30,6 +31,7 @@ api.interceptors.request.use(
   },
   (error) => {
     logError('[API Request Error]', error);
+    applyFriendlyNetworkError(error);
     return Promise.reject(error);
   }
 );
@@ -38,6 +40,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     log(`[API Response] ${response.config.url} - Status: ${response.status}`);
+    hideConnectionIssue();
     return response;
   },
   (error) => {
@@ -67,11 +70,8 @@ api.interceptors.response.use(
       logError('[API] Server error occurred');
     }
 
-    // Map backend error to friendly message
-    let friendlyMessage = getFriendlyErrorMessage(
-      error.response?.data?.code || error.response?.data?.message || error.message
-    );
-    error.friendlyMessage = friendlyMessage;
+    applyFriendlyNetworkError(error);
+    error.friendlyMessage = getFriendlyErrorMessage(error);
 
     return Promise.reject(error);
   }

@@ -26,7 +26,7 @@ import {
 import TaskEODReport from "./TaskEODReport";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
 import SubTabsBar from "../common/SubTabsBar";
-import { formatISTDateTimeParts, getISTParts } from "../../utils/dateTimeIST";
+import { formatISTDateTimeParts, getISTParts, todayISTISO } from "../../utils/dateTimeIST";
 
 
 // Project 12: all current and future tasks can enter production above 2x base target
@@ -52,26 +52,22 @@ const QATrackerReport = () => {
     parentTab: 'tracker_report',
   });
   
-  // Check if user is QA agent (QA agents should not see edit/delete actions)
-  const roleId = user?.role_id;
-  const role = user?.role_name || user?.role || '';
-  const designation = user?.designation || user?.user_designation || '';
-  const isQAAgent = roleId === 5 || 
-                    String(designation).toLowerCase() === 'qa' || 
-                    String(role).toLowerCase().includes('qa');
+  // Role-based only — designation is never used for access
+  const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
+  const role = String(user?.role_name || user?.role || '').toLowerCase().trim();
+  const isQAAgent = roleId === 5 || role === 'qa' || role.includes('qa');
+  const isTeamLeader = roleId === 7 || role.includes('team leader');
   const isAssistantManager =
-    roleId === 4 ||
-    String(designation).toLowerCase() === 'assistant manager' ||
-    String(role).toLowerCase().includes('assistant');
+    !isTeamLeader &&
+    (roleId === 4 || role === 'assistant manager' || (role.includes('assistant') && !role.includes('team leader')));
+  const canMutateTracker = !isQAAgent && !isTeamLeader;
   
   // Check if user is PM, Admin, or Super Admin (for team filter visibility)
-  const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
-  const isAdmin = roleId === 1 || roleId === 2 || String(role).toLowerCase() === 'admin' || String(designation).toLowerCase() === 'admin';
-  const isSuperAdmin = String(role).toLowerCase().includes('super') || String(designation).toLowerCase().includes('super');
+  const isProjectManager = roleId === 3 || role.includes('project manager');
+  const isAdmin = roleId === 1 || roleId === 2 || role === 'admin' || role === 'super admin';
+  const isSuperAdmin = roleId === 1 || role.includes('super');
   const canViewTeamFilter = isProjectManager || isAdmin || isSuperAdmin;
-  const isAgent =
-    String(role).toLowerCase() === 'agent' ||
-    String(designation).toLowerCase() === 'agent';
+  const isAgent = roleId === 6 || role === 'agent';
   const canAccessTaskEODReport = !isAgent;
   
   const [trackers, setTrackers] = useState([]);
@@ -93,7 +89,7 @@ const QATrackerReport = () => {
   const [selectedAgents, setSelectedAgents] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
-  const [selectedTask, setSelectedTask] = useState('');
+  const [selectedTasks, setSelectedTasks] = useState([]);
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getTodayDate());
   const [_summary, setSummary] = useState([]);
@@ -232,6 +228,7 @@ const QATrackerReport = () => {
       setLoadingUsers(true);
       console.log('[QATrackerReport] fetchUsers called with teamId:', teamId);
       log('[QATrackerReport] Fetching agents list for agent filter');
+      // Agent list uses rolling 3-month leaver window (no date_from → listing mode).
       const payload = {
         logged_in_user_id: user?.user_id,
         dropdown_type: "agent"
@@ -339,8 +336,14 @@ const QATrackerReport = () => {
       payload.project_id = Number(selectedProject);
     }
 
-    if (selectedTask) {
-      payload.task_id = Number(selectedTask);
+    if (selectedTasks.length > 0) {
+      const taskIds = selectedTasks
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+      if (taskIds.length > 0) {
+        payload.task_ids = taskIds;
+        payload.task_id = taskIds;
+      }
     }
 
     if (includePagination) {
@@ -401,7 +404,7 @@ const QATrackerReport = () => {
       log('[QATrackerReport] Fetched trackers:', fetchedTrackers.length, 'totals:', data.totals);
     } catch (err) {
       logError('[QATrackerReport] Error fetching tracker/view:', err);
-      toast.error("Failed to load tracker data");
+      toast.error(err.response?.data?.message || "Failed to load tracker data");
       setTrackers([]);
       setSummary([]);
       setApiTotals(null);
@@ -429,7 +432,7 @@ const QATrackerReport = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id, device_id, device_type]);
 
-  // Refetch agents when team selection changes
+  // Refetch agents when team changes (3-month listing; not tied to report date range)
   useEffect(() => {
     if (!user?.user_id) return;
     
@@ -453,7 +456,7 @@ const QATrackerReport = () => {
       fetchData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTask, currentPage, itemsPerPage]);
+  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTasks, currentPage, itemsPerPage]);
 
   // Filter tasks based on selected project for cascading dropdown
   const filteredTasksList = useMemo(() => {
@@ -540,7 +543,7 @@ const QATrackerReport = () => {
     setSelectedAgents([]);
     setSelectedTeams('');
     setSelectedProject('');
-    setSelectedTask('');
+    setSelectedTasks([]);
     setStartDate(today);
     setEndDate(today);
     setCurrentPage(1);
@@ -569,12 +572,20 @@ const QATrackerReport = () => {
   const handleProjectChange = (value) => {
     setCurrentPage(1);
     setSelectedProject(value);
-    setSelectedTask('');
+    setSelectedTasks((prev) => {
+      if (!value) return [];
+      const allowed = new Set(
+        tasksList
+          .filter((task) => String(task.project_id) === String(value))
+          .map((task) => String(task.task_id))
+      );
+      return prev.filter((id) => allowed.has(String(id)));
+    });
   };
 
   const handleTaskChange = (value) => {
     setCurrentPage(1);
-    setSelectedTask(value);
+    setSelectedTasks(Array.isArray(value) ? value : value ? [value] : []);
   };
 
   const handlePageChange = (page) => {
@@ -740,10 +751,10 @@ const QATrackerReport = () => {
       case 'tracker_datetime':
         if (!value) newErrors.tracker_datetime = 'Date & Time is required';
         else {
-          const selectedDate = new Date(value);
-          const now = new Date();
-          if (selectedDate > now) {
-            newErrors.tracker_datetime = 'Future date & time not allowed';
+          const selectedDay = String(value).slice(0, 10);
+          const today = todayISTISO() || getTodayDate();
+          if (selectedDay > today) {
+            newErrors.tracker_datetime = 'Future date not allowed';
           } else {
             delete newErrors.tracker_datetime;
           }
@@ -798,6 +809,7 @@ const QATrackerReport = () => {
   // Handle add form submit
   const handleAddSubmit = async (e) => {
     e.preventDefault();
+    if (!canMutateTracker) return;
     
     setAddTouched({
       agent_id: true,
@@ -813,10 +825,10 @@ const QATrackerReport = () => {
     if (!addFormData.tracker_datetime) {
       errors.tracker_datetime = 'Date & Time is required';
     } else {
-      const selectedDate = new Date(addFormData.tracker_datetime);
-      const now = new Date();
-      if (selectedDate > now) {
-        errors.tracker_datetime = 'Future date & time not allowed';
+      const selectedDay = String(addFormData.tracker_datetime).slice(0, 10);
+      const today = todayISTISO() || getTodayDate();
+      if (selectedDay > today) {
+        errors.tracker_datetime = 'Future date not allowed';
       }
     }
     if (!addFormData.project_id) errors.project_id = 'Project is required';
@@ -844,6 +856,7 @@ const QATrackerReport = () => {
       const formattedDateTime = dateTimeValue.replace('T', ' ') + ':00';
       
       const formData = new FormData();  
+      formData.append('logged_in_user_id', user?.user_id);
       formData.append('user_id', Number(addFormData.agent_id));
       formData.append('date', formattedDateTime);
       formData.append('project_id', Number(addFormData.project_id));
@@ -955,11 +968,11 @@ const QATrackerReport = () => {
         base_target: tracker.tenure_target || tracker.actual_target || "",
         tracker_note: tracker.tracker_note || tracker.notes || "",
         tracker_file: null,
+        newFile: null,
+        remove_file: false,
       });
 
-      if (tracker.tracker_file) {
-        setEditFilePreview(tracker.tracker_file);
-      }
+      setEditFilePreview(tracker.tracker_file || null);
 
       if (tracker.project_id && projectsData.length > 0) {
         const project = projectsData.find(p => String(p.project_id) === String(tracker.project_id));
@@ -1090,7 +1103,7 @@ const QATrackerReport = () => {
     const maxSize = 10 * 1024 * 1024;
     if (fileObj.size > maxSize) {
       setEditFileError("File size must not exceed 10MB");
-      setEditFormData(prev => ({ ...prev, tracker_file: null, newFile: null }));
+      setEditFormData(prev => ({ ...prev, tracker_file: null, newFile: null, remove_file: false }));
       setEditFilePreview(null);
       toast.error("File size exceeds 10MB limit", { duration: 4000 });
       e.target.value = null;
@@ -1108,7 +1121,7 @@ const QATrackerReport = () => {
 
     if (!allowedTypes.includes(fileObj.type)) {
       setEditFileError("Invalid file type. Please upload Excel, PDF, Word, or CSV files.");
-      setEditFormData(prev => ({ ...prev, tracker_file: null, newFile: null }));
+      setEditFormData(prev => ({ ...prev, tracker_file: null, newFile: null, remove_file: false }));
       setEditFilePreview(null);
       toast.error("Invalid file type", { duration: 4000 });
       e.target.value = null;
@@ -1116,18 +1129,45 @@ const QATrackerReport = () => {
     }
 
     setEditFileError("");
-    setEditFormData(prev => ({ ...prev, tracker_file: fileObj, newFile: fileObj }));
+    setEditFormData(prev => ({ ...prev, tracker_file: fileObj, newFile: fileObj, remove_file: false }));
     setEditFilePreview(fileObj.name);
     toast.success(`File selected: ${fileObj.name}`);
     log('[QATrackerReport] Edit file selected:', fileObj.name);
   };
 
+  const clearEditFileInput = () => {
+    const input = document.getElementById('edit-file-upload');
+    if (input) input.value = '';
+  };
+
+  const handleRemoveEditFile = (e) => {
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    setEditFormData((prev) => ({
+      ...prev,
+      tracker_file: null,
+      newFile: null,
+      remove_file: true,
+    }));
+    setEditFilePreview(null);
+    setEditFileError("");
+    clearEditFileInput();
+    toast.success("File will be removed when you save");
+  };
+
   // Handle edit form submit
   const handleEditSubmit = async (e) => {
     e.preventDefault();
+    if (!canMutateTracker) return;
 
     if (!editFormData.tracker_datetime || !editFormData.project_id || !editFormData.task_id || !editFormData.production) {
       toast.error("Please fill all required fields");
+      return;
+    }
+    const editDay = String(editFormData.tracker_datetime).slice(0, 10);
+    const today = todayISTISO() || getTodayDate();
+    if (editDay > today) {
+      toast.error("Tracker cannot be added for a future date");
       return;
     }
 
@@ -1145,6 +1185,7 @@ const QATrackerReport = () => {
 
     try {
       const formData = new FormData();
+      formData.append('logged_in_user_id', user?.user_id);
       formData.append('tracker_id', editingTracker.tracker_id);
       
       if (editFormData.tracker_datetime) {
@@ -1160,13 +1201,21 @@ const QATrackerReport = () => {
       formData.append('production', Number(editFormData.production));
       formData.append('base_target', Number(editFormData.base_target));
 
-      if (editFormData.tracker_note && editFormData.tracker_note.trim()) {
-        formData.append('tracker_note', editFormData.tracker_note.trim());
-      }
+      // Always send note on update — empty string clears a previously saved note
+      formData.append(
+        'tracker_note',
+        editFormData.tracker_note != null ? String(editFormData.tracker_note).trim() : ''
+      );
 
       if (editFormData.newFile) {
         formData.append('tracker_file', editFormData.newFile);
         log('[QATrackerReport] Uploading new file:', editFormData.newFile.name);
+      } else if (
+        editFormData.remove_file ||
+        (!editFilePreview && editingTracker?.tracker_file)
+      ) {
+        formData.append('remove_file', '1');
+        log('[QATrackerReport] Clearing tracker file');
       }
 
       log('[QATrackerReport] Submitting tracker update with FormData');
@@ -1188,7 +1237,8 @@ const QATrackerReport = () => {
           base_target: "",
           tracker_note: "",
           tracker_file: null,
-          newFile: null
+          newFile: null,
+          remove_file: false,
         });
         setEditFilePreview(null);
         setEditFileError("");
@@ -1217,6 +1267,8 @@ const QATrackerReport = () => {
       base_target: "",
       tracker_note: "",
       tracker_file: null,
+      newFile: null,
+      remove_file: false,
     });
     setEditFilePreview(null);
     setEditFileBase64(null);
@@ -1514,28 +1566,29 @@ const QATrackerReport = () => {
               />
             </div>
 
-            {/* Task Dropdown */}
+            {/* Task Multi-Select Dropdown */}
             <div style={{ width: '182px' }}>
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1">
                 <ListTodo className="w-3.5 h-3.5 text-blue-600" />
                 Task
               </label>
-              <SearchableSelect
+              <MultiSelectWithCheckbox
                 icon={ListTodo}
-                value={selectedTask}
+                value={selectedTasks}
                 onChange={handleTaskChange}
                 options={filteredTasksList.map(task => ({ 
                   value: String(task.task_id), 
                   label: task.task_name 
                 }))}
-                placeholder="Select Task"
-                isClearable={true}
+                placeholder="Select Tasks"
+                showSelectAll={true}
+                maxDisplayCount={1}
                 disabled={loadingTasks}
               />
             </div>
 
-            {/* Add Tracker Button - Only visible to AM, PM, Admin, Super Admin (not QA) */}
-            {!isQAAgent && (
+            {/* Add Tracker Button - Only visible to AM, PM, Admin, Super Admin (not QA / Team Leader) */}
+            {canMutateTracker && (
               <div className="flex items-end">
                 <button
                   onClick={handleOpenAddModal}
@@ -1604,7 +1657,7 @@ const QATrackerReport = () => {
                   <col style={{ width: isQAAgent ? '16%' : '14%' }}/>
                   <col style={{ width: isQAAgent ? '10%' : '8%' }}/>
                   <col style={{ width: isQAAgent ? '8%' : '7%' }}/>
-                  {!isQAAgent && <col style={{ width: '13%' }}/>}
+                  {canMutateTracker && <col style={{ width: '13%' }}/>}
                 </colgroup>
                 <thead className="bg-gradient-to-r from-blue-600 to-blue-700 sticky top-0 z-10">
                   <tr>
@@ -1618,7 +1671,7 @@ const QATrackerReport = () => {
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Notes</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">File</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Shift</th>
-                    {!isQAAgent && <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">Actions</th>}
+                    {canMutateTracker && <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -1765,7 +1818,7 @@ const QATrackerReport = () => {
                             {(tracker.shift || tracker.shift_type || '').toLowerCase() === 'day' || (tracker.shift || tracker.shift_type) === 'day_shift' ? 'Day' : (tracker.shift || tracker.shift_type || '').toLowerCase() === 'night' || (tracker.shift || tracker.shift_type) === 'night_shift' ? 'Night' : '—'}
                           </span>
                         </td>
-                        {!isQAAgent && (
+                        {canMutateTracker && (
                           <td className="px-5 py-3 align-middle">
                             <div className="flex items-center justify-center gap-2">
                               <button
@@ -2333,22 +2386,37 @@ const QATrackerReport = () => {
                           Project Files
                         </label>
                         
-                        {editFilePreview && !editFormData.tracker_file && (
-                          <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+                        {(editFilePreview || editFormData.remove_file) && !editFormData.tracker_file && (
+                          <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600 shrink-0">
                                 <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
                               </svg>
-                              <span className="text-xs font-medium text-blue-700">Existing file</span>
+                              <span className="text-xs font-medium text-blue-700 truncate">
+                                {editFormData.remove_file ? 'File will be removed on save' : 'Existing file'}
+                              </span>
                             </div>
-                            <a
-                              href={editFilePreview}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 text-xs font-semibold"
-                            >
-                              View
-                            </a>
+                            <div className="flex items-center gap-3 shrink-0">
+                              {editFilePreview && !editFormData.remove_file && (
+                                <a
+                                  href={editFilePreview}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 text-xs font-semibold"
+                                >
+                                  View
+                                </a>
+                              )}
+                              {!editFormData.remove_file && (
+                                <button
+                                  type="button"
+                                  onClick={handleRemoveEditFile}
+                                  className="text-red-600 hover:text-red-800 text-xs font-semibold"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -2379,6 +2447,15 @@ const QATrackerReport = () => {
                                 )}
                               </p>
                               <p className="text-xs text-slate-500 mt-1">Max: 10MB</p>
+                              {editFormData.tracker_file && (
+                                <button
+                                  type="button"
+                                  onClick={handleRemoveEditFile}
+                                  className="mt-1 text-xs font-semibold text-red-600 hover:text-red-800"
+                                >
+                                  Remove selected file
+                                </button>
+                              )}
                             </div>
                           </div>
                           <input

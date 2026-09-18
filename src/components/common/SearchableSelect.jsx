@@ -92,7 +92,7 @@ const SearchableSelect = ({
            opt.value?.toString().toLowerCase().includes(searchLower);
   });
 
-  const selectedOption = options.find(opt => opt.value === value);
+  const selectedOption = options.find(opt => String(opt.value ?? "") === String(value ?? ""));
 
   const handleSelect = (optionValue) => {
     onChange(optionValue);
@@ -241,11 +241,11 @@ const SearchableSelect = ({
                     className={`
                       w-full px-4 py-2.5 text-left text-sm flex items-center justify-between
                       transition-all hover:bg-blue-50 hover:text-blue-700
-                      ${value === option.value ? 'bg-blue-50 text-blue-700 font-semibold border-l-4 border-blue-600' : 'text-slate-700 font-medium'}
+                      ${String(value ?? "") === String(option.value ?? "") ? 'bg-blue-50 text-blue-700 font-semibold border-l-4 border-blue-600' : 'text-slate-700 font-medium'}
                     `}
                   >
                     <span>{option.label}</span>
-                    {value === option.value && (
+                    {String(value ?? "") === String(option.value ?? "") && (
                       <Check className="w-4 h-4 text-blue-600" />
                     )}
                   </button>

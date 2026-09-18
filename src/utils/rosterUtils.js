@@ -223,7 +223,7 @@ export function getDayDisplayInfo(day, options = null) {
 
   const isNightShift = String(effectiveDay.shift || "").toUpperCase() === "NIGHT";
 
-  // Half-day leave and Half Working feel the same: Half Working + hours
+  // Half-day leave and Half Working: show hours; leave also shows whether target is reduced.
   if (isHalfLeave || isHalfWorking) {
     cellClass = isNightShift
       ? "bg-teal-100 border-teal-500"
@@ -232,21 +232,35 @@ export function getDayDisplayInfo(day, options = null) {
     badges.push("Half Day");
     if (isHalfLeave) {
       badges.push("Leave");
+      const affectTarget =
+        Number(effectiveDay.leave_affect_target) === 1 ||
+        effectiveDay.leave_affect_target === true ||
+        Number(effectiveDay.affect_target) === 1 ||
+        effectiveDay.affect_target === true;
+      badges.push(affectTarget ? "Affects target" : "Does not affect target");
+    } else if (isHalfWorking) {
+      badges.push("Affects target");
     }
   } else if (effectiveDay.day_type === "Leave") {
     cellClass = "bg-amber-50 border-amber-200";
     primaryLabel = "Leave";
     badges.push("Full Day");
-  } else if (effectiveDay.is_holiday_on_week_off) {
-    cellClass = "bg-slate-100 border-slate-300";
-    primaryLabel = "Week Off";
-    badges.push("Holiday");
+  } else if (effectiveDay.day_type === "Left") {
+    cellClass = "bg-rose-50 border-rose-300";
+    primaryLabel = "Left";
+  } else if (
+    effectiveDay.day_type === "Holiday" ||
+    (effectiveDay.holiday_id &&
+      effectiveDay.day_type !== "Working" &&
+      effectiveDay.day_type !== "Leave" &&
+      effectiveDay.day_type !== "Left")
+  ) {
+    cellClass = "bg-purple-50 border-purple-200";
+    primaryLabel = "Holiday";
+    if (effectiveDay.day_type === "WeekOff") badges.push("Week Off");
   } else if (effectiveDay.day_type === "WeekOff") {
     cellClass = "bg-slate-100 border-slate-300";
     primaryLabel = "Week Off";
-  } else if (effectiveDay.day_type === "Holiday") {
-    cellClass = "bg-purple-50 border-purple-200";
-    primaryLabel = "Holiday";
   } else if (effectiveDay.day_type === "Working") {
     cellClass = isNightShift
       ? "bg-teal-100 border-teal-500"
@@ -254,12 +268,15 @@ export function getDayDisplayInfo(day, options = null) {
     primaryLabel = "Working";
     if (effectiveDay.shift) badges.push(isNightShift ? "Night" : "Day");
     badges.push("Full Day");
+    if (effectiveDay.holiday_id) badges.push("Holiday");
   }
 
-  // Shift badge for half working / other day types (Working already added above)
+  // Shift badge for half working / other day types (Working already added above).
+  // Left people do not work — do not show Day/Night.
   if (
     effectiveDay.shift &&
     effectiveDay.day_type !== "Working" &&
+    effectiveDay.day_type !== "Left" &&
     !(isHalfLeave || isHalfWorking)
   ) {
     badges.push(isNightShift ? "Night" : "Day");
@@ -281,7 +298,7 @@ export function getDayDisplayInfo(day, options = null) {
   ) {
     badges.push(`${hoursBadge}h`);
   }
-  if (effectiveDay.holiday_name && effectiveDay.day_type !== "Leave" && !effectiveDay.is_holiday_on_week_off) {
+  if (effectiveDay.holiday_name && effectiveDay.day_type !== "Leave" && effectiveDay.day_type !== "Left") {
     badges.push(effectiveDay.holiday_name);
   }
 
@@ -483,13 +500,10 @@ export function filterEmployeesByTeam(employees, teamId, teams = []) {
 export function isAgentOrQA(user) {
   if (!user) return false;
   const roleName = String(user.role_name || user.role || "").trim().toLowerCase();
-  const designation = String(user.designation || user.designation_name || "").trim().toLowerCase();
   const roleId = Number(user.role_id);
   return (
     roleName === "agent" ||
     roleName === "qa" ||
-    designation === "agent" ||
-    designation === "qa" ||
     roleId === 5 ||
     roleId === 6
   );
@@ -545,7 +559,7 @@ export function formatChangeRequestSummary(changeType, payload) {
       const range = [p.start_date, p.end_date].filter(Boolean).join(" → ") || "—";
       const flags = [
         p.is_half_day ? "Half day" : null,
-        p.affect_target ? "Affects target" : null,
+        p.affect_target ? "Affects target" : "Does not affect target",
       ].filter(Boolean);
       const reason = p.reason ? ` — ${p.reason}` : "";
       return `${p.leave_type || "Leave"} (${range})${flags.length ? ` [${flags.join(", ")}]` : ""}${reason}`;
@@ -631,7 +645,9 @@ function mergePendingDate(byDate, dateStr, preview, summary, { submitted = false
   const key = dateStr.slice(0, 10);
   const existing = byDate[key] || { preview: {}, summaries: [], submitted: false };
   const summaries = [...existing.summaries, summary];
-  const phaseLabel = "Submitted — awaiting approval";
+  const phaseLabel = submitted
+    ? "Submitted — awaiting approval"
+    : "Saved — submit for approval";
   byDate[key] = {
     preview: { ...existing.preview, ...preview },
     summaries,
@@ -649,8 +665,7 @@ export function buildPendingCalendarOverlay(requests, rosterMonthId) {
 
   const relevant = (requests || []).filter(
     (r) =>
-      r.status === "Pending" &&
-      Boolean(r.batch_id) &&
+      (r.status || "") === "Pending" &&
       (!rosterMonthId || String(r.roster_month_id) === String(rosterMonthId))
   );
 
@@ -684,11 +699,14 @@ export function buildPendingCalendarOverlay(requests, rosterMonthId) {
       case "LEAVE_UPDATE":
         eachDateInRange(p.start_date, p.end_date).forEach((d) => {
           const half = Boolean(Number(p.is_half_day) === 1 || p.is_half_day === true);
+          const affect = Boolean(Number(p.affect_target) === 1 || p.affect_target === true);
           mergePendingDate(byDate, d, {
             day_type: "Leave",
             working_type: half ? "Half" : "Full",
             leave_is_half_day: half,
             is_half_day: half,
+            leave_affect_target: affect,
+            affect_target: affect,
             display_as_half_working: half,
             _pendingLeaveType: "Leave",
           }, summary, overlayOpts);

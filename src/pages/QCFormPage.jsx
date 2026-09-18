@@ -76,6 +76,8 @@ const QCFormPage = () => {
   const [afdData, setAfdData] = useState(null); // AFD with categories and subcategories
   const [totalRecords, setTotalRecords] = useState(0); // Total records from API
   const [sampleSize, setSampleSize] = useState(0); // Sample size from API
+  const [objectCount, setObjectCount] = useState(null); // Sum of selected column on the whole file
+  const [qcObjectCount, setQcObjectCount] = useState(null); // Sum of selected column on QC sample rows
   const [sampleFilePath, setSampleFilePath] = useState(''); // Sample file path from API
   const [samplingPercentage, setSamplingPercentage] = useState(
     Number(trackerData?.qc_percentage) || 10
@@ -244,6 +246,14 @@ const QCFormPage = () => {
             const apiTotalRecords = sampleResponse.data.total_records || 0;
             const apiSampleSize = sampleResponse.data.sample_size || 0;
             const apiSamplingPercentage = Number(sampleResponse.data.sampling_percentage);
+            const apiObjectCount =
+              sampleResponse.data.object_count != null && sampleResponse.data.object_count !== ""
+                ? Number(sampleResponse.data.object_count)
+                : null;
+            const apiQcObjectCount =
+              sampleResponse.data.qc_object_count != null && sampleResponse.data.qc_object_count !== ""
+                ? Number(sampleResponse.data.qc_object_count)
+                : null;
             
             // Try multiple possible locations for the file path
             let apiFilePath = sampleResponse.data.file_path 
@@ -270,6 +280,16 @@ const QCFormPage = () => {
             
             setTotalRecords(apiTotalRecords);
             setSampleSize(apiSampleSize);
+            setObjectCount(
+              apiObjectCount != null && !Number.isNaN(apiObjectCount)
+                ? apiObjectCount
+                : null
+            );
+            setQcObjectCount(
+              apiQcObjectCount != null && !Number.isNaN(apiQcObjectCount)
+                ? apiQcObjectCount
+                : null
+            );
             setSamplingPercentage(apiSamplingPercentage || Number(trackerData?.qc_percentage) || 10);
             setSampleFilePath(apiFilePath);
             sampleFilePathRef.current = apiFilePath; // Also store in ref
@@ -641,7 +661,9 @@ const QCFormPage = () => {
         qc_score: parseFloat(qcScore.toFixed(2)),
         status: status,
         file_record_count: totalRecords || errorMetrics.recordCount,
-        qc_generated_count: sampleSize || errorMetrics.sampleCount, 
+        qc_generated_count: sampleSize || errorMetrics.sampleCount,
+        object_count: objectCount,
+        qc_object_count: qcObjectCount,
         qc_file_records: formData, 
         error_list: errorList, 
         comments: comments || '',

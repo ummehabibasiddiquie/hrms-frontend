@@ -14,16 +14,18 @@ import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { log, logError } from "../../config/environment";
-import { getFriendlyErrorMessage } from '../../utils/errorMessages';
+import { getFriendlyErrorMessage, showApiError } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
 import AppLayout from "../../layouts/AppLayout";
 import QATabsNavigation from "./QATabsNavigation";
 import BillableReport from "../common/BillableReport";
 import QABillableReport from "../dashboard/QABillableReport";
+import KraReport from "../dashboard/KraReport";
 import QAFilterBar from "./QAFilterBar";
 import QAIndividualAuditReport from "./QAIndividualAuditReport";
 import QAAgentQCFormReport from "../dashboard/QAAgentQCFormReport";
 import QAAgentReworkCorrectionReview from "../dashboard/QAAgentReworkCorrectionReview";
+import QAHoursTracker from "./QAHoursTracker";
 import { useRoutedDashboardTab } from "../../hooks/useRoutedDashboardTab";
 import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
 
@@ -233,7 +235,7 @@ const QAAgentDashboard = ({ embedded = false }) => {
     } catch (err) {
       logError('[QAAgentDashboard] Error fetching dashboard data:', err);
       setError(getFriendlyErrorMessage(err));
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setLoading(false);
     }
@@ -448,9 +450,10 @@ const QAAgentDashboard = ({ embedded = false }) => {
         )
       )}
       
-      {activeTab === 'billable_report' && <BillableReport />}
-
+      {activeTab === 'billable_report' && <BillableReport title="Agents Billable Report" />}
       {activeTab === 'qa_billable_report' && <QABillableReport />}
+      {activeTab === 'kra_report' && <KraReport />}
+      {activeTab === 'my_hours' && <QAHoursTracker mode="self" />}
 
       {activeTab === 'audit_report' && <QAIndividualAuditReport />}
       

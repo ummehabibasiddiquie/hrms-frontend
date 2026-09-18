@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { X, Save, Calendar, Clock } from "lucide-react";
+import { X, Save, Calendar, Clock, ClipboardCheck } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { saveTempQC } from "../../services/qcService";
 
@@ -22,14 +22,20 @@ const DailyEntryFormModal = ({
   roleId = null,
   userId = null,
   date = null,
-  logged_in_user_id = null
+  logged_in_user_id = null,
+  allowAssignedHours = true,
+  allowQcScore = false,
 }) => {
   const [formData, setFormData] = useState({
-    assignHours: ""
+    assignHours: "",
+    qcScore: ""
   });
 
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
+  const hoursReadOnly = roleId === 5 || String(userRole || "").toUpperCase().includes("QA");
+  const showHours = allowAssignedHours && !hoursReadOnly;
+  const showQc = allowQcScore;
 
   // Initialize form data when modal opens or initialData changes
   useEffect(() => {
@@ -45,12 +51,16 @@ const DailyEntryFormModal = ({
         };
 
         setFormData({
-          assignHours: parseNumericValue(initialData.assignHours || initialData.assign_hours)
+          assignHours: parseNumericValue(
+            initialData.assignHours || initialData.assign_hours || initialData.assigned_hours
+          ),
+          qcScore: parseNumericValue(initialData.qcScore || initialData.qc_score)
         });
       } else {
         // Reset for add mode
         setFormData({
-          assignHours: ""
+          assignHours: "",
+          qcScore: ""
         });
       }
       setErrors({});
@@ -62,10 +72,19 @@ const DailyEntryFormModal = ({
   const validateField = (name, value) => {
     switch (name) {
       case "assignHours":
+        if (!showHours) return "";
         if (value && value !== "") {
           const hours = Number(value);
           if (isNaN(hours) || hours < 0) return "Must be a non-negative number";
           if (hours > 24) return "Cannot exceed 24 hours";
+        }
+        return "";
+      case "qcScore":
+        if (!showQc) return "";
+        if (value === "" || value === null || value === undefined) return "QC score is required";
+        {
+          const score = Number(value);
+          if (isNaN(score) || score < 0 || score > 100) return "Must be between 0 and 100";
         }
         return "";
 
@@ -106,7 +125,8 @@ const DailyEntryFormModal = ({
 
     setErrors(newErrors);
     setTouched({
-      assignHours: true
+      assignHours: showHours,
+      qcScore: showQc
     });
 
     // If no errors, submit
@@ -146,18 +166,22 @@ const DailyEntryFormModal = ({
           logged_in_user_id: logged_in_user_id
         };
 
-        // Only assigned hours are editable from Billable Report.
-        if (formData.assignHours && formData.assignHours !== '') {
+        if (showHours && formData.assignHours !== '' && formData.assignHours != null) {
           payload.assigned_hours = Number(formData.assignHours);
         }
+        if (showQc && formData.qcScore !== '' && formData.qcScore != null) {
+          payload.qc_score = Number(formData.qcScore);
+        }
 
-        console.log('Submitting assigned hours data:', payload);
+        if (payload.assigned_hours === undefined && payload.qc_score === undefined) {
+          toast.error('Enter assigned hours or QC score');
+          return;
+        }
 
-        // Save the assigned hours update.
         const response = await saveTempQC(payload);
         
         if (response.status) {
-          toast.success(response.message || 'Assigned hours saved successfully!');
+          toast.success(response.message || 'Saved successfully!');
           onSubmit(formData); // Call parent's onSubmit for additional handling (triggers refresh)
           handleClose(); // Close modal after successful save
         } else {
@@ -174,7 +198,8 @@ const DailyEntryFormModal = ({
 
   const handleClose = () => {
     setFormData({
-      assignHours: ""
+      assignHours: "",
+      qcScore: ""
     });
     setErrors({});
     setTouched({});
@@ -224,14 +249,11 @@ const DailyEntryFormModal = ({
         <div className="flex-1 overflow-y-auto p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             
-            {/* Assign Hours */}
+            {showHours && (
             <div>
               <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
                 <Clock className="w-4 h-4 text-blue-600" />
                 Assign Hours
-                {(roleId === 5 || userRole === "QA_AGENT") && (
-                  <span className="text-xs font-normal text-slate-500 ml-2">(Read-only for QA Agent)</span>
-                )}
               </label>
               <input
                 type="number"
@@ -243,15 +265,12 @@ const DailyEntryFormModal = ({
                   touched.assignHours && errors.assignHours
                     ? 'border-red-500 focus:ring-red-500'
                     : 'border-slate-200 focus:ring-blue-500'
-                } rounded-xl focus:outline-none focus:ring-2 transition-all duration-200 ${
-                  (roleId === 5 || userRole === "QA_AGENT") ? 'bg-slate-100 cursor-not-allowed' : ''
-                }`}
+                } rounded-xl focus:outline-none focus:ring-2 transition-all duration-200`}
                 placeholder="Enter hours (e.g., 8.5)"
                 min="0"
                 max="24"
                 step="0.01"
-                disabled={isSubmitting || roleId === 5 || userRole === "QA_AGENT"}
-                readOnly={roleId === 5 || userRole === "QA_AGENT"}
+                disabled={isSubmitting}
               />
               {touched.assignHours && errors.assignHours && (
                 <p className="mt-2 text-xs text-red-600 flex items-center gap-1">
@@ -259,6 +278,38 @@ const DailyEntryFormModal = ({
                 </p>
               )}
             </div>
+            )}
+
+            {showQc && (
+            <div>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
+                <ClipboardCheck className="w-4 h-4 text-blue-600" />
+                QC Score
+              </label>
+              <input
+                type="number"
+                name="qcScore"
+                value={formData.qcScore}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={`block w-full px-4 py-3 text-sm bg-slate-50 border ${
+                  touched.qcScore && errors.qcScore
+                    ? 'border-red-500 focus:ring-red-500'
+                    : 'border-slate-200 focus:ring-blue-500'
+                } rounded-xl focus:outline-none focus:ring-2 transition-all duration-200`}
+                placeholder="Enter QC score (0–100)"
+                min="0"
+                max="100"
+                step="0.01"
+                disabled={isSubmitting}
+              />
+              {touched.qcScore && errors.qcScore && (
+                <p className="mt-2 text-xs text-red-600 flex items-center gap-1">
+                  <span className="font-semibold">⚠</span> {errors.qcScore}
+                </p>
+              )}
+            </div>
+            )}
 
           </form>
         </div>

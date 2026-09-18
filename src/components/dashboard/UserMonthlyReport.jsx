@@ -9,7 +9,8 @@ import { exportToCSV } from '../../utils/csvExport';
 import { MonthYearPicker } from '../common/CustomCalendar';
 import SearchableSelect from '../common/SearchableSelect';
 import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
-import { getCurrentMonthYear, getDefaultRecentMonthYears } from '../../utils/rosterUtils';
+import { getCurrentMonthYear, getDefaultRecentMonthYears, parseMonthYear } from '../../utils/rosterUtils';
+import { getFriendlyErrorMessage, showApiError } from '../../utils/errorMessages';
 
 const sortTeamWise = (a, b) => {
   const teamA = (a.team_name || "").trim();
@@ -27,23 +28,28 @@ const sortTeamWise = (a, b) => {
 const UserMonthlyReport = () => {
   const { user } = useAuth();
   
-  // Role checking — coerce role_id (API may return string) and check designation fallbacks
+  // Role-based only — designation is never used for access
   const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
   const role = user?.role || user?.role_name || user?.user_role || '';
-  const designation = String(user?.designation || user?.user_designation || '').toLowerCase();
-  const normalizedRole = String(role).toLowerCase();
-  const isSuperAdmin = roleId === 1 || normalizedRole.includes('super') || designation.includes('super');
-  const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === 'admin' || designation.includes('admin'));
+  const normalizedRole = String(role).toLowerCase().trim();
+  const isSuperAdmin = roleId === 1 || normalizedRole.includes('super');
+  const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === 'admin');
   const isProjectManager =
-    roleId === 3 || normalizedRole.includes('project manager') || designation.includes('project manager');
+    roleId === 3 || normalizedRole.includes('project manager');
+  const isTeamLeader =
+    roleId === 7 || normalizedRole.includes('team leader');
   const isAssistantManager =
-    roleId === 4 || normalizedRole.includes('assistant') || designation.includes('assistant');
-  const canManageAssignedHours = isAssistantManager || isProjectManager || isAdmin || isSuperAdmin;
+    !isTeamLeader &&
+    (roleId === 4 ||
+      normalizedRole === 'assistant manager' ||
+      (normalizedRole.includes('assistant') && !normalizedRole.includes('team leader')));
+  const canManageAssignedHours = (isAssistantManager || isProjectManager || isAdmin || isSuperAdmin) && !isTeamLeader;
+  // Monthly target is set by roster generate and is not edited afterwards.
   const canEditMonthlyBaseline = false;
   const canEditExtraHours = canManageAssignedHours;
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
   const canViewTeamColumn = isAdmin || isSuperAdmin || isProjectManager;
-  const assistantManagerTeamId = isAssistantManager ? user?.team_id : null;
+  const assistantManagerTeamId = (isAssistantManager || isTeamLeader) ? user?.team_id : null;
   
   // State for users list
   const [users, setUsers] = useState([]);
@@ -117,7 +123,7 @@ const UserMonthlyReport = () => {
         }
       } catch (err) {
         console.error('Error fetching users:', err);
-        toast.error('Failed to load users');
+        showApiError(err);
         setUsers([]);
       } finally {
         setLoadingUsers(false);
@@ -144,7 +150,7 @@ const UserMonthlyReport = () => {
         setTeams(teamsData);
       } catch (err) {
         console.error('Error fetching teams:', err);
-        toast.error('Failed to load teams');
+        showApiError(err);
         setTeams([]);
       } finally {
         setLoadingTeams(false);
@@ -203,8 +209,8 @@ const UserMonthlyReport = () => {
       setLoading(false);
     } catch (err) {
       console.error('Error fetching report data:', err);
-      toast.error('Failed to fetch report data');
-      setError('Failed to fetch report data');
+      showApiError(err);
+      setError(getFriendlyErrorMessage(err));
       setLoading(false);
     }
   };
@@ -264,12 +270,32 @@ const UserMonthlyReport = () => {
       toast.error('You do not have permission to update assigned hours');
       return;
     }
+    const monthlyTarget = parseFloat(editData.monthly_target);
+    if (canEditMonthlyBaseline && (Number.isNaN(monthlyTarget) || monthlyTarget < 0)) {
+      toast.error('Enter a valid monthly target (0 or more)');
+      return;
+    }
+    const extraHours = parseFloat(editData.extra_assign_hours);
+    if (canEditExtraHours && Number.isNaN(extraHours)) {
+      toast.error('Enter valid extra assigned hours (use a minus value to reduce the goal, e.g. -18)');
+      return;
+    }
+    const currentTarget = parseFloat(editData.monthly_target ?? 0);
+    if (canEditExtraHours && !Number.isNaN(currentTarget) && currentTarget + extraHours < 0) {
+      toast.error('Extra assigned hours cannot reduce the monthly goal below 0');
+      return;
+    }
+
     try {
       const payload = {
+        logged_in_user_id: user?.user_id,
         user_monthly_tracker_id: id,
         month_year: editData.month_year,
-        extra_assigned_hours: parseFloat(editData.extra_assign_hours),
+        extra_assigned_hours: extraHours,
       };
+      if (canEditMonthlyBaseline) {
+        payload.monthly_target = monthlyTarget;
+      }
 
       const response = await api.post('/user_monthly_tracker/update', payload);
       
@@ -482,17 +508,31 @@ const UserMonthlyReport = () => {
     return <LoadingSpinner />;
   }
 
-  // Build table rows: tracker data + empty rows for users missing a record in each visible month
+  // Build table rows: tracker data + empty rows for users missing a record.
+  // Past months: only users who already have goal data (no placeholders for new joiners).
+  // Current / future months: placeholders so managers can add goals for active agents.
   const getTableData = () => {
     const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
     const visibleMonths = selectedMonthFilter !== 'all'
       ? [selectedMonthFilter]
       : defaultMonths;
 
+    const current = parseMonthYear(getCurrentMonthYear());
+    const isPastMonthKey = (monthKey) => {
+      const parsed = parseMonthYear(monthKey);
+      if (!parsed || !current) return false;
+      return (
+        parsed.year < current.year ||
+        (parsed.year === current.year && parsed.month < current.month)
+      );
+    };
+
     const allData = reportData.filter((r) => visibleMonths.includes(r.month_year));
     const monthsNeedingPlaceholders = new Set(visibleMonths);
 
     monthsNeedingPlaceholders.forEach((monthKey) => {
+      if (isPastMonthKey(monthKey)) return;
+
       const monthUserIds = new Set(
         reportData.filter((r) => r.month_year === monthKey).map((r) => r.user_id)
       );
@@ -624,7 +664,7 @@ const UserMonthlyReport = () => {
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
         <h2 className="text-2xl font-bold text-white">User Monthly Goal</h2>
         <p className="text-blue-100 text-sm mt-1">
-          Monthly target and working days are read-only. Edit extra assigned hours here for employees who already have a monthly baseline.
+          Monthly target is calculated from the roster. Assistant Manager, Project Manager, Admin, and Super Admin can edit it here when hours need to be reduced or raised. Working days stay roster-driven.
         </p>
       </div>
 
@@ -770,7 +810,7 @@ const UserMonthlyReport = () => {
                               <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider border border-blue-500">Team</th>
                             )}
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Monthly Target</th>
-                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Extra Assign Hours</th>
+                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Extra Assign Hours<br /><span className="normal-case font-medium opacity-80">use minus to reduce, e.g. -18</span></th>
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Working Days</th>
                             <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider border border-blue-500">Actions</th>
                           </tr>
@@ -792,18 +832,32 @@ const UserMonthlyReport = () => {
                                       <td className="px-6 py-4 text-slate-600 border border-slate-300">{record.team_name || '-'}</td>
                                     )}
                                     <td className="px-6 py-4 border border-slate-300">
-                                      <span className="block text-center text-slate-600 font-semibold">
-                                        {editData.monthly_target ?? record.monthly_target ?? '—'}
-                                      </span>
+                                      {canEditMonthlyBaseline ? (
+                                        <input
+                                          type="number"
+                                          name="monthly_target"
+                                          min="0"
+                                          step="0.01"
+                                          value={editData.monthly_target}
+                                          onChange={handleEditDataChange}
+                                          placeholder="Monthly hours"
+                                          className="w-full bg-white border-2 border-indigo-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                                        />
+                                      ) : (
+                                        <span className="block text-center text-slate-600 font-semibold">
+                                          {editData.monthly_target ?? record.monthly_target ?? '—'}
+                                        </span>
+                                      )}
                                     </td>
                                     <td className="px-6 py-4 border border-slate-300">
                                       {canEditExtraHours ? (
                                         <input
-                                          type="text"
+                                          type="number"
                                           name="extra_assign_hours"
+                                          step="0.01"
                                           value={editData.extra_assign_hours}
                                           onChange={handleEditDataChange}
-                                          placeholder="Enter hours"
+                                          placeholder="-18 to reduce"
                                           className="w-full bg-white border-2 border-indigo-300 text-slate-800 text-sm rounded-lg px-3 py-2 text-center outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
                                         />
                                       ) : (
@@ -875,7 +929,7 @@ const UserMonthlyReport = () => {
                                           <button
                                             onClick={() => handleEditClick(record)}
                                             className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all hover:shadow-md"
-                                            title="Edit extra hours"
+                                            title="Edit monthly target and extra hours"
                                           >
                                             <Edit2 className="w-4 h-4" />
                                           </button>

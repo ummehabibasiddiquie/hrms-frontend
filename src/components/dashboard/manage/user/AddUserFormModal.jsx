@@ -12,6 +12,7 @@ import { UserPlus, X, Upload, XCircle, User, Eye, EyeOff, ChevronDown, Users } f
 import SearchableSelect from "../../../common/SearchableSelect";
 import MultiSelectWithCheckbox from "../../../common/MultiSelectWithCheckbox";
 import { SingleDatePicker } from "../../../common/CustomCalendar";
+import { todayISTISO } from "../../../../utils/dateTimeIST";
 
 /** Show joining date as dd/mm/yyyy. Accepts YYYY-MM-DD from the API. */
 export function joiningDateToDisplay(value) {
@@ -53,6 +54,7 @@ const AddUserFormModal = ({
      designations = [],
      projectManagers = [],
      assistantManagers = [],
+     teamLeaders = [],
      qas = [],
      teams = [],
      isDropdownLoading,
@@ -79,73 +81,98 @@ const AddUserFormModal = ({
 
      /**
       * Role-based field visibility configuration
-      * Role IDs: 1=Super Admin, 2=Admin, 3=Project Manager, 4=Assistant Manager, 5=QA, 6=Agent
+      * Role IDs: 1=Super Admin, 2=Admin, 3=Project Manager, 4=Assistant Manager,
+      * 5=QA, 6=Agent, 7=Assistant Team Leader
       */
      const getFieldVisibility = (selectedRoleId) => {
           const roleId = Number(selectedRoleId);
-          
-          // Agent (role_id = 6): Show tenure field
-          if (roleId === 6) {
-               return {
-                    projectManager: { visible: true, required: false },
-                    assistantManager: { visible: true, required: true },
-                    qualityAnalyst: { visible: true, required: true },
-                    tenure: { visible: true, required: true },
-                    joiningDate: { visible: true, required: true },
-               };
-          }
-          
-          // Default: hide tenure field (Super Admin, Admin)
+          const hidden = { visible: false, required: false };
+          const optional = { visible: true, required: false };
+          const required = { visible: true, required: true };
+
+          // Super Admin (1) and Admin (2): no reporting line or team
           if (!roleId || roleId === 1 || roleId === 2) {
                return {
-                    projectManager: { visible: true, required: false },
-                    assistantManager: { visible: true, required: true },
-                    qualityAnalyst: { visible: true, required: true },
-                    tenure: { visible: false, required: false },
-                    joiningDate: { visible: true, required: false },
+                    projectManager: hidden,
+                    assistantManager: hidden,
+                    teamLeader: hidden,
+                    qualityAnalyst: hidden,
+                    team: hidden,
+                    tenure: hidden,
+                    joiningDate: optional,
                };
           }
-          
-          // QA Agent (role_id = 5): Hide qualityAnalyst and tenure fields
-          if (roleId === 5) {
-               return {
-                    projectManager: { visible: true, required: false },
-                    assistantManager: { visible: true, required: true },
-                    qualityAnalyst: { visible: false, required: false },
-                    tenure: { visible: false, required: false },
-                    joiningDate: { visible: true, required: true },
-               };
-          }
-          
-          // Assistant Manager (role_id = 4): Hide assistantManager, qualityAnalyst and tenure fields
-          if (roleId === 4) {
-               return {
-                    projectManager: { visible: true, required: false },
-                    assistantManager: { visible: false, required: false },
-                    qualityAnalyst: { visible: false, required: false },
-                    tenure: { visible: false, required: false },
-                    joiningDate: { visible: true, required: false },
-               };
-          }
-          
-          // Project Manager (role_id = 3): Hide all three fields and tenure
+
           if (roleId === 3) {
                return {
-                    projectManager: { visible: false, required: false },
-                    assistantManager: { visible: false, required: false },
-                    qualityAnalyst: { visible: false, required: false },
-                    tenure: { visible: false, required: false },
-                    joiningDate: { visible: true, required: false },
+                    projectManager: hidden,
+                    assistantManager: hidden,
+                    teamLeader: hidden,
+                    qualityAnalyst: hidden,
+                    team: optional,
+                    tenure: hidden,
+                    joiningDate: optional,
                };
           }
-          
-          // Fallback: hide tenure field
+
+          // Assistant Manager (4)
+          if (roleId === 4) {
+               return {
+                    projectManager: optional,
+                    assistantManager: hidden,
+                    teamLeader: hidden,
+                    qualityAnalyst: hidden,
+                    team: required,
+                    tenure: hidden,
+                    joiningDate: optional,
+               };
+          }
+
+          // Assistant Team Leader (7): optional PM and AM (not required)
+          if (roleId === 7) {
+               return {
+                    projectManager: optional,
+                    assistantManager: optional,
+                    teamLeader: hidden,
+                    qualityAnalyst: hidden,
+                    team: required,
+                    tenure: hidden,
+                    joiningDate: optional,
+               };
+          }
+
+          if (roleId === 5) {
+               return {
+                    projectManager: optional,
+                    assistantManager: optional,
+                    teamLeader: optional,
+                    qualityAnalyst: hidden,
+                    team: required,
+                    tenure: required,
+                    joiningDate: required,
+               };
+          }
+
+          if (roleId === 6) {
+               return {
+                    projectManager: optional,
+                    assistantManager: optional,
+                    teamLeader: optional,
+                    qualityAnalyst: required,
+                    team: required,
+                    tenure: required,
+                    joiningDate: required,
+               };
+          }
+
           return {
-               projectManager: { visible: true, required: false },
-               assistantManager: { visible: true, required: true },
-               qualityAnalyst: { visible: true, required: true },
-               tenure: { visible: false, required: false },
-               joiningDate: { visible: true, required: false },
+               projectManager: optional,
+               assistantManager: optional,
+               teamLeader: optional,
+               qualityAnalyst: required,
+               team: required,
+               tenure: hidden,
+               joiningDate: optional,
           };
      };
 
@@ -263,10 +290,10 @@ const AddUserFormModal = ({
 
      const validateJoiningDate = (value) => {
           if (!value || !String(value).trim()) {
-               return "Please enter joining date (dd/mm/yyyy)";
+               return "Please enter Tracker Joining Date";
           }
           if (!joiningDateToIso(value)) {
-               return "Use dd/mm/yyyy";
+               return "Use a valid date (past or future allowed)";
           }
           return "";
      };
@@ -326,6 +353,13 @@ const AddUserFormModal = ({
                }
           }
 
+          // Validate teamLeaders (array - only if visible and required for this role)
+          if (visibility.teamLeader?.visible && visibility.teamLeader.required) {
+               if (!newUser.teamLeaders || newUser.teamLeaders.length === 0) {
+                    errors.teamLeaders = "Please select at least one Assistant Team Leader";
+               }
+          }
+
           // Validate qualityAnalysts (array - only if visible and required for this role)
           if (visibility.qualityAnalyst.visible && visibility.qualityAnalyst.required) {
                if (!newUser.qualityAnalysts || newUser.qualityAnalysts.length === 0) {
@@ -333,9 +367,10 @@ const AddUserFormModal = ({
                }
           }
 
-          // Validate team
-          const teamError = validateDropdown(newUser.team, "Team");
-          if (teamError) errors.team = teamError;
+          if (visibility.team?.visible && visibility.team.required) {
+               const teamError = validateDropdown(newUser.team, "Team");
+               if (teamError) errors.team = teamError;
+          }
 
           // Validate tenure (only if visible and required for this role)
           if (visibility.tenure && visibility.tenure.visible && visibility.tenure.required) {
@@ -355,7 +390,22 @@ const AddUserFormModal = ({
       * Handle field change with live validation
       */
      const handleFieldChange = (fieldName, value, validator) => {
-          setNewUser({ ...newUser, [fieldName]: value });
+          if (fieldName === "role") {
+               const vis = getFieldVisibility(value);
+               const next = { ...newUser, role: value };
+               if (!vis.projectManager.visible) next.projectManagers = [];
+               if (!vis.assistantManager.visible) next.assistantManagers = [];
+               if (!vis.teamLeader?.visible) next.teamLeaders = [];
+               if (!vis.qualityAnalyst.visible) next.qualityAnalysts = [];
+               if (!vis.team?.visible) next.team = "";
+               if (!vis.tenure?.visible) next.tenure = "";
+               if (vis.joiningDate?.visible && !String(next.joining_date || "").trim()) {
+                    next.joining_date = todayISTISO();
+               }
+               setNewUser(next);
+          } else {
+               setNewUser({ ...newUser, [fieldName]: value });
+          }
           
           // Run live validation only if submit was attempted and validator is a function
           if (submitAttempted && typeof validator === "function") {
@@ -702,6 +752,29 @@ const AddUserFormModal = ({
                                    </div>
                               )}
 
+                              {/* Assistant Team Leader Selection - Conditionally visible - MULTI SELECT */}
+                              {fieldVisibility.teamLeader?.visible && (
+                                   <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                             Assistant Team Leader {fieldVisibility.teamLeader.required && <span className="text-red-600">*</span>}
+                                        </label>
+                                        <MultiSelectWithCheckbox
+                                             value={newUser.teamLeaders || []}
+                                             onChange={(val) => {
+                                                  setNewUser({ ...newUser, teamLeaders: val });
+                                                  clearFieldError && clearFieldError("teamLeaders");
+                                             }}
+                                             options={teamLeaders.map(tl => ({ value: String(tl.user_id), label: tl.label }))}
+                                             icon={Users}
+                                             placeholder="Select Assistant Team Leaders"
+                                             disabled={isDropdownLoading}
+                                             error={hasError("teamLeaders")}
+                                             errorMessage={getErrorMessage("teamLeaders")}
+                                             maxDisplayCount={2}
+                                        />
+                                   </div>
+                              )}
+
                               {/* Quality Analyst Selection - Conditionally visible - MULTI SELECT */}
                               {fieldVisibility.qualityAnalyst.visible && (
                                    <div>
@@ -725,10 +798,10 @@ const AddUserFormModal = ({
                                    </div>
                               )}
 
-                              {/* Team Selection */}
+                              {fieldVisibility.team?.visible && (
                               <div>
                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                        Team <span className="text-red-600">*</span>
+                                        Team {fieldVisibility.team.required && <span className="text-red-600">*</span>}
                                    </label>
                                    <SearchableSelect
                                         value={newUser.team ?? ""}
@@ -744,6 +817,7 @@ const AddUserFormModal = ({
                                         errorMessage={getErrorMessage("team")}
                                    />
                               </div>
+                              )}
                               {/* Password Input - Shown in both create and edit mode */}
                               <div>
                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -784,7 +858,7 @@ const AddUserFormModal = ({
                               {fieldVisibility.joiningDate && fieldVisibility.joiningDate.visible && (
                                    <div className="md:col-span-1">
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                             Joining Date {fieldVisibility.joiningDate.required && <span className="text-red-600">*</span>}
+                                             Tracker Joining Date {fieldVisibility.joiningDate.required && <span className="text-red-600">*</span>}
                                         </label>
                                         <SingleDatePicker
                                              value={joiningDateToIso(newUser.joining_date) || newUser.joining_date}
@@ -795,7 +869,11 @@ const AddUserFormModal = ({
                                              )}
                                              placeholder="dd/mm/yyyy"
                                              hasError={hasError("joining_date")}
+                                             allowFuture
                                         />
+                                        <p className="mt-1 text-xs text-slate-500">
+                                             System date for roster / tracker (not org DOJ). Defaults to today; past or future is allowed.
+                                        </p>
                                         {getErrorMessage("joining_date") && (
                                              <p className="mt-1 text-xs text-red-600">{getErrorMessage("joining_date")}</p>
                                         )}

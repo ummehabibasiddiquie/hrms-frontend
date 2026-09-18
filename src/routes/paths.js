@@ -21,6 +21,7 @@ export const ROLE_IDS = {
   ASSISTANT_MANAGER: 4,
   QA_AGENT: 5,
   AGENT: 6,
+  TEAM_LEADER: 7,
 };
 
 /** Default landing page after login (or when access is denied). */
@@ -40,7 +41,10 @@ export const ANALYTICS_TABS = [
   "mgmt_incentives",
   "my_roster",
   "audit_report",
+  "my_hours",
+  "qa_hours",
   "adherence",
+  "kra_report",
 ];
 
 export function isAnalyticsTab(tab) {

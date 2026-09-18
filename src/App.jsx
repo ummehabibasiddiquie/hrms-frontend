@@ -4,6 +4,7 @@ import AppRoutes from './routes/AppRoutes';
 import AgentGoalStatusModal from './components/AgentDashboard/AgentGoalStatusModal';
 import { Toaster } from "react-hot-toast";
 import { BrowserRouter } from 'react-router-dom';
+import ConnectionBanner from './components/common/ConnectionBanner';
 
 const AgentGoalModalHost = () => {
   const { user } = useAuth();
@@ -15,6 +16,7 @@ const App = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <ConnectionBanner />
         <Toaster
           position="top-right"
           toastOptions={{

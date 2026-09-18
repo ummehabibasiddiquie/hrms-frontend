@@ -6,7 +6,8 @@ const ROLE_MAP = {
   3: "PROJECT_MANAGER",
   4: "ASSISTANT_MANAGER",
   5: "QA_AGENT",
-  6: "AGENT"
+  6: "AGENT",
+  7: "TEAM_LEADER"
 };
 import { ViewState } from "../../utils/constants";
 import { ROUTES, dashboardTabUrl } from "../../routes/paths";
@@ -28,7 +29,9 @@ import {
   UserCheck,
   BarChart3,
   CheckCircle2,
-  CalendarDays
+  CalendarDays,
+  Mail,
+  Clock
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import GeminiKeyModal from "../GeminiKeyModal";
@@ -136,6 +139,16 @@ const Header = ({
       setIsMobileMenuOpen(false);
       return;
     }
+    if (view === 'MY_REPORT') {
+      navigate(dashboardTabUrl('my_hours'));
+      setIsMobileMenuOpen(false);
+      return;
+    }
+    if (view === 'REPORT_EMAILS') {
+      navigate(dashboardTabUrl('report_emails'));
+      setIsMobileMenuOpen(false);
+      return;
+    }
     
     if (view === ViewState.ADMIN_PANEL) {
       navigate(dashboardTabUrl('manage'));
@@ -179,7 +192,7 @@ const Header = ({
     const role = (currentUser?.role || currentUser?.role_name || currentUser?.user_role || '').toString().toUpperCase();
     // Always show for admin and super admin (by role_id)
     if (roleId === 1 || roleId === 2) {
-      return [
+      const items = [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
@@ -187,6 +200,10 @@ const Header = ({
         { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
+      if (roleId === 1) {
+        items.push({ view: "REPORT_EMAILS", label: "Report emails", icon: Mail });
+      }
+      return items;
     }
     // For agents (role_id 6 or role includes 'AGENT')
     if (roleId === 6 || role.includes('AGENT')) {
@@ -203,6 +220,7 @@ const Header = ({
         if (roleId === 5) {
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+            { view: "MY_REPORT", label: "My Report", icon: Clock },
             { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
@@ -212,6 +230,7 @@ const Header = ({
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
             { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
             { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
@@ -226,6 +245,14 @@ const Header = ({
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
         }
+        if (roleId === 7) {
+          // Team Leader: no QA/QC report tabs
+          return [
+            { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+            { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
+          ];
+        }
         // All other role_ids (not admin/superadmin)
         return [
           { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
@@ -237,9 +264,18 @@ const Header = ({
     if (role.includes('QA')) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+        { view: "MY_REPORT", label: "My Report", icon: Clock },
         { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+      ];
+    }
+    if (role.includes('TEAM LEADER') || role.includes('TEAM_LEADER') || roleId === 7) {
+      // Team Leader: no QA/QC report tabs
+      return [
+        { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+        { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
     }
     if (role.includes('ASSISTANT') || role.includes('ASST')) {
@@ -256,6 +292,7 @@ const Header = ({
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
         { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
         { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
@@ -278,7 +315,7 @@ const Header = ({
 
     // Check for Analytics/Dashboard
     if (view === ViewState.DASHBOARD || view === 'Analytics') {
-      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report'];
+      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report', 'qa_hours', 'kra_report'];
       return currentPath === '/dashboard' && (!currentTab || analyticsTabs.includes(currentTab));
     }
 
@@ -304,6 +341,14 @@ const Header = ({
 
     if (view === 'MY_ROSTER') {
       return currentPath === '/dashboard' && currentTab === 'my_roster';
+    }
+
+    if (view === 'MY_REPORT') {
+      return currentPath === '/dashboard' && currentTab === 'my_hours';
+    }
+
+    if (view === 'REPORT_EMAILS') {
+      return currentPath === '/dashboard' && currentTab === 'report_emails';
     }
 
     // Check for Manage/Admin Panel

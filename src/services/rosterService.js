@@ -108,12 +108,20 @@ export async function unlockRosterMonth(payload) {
   return rosterPost("/roster/unlock", payload);
 }
 
+export async function lockRosterWeek(payload) {
+  return rosterPost("/roster/week/lock", payload);
+}
+
 export async function unlockRosterWeek(payload) {
   return rosterPost("/roster/week/unlock", payload);
 }
 
 export async function emailRosterWeek(payload) {
   return rosterPost("/roster/week/email", payload);
+}
+
+export async function notifyRosterApproval(payload) {
+  return rosterPost("/roster/notify_approval", payload);
 }
 
 export async function listRosterAudit(payload = {}) {

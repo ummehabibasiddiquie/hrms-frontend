@@ -134,6 +134,14 @@ export default defineConfig(({ mode }) => {
 
           secure: false,
         },
+
+        "/report_email": {
+          target: apiBaseURL,
+
+          changeOrigin: true,
+
+          secure: false,
+        },
       },
       middlewareMode: false,
 

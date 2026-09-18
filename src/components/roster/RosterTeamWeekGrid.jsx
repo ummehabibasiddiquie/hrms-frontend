@@ -10,7 +10,7 @@ const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /**
  * Excel-style team roster: Week tabs × employee rows × day cells.
- * Cells are view-only; roster changes go through Excel Upload.
+ * Managers click a day to edit (leave, week-off, working type). Excel remains for bulk.
  */
 const RosterTeamWeekGrid = ({
   monthYear,
@@ -24,6 +24,9 @@ const RosterTeamWeekGrid = ({
   canUnlockWeeks = false,
   unlockingWeek = "",
   onUnlockWeek,
+  onLockWeek,
+  onEmailWeek,
+  emailingWeek = false,
 }) => {
   const weeks = useMemo(() => getWeeksInMonth(monthYear), [monthYear]);
   const [activeWeek, setActiveWeek] = useState(1);
@@ -115,6 +118,16 @@ const RosterTeamWeekGrid = ({
           {week?.label}
           {activeWeekLocked ? " · Locked" : ""}
         </span>
+        {canUnlockWeeks && activeWeekLocked && typeof onEmailWeek === "function" && (
+          <button
+            type="button"
+            disabled={emailingWeek || Boolean(unlockingWeek)}
+            onClick={() => onEmailWeek(activeWeek)}
+            className="self-center px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {emailingWeek ? "Emailing…" : `Email Week ${activeWeek}`}
+          </button>
+        )}
         {canUnlockWeeks && activeWeekLocked && typeof onUnlockWeek === "function" && (
           <button
             type="button"
@@ -125,6 +138,18 @@ const RosterTeamWeekGrid = ({
             {unlockingWeek === `unlock-week-${activeWeek}`
               ? "Unlocking…"
               : `Unlock Week ${activeWeek}`}
+          </button>
+        )}
+        {canUnlockWeeks && !activeWeekLocked && !monthCalendarLocked && typeof onLockWeek === "function" && (
+          <button
+            type="button"
+            disabled={Boolean(unlockingWeek)}
+            onClick={() => onLockWeek(activeWeek)}
+            className="self-center px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {unlockingWeek === `lock-week-${activeWeek}`
+              ? "Locking…"
+              : `Lock Week ${activeWeek}`}
           </button>
         )}
       </div>

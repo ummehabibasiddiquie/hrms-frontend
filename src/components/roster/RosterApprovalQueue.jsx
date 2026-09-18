@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Mail,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import {
@@ -18,8 +19,9 @@ import {
   approveChangeRequestsBulk,
   listChangeRequests,
   rejectChangeRequest,
+  notifyRosterApproval,
 } from "../../services/rosterService";
-import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { showApiError } from "../../utils/errorMessages";
 import {
   statusBadgeClass,
   getCurrentMonthYear,
@@ -31,9 +33,25 @@ import {
 import LoadingSpinner from "../common/LoadingSpinner";
 import { MonthYearPicker } from "../common/CustomCalendar";
 import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
+import { useRosterRoles } from "../../hooks/useRosterRoles";
 
 const PAGE_SIZE = 8;
 const BULK_APPROVE_CHUNK = 10;
+
+function notifyWeeklyRosterEmail(mailRows) {
+  const rows = mailRows || [];
+  const mailed = rows.filter((e) => e.sent).length;
+  if (mailed) {
+    toast.success(`Weekly roster emailed for ${mailed} week(s)`);
+    return;
+  }
+  if (rows.some((e) => e.deferred)) {
+    toast("Weekly roster email waits until pending requests for that week are reviewed");
+    return;
+  }
+  const reason = rows.find((e) => e.reason)?.reason;
+  if (reason) toast.error(reason);
+}
 
 const STATUS_TABS = [
   { id: "Pending", label: "Pending" },
@@ -90,6 +108,8 @@ const RosterApprovalQueue = ({
   const [modal, setModal] = useState(null);
   const [detailRequest, setDetailRequest] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [notifying, setNotifying] = useState(false);
+  const { isSuperAdmin } = useRosterRoles();
 
   const loadRequests = useCallback(async () => {
     try {
@@ -101,7 +121,7 @@ const RosterApprovalQueue = ({
       setPage(1);
       setSelectedIds(new Set());
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
       setRequests([]);
     } finally {
       setLoading(false);
@@ -208,19 +228,14 @@ const RosterApprovalQueue = ({
             ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
           });
           toast.success("Request approved");
-          const mailRows = res?.data?.weekly_roster_emails || [];
-          const mailed = mailRows.filter((e) => e.sent).length;
-          if (mailed) toast.success(`Weekly roster emailed for ${mailed} week(s)`);
-          else {
-            const reason = mailRows.find((e) => e.reason)?.reason;
-            toast.error(reason || "Approved, but weekly roster email was not sent");
-          }
+          notifyWeeklyRosterEmail(res?.data?.weekly_roster_emails);
         } else {
-          await rejectChangeRequest({
+          const res = await rejectChangeRequest({
             request_id: request.request_id,
             reviewer_comment: comment.trim(),
           });
           toast.success("Request rejected");
+          notifyWeeklyRosterEmail(res?.data?.weekly_roster_emails);
         }
       } else if (type === "approve_selected") {
         setBulkLoading(true);
@@ -231,6 +246,7 @@ const RosterApprovalQueue = ({
         let approved = 0;
         let failed = [];
         let mailedWeeks = 0;
+        let deferredMail = false;
         for (let i = 0; i < ids.length; i += BULK_APPROVE_CHUNK) {
           const chunk = ids.slice(i, i + BULK_APPROVE_CHUNK);
           const res = await approveChangeRequestsBulk({
@@ -239,7 +255,9 @@ const RosterApprovalQueue = ({
           });
           approved += res.data?.approved ?? 0;
           failed = failed.concat(res.data?.failed || []);
-          mailedWeeks += (res.data?.weekly_roster_emails || []).filter((e) => e.sent).length;
+          const mailRows = res.data?.weekly_roster_emails || [];
+          mailedWeeks += mailRows.filter((e) => e.sent).length;
+          if (mailRows.some((e) => e.deferred)) deferredMail = true;
           setBulkProgress({
             done: Math.min(i + chunk.length, total),
             total,
@@ -249,11 +267,17 @@ const RosterApprovalQueue = ({
 
         if (failed.length) {
           toast.error(`Approved ${approved}; ${failed.length} failed`);
+          const reason = failed.find((f) => f?.reason)?.reason;
+          if (reason) toast.error(reason);
         } else {
           toast.success(`Approved ${approved} request(s)`);
         }
-        if (mailedWeeks) toast.success(`Weekly roster emailed for ${mailedWeeks} week(s)`);
-        else toast.error("Approved, but weekly roster email was not sent");
+        if (approved > 0) {
+          if (mailedWeeks) toast.success(`Weekly roster emailed for ${mailedWeeks} week(s)`);
+          else if (deferredMail) {
+            toast("Weekly roster email waits until pending requests for that week are reviewed");
+          }
+        }
         setSelectedIds(new Set());
       } else if (type === "reject_selected") {
         setBulkLoading(true);
@@ -263,12 +287,14 @@ const RosterApprovalQueue = ({
 
         let ok = 0;
         let fail = 0;
+        let lastMailRows = [];
         for (let i = 0; i < ids.length; i += 1) {
           try {
-            await rejectChangeRequest({
+            const res = await rejectChangeRequest({
               request_id: ids[i],
               reviewer_comment: comment.trim(),
             });
+            lastMailRows = res?.data?.weekly_roster_emails || lastMailRows;
             ok += 1;
           } catch {
             fail += 1;
@@ -277,6 +303,7 @@ const RosterApprovalQueue = ({
         }
         if (fail) toast.error(`Rejected ${ok}; ${fail} failed`);
         else toast.success(`Rejected ${ok} request(s)`);
+        notifyWeeklyRosterEmail(lastMailRows);
         setSelectedIds(new Set());
       }
 
@@ -286,7 +313,7 @@ const RosterApprovalQueue = ({
       await loadRequests();
       onActionComplete?.();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setActionId(null);
       setBulkLoading(false);
@@ -299,7 +326,24 @@ const RosterApprovalQueue = ({
     : [];
 
   const showBulkBar = statusFilter === "Pending" || statusFilter === "";
-  const busy = !!actionId || bulkLoading;
+  const busy = !!actionId || bulkLoading || notifying;
+
+  const handleNotifyApprovers = async () => {
+    if (!isSuperAdmin || notifying) return;
+    if (!counts.pending) {
+      toast.error("No pending submitted requests to email");
+      return;
+    }
+    try {
+      setNotifying(true);
+      const res = await notifyRosterApproval({ month_year: monthYear });
+      toast.success(res.message || "Approval email sent to Admin and Super Admin");
+    } catch (err) {
+      showApiError(err);
+    } finally {
+      setNotifying(false);
+    }
+  };
 
   const modalTitle = (() => {
     if (!modal) return "";
@@ -348,6 +392,17 @@ const RosterApprovalQueue = ({
             />
           </div>
           <p className="text-xs text-slate-400 lg:pb-2 shrink-0">{formatMonthYearLabel(monthYear)}</p>
+          {isSuperAdmin && counts.pending > 0 && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleNotifyApprovers}
+              className="lg:mb-0.5 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-amber-700 text-white hover:bg-amber-800 disabled:opacity-50"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              {notifying ? "Sending…" : "Email approvers (pending)"}
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-1.5">

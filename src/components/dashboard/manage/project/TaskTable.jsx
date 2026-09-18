@@ -3,7 +3,8 @@ import { fetchProjectTasks, updateTask } from '../../../../services/projectServi
 import { Edit, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import DeleteTaskModal from './DeleteTaskModal';
-import { getFriendlyErrorMessage } from '../../../../utils/errorMessages';
+import { showApiError } from '../../../../utils/errorMessages';
+import { formatQaTargetSummary } from './qaTargetFields';
 
 const ROW_HEIGHT = 40;
 const VISIBLE_ROWS = 12;
@@ -51,7 +52,7 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
       toast.success(next === 1 ? 'Task activated' : 'Task deactivated');
       onTaskUpdated?.(project.id, taskId);
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err) || 'Failed to update task status');
+      showApiError(err, 'Failed to update task status');
     } finally {
       setTogglingId(null);
     }
@@ -90,18 +91,20 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                 }
           }
         >
-          <table className="w-full text-sm table-fixed">
+          <table className="w-full text-sm">
             <colgroup>
-              <col style={{ width: '24%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '32%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '16%' }} />
+              <col style={{ width: '28%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '22%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '12%' }} />
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className={compact ? 'bg-slate-700 text-white' : 'bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white'}>
                 <th className={`text-left font-semibold uppercase tracking-wide ${compact ? 'py-2 px-3 text-xs' : 'py-4 px-4 text-sm font-bold'}`}>Task Name</th>
                 <th className={`text-left font-semibold uppercase tracking-wide ${compact ? 'py-2 px-3 text-xs' : 'py-4 px-4 text-sm font-bold'}`}>Target / Hr</th>
+                <th className={`text-left font-semibold uppercase tracking-wide ${compact ? 'py-2 px-3 text-xs' : 'py-4 px-4 text-sm font-bold'}`}>QC Target</th>
                 <th className={`text-left font-semibold uppercase tracking-wide ${compact ? 'py-2 px-3 text-xs' : 'py-4 px-4 text-sm font-bold'}`}>Description</th>
                 <th className={`text-center font-semibold uppercase tracking-wide ${compact ? 'py-2 px-3 text-xs' : 'py-4 px-4 text-sm font-bold'}`}>Status</th>
                 <th className={`text-center font-semibold uppercase tracking-wide ${compact ? 'py-2 px-3 text-xs' : 'py-4 px-4 text-sm font-bold'}`}>Actions</th>
@@ -110,7 +113,7 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
             <tbody ref={tableBodyRef} className="bg-white divide-y divide-slate-200">
               {tasks.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className={compact ? 'px-4 py-6 text-center text-sm text-slate-500' : 'px-6 py-12 text-center'}>
+                  <td colSpan="6" className={compact ? 'px-4 py-6 text-center text-sm text-slate-500' : 'px-6 py-12 text-center'}>
                     {compact ? (
                       'No tasks — use + to add one'
                     ) : (
@@ -132,21 +135,32 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                   const taskName = t.name || t.task_name || '';
                   const taskTarget = t.targetPerHour || t.task_target || '';
                   const taskDescription = t.description || t.task_description || '-';
+                  const qaTarget = formatQaTargetSummary(t);
                   const taskId = t.id || t.task_id;
                   const isActive = Number(t.is_active ?? 1) === 1;
                   const cellPad = compact ? 'py-2 px-3' : 'py-4 px-4';
+                  const qaTone =
+                    qaTarget.mode === 'object_range'
+                      ? compact
+                        ? 'bg-violet-100 text-violet-800'
+                        : 'bg-violet-50 text-violet-800 border border-violet-200'
+                      : qaTarget.mode === 'file_minutes' || qaTarget.mode === 'record_minutes'
+                        ? compact
+                          ? 'bg-sky-100 text-sky-800'
+                          : 'bg-sky-50 text-sky-800 border border-sky-200'
+                        : '';
                   return (
                     <tr key={key} className={`hover:bg-blue-50 transition-colors duration-150 ${!isActive ? 'opacity-75' : ''}`}>
-                      <td className={`${cellPad} align-middle`}>
-                        <div className="flex items-center gap-2">
+                      <td className={`${cellPad} align-top`}>
+                        <div className="flex items-start gap-2 min-w-0">
                           {!compact && (
-                          <div className="bg-blue-100 p-1.5 rounded-lg flex-shrink-0">
+                          <div className="bg-blue-100 p-1.5 rounded-lg flex-shrink-0 mt-0.5">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-4 h-4 text-blue-700">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                             </svg>
                           </div>
                           )}
-                          <span className="text-slate-800 font-medium truncate">{taskName}</span>
+                          <span className="text-slate-800 font-medium whitespace-normal break-words">{taskName}</span>
                         </div>
                       </td>
                       <td className={`${cellPad} align-middle`}>
@@ -157,6 +171,23 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                         }`}>
                           {taskTarget}
                         </span>
+                      </td>
+                      <td className={`${cellPad} align-middle`}>
+                        {qaTarget.mode !== 'none' && qaTarget.label ? (
+                          <div
+                            className={`inline-flex max-w-full flex-col items-start gap-0.5 rounded-md px-2 py-1 text-left ${
+                              compact ? 'text-[11px]' : 'text-xs'
+                            } ${qaTone}`}
+                            title={qaTarget.detail || qaTarget.label}
+                          >
+                            <span className="font-semibold whitespace-normal break-words">{qaTarget.label}</span>
+                            {qaTarget.detail ? (
+                              <span className="font-normal opacity-90 whitespace-normal break-words line-clamp-2">
+                                {qaTarget.detail}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </td>
                       <td className={`${cellPad} text-slate-600 align-middle`}>
                         <span className="line-clamp-2">{taskDescription}</span>

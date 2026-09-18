@@ -56,7 +56,8 @@ export const DateRangePicker = ({
   fieldWidth = null,
   noWrapper = false, // New prop to remove the card wrapper
   disabledMonths = null, // New prop to restrict calendar to specific months
-  showOnlySelectedMonth = false // New prop to show only the selected month without dropdown
+  showOnlySelectedMonth = false, // New prop to show only the selected month without dropdown
+  minDate = null, // yyyy-mm-dd — dates before this cannot be selected
 }) => {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
@@ -142,8 +143,15 @@ export const DateRangePicker = ({
     if (day > today) {
       return true;
     }
+    const min = parseDate(minDate);
+    if (min) {
+      min.setHours(0, 0, 0, 0);
+      if (day < min) return true;
+    }
     return !isDateInAllowedMonth(date);
   };
+  const minDateObj = parseDate(minDate);
+  const calendarFromYear = minDateObj ? minDateObj.getFullYear() : 2020;
 
   // Content without wrapper
   const content = (
@@ -202,7 +210,7 @@ export const DateRangePicker = ({
                 disabled={isDateDisabled}
                 initialFocus
                 captionLayout={showOnlySelectedMonth ? "label" : "dropdown"}
-                fromYear={showOnlySelectedMonth ? undefined : 2020}
+                fromYear={showOnlySelectedMonth ? undefined : calendarFromYear}
                 toYear={showOnlySelectedMonth ? undefined : new Date().getFullYear()}
                 month={showOnlySelectedMonth && disabledMonths && disabledMonths[0] ? 
                   (() => {
@@ -265,7 +273,7 @@ export const DateRangePicker = ({
                 disabled={isDateDisabled}
                 initialFocus
                 captionLayout={showOnlySelectedMonth ? "label" : "dropdown"}
-                fromYear={showOnlySelectedMonth ? undefined : 2020}
+                fromYear={showOnlySelectedMonth ? undefined : calendarFromYear}
                 toYear={showOnlySelectedMonth ? undefined : new Date().getFullYear()}
                 month={showOnlySelectedMonth && disabledMonths && disabledMonths[0] ? 
                   (() => {
@@ -334,6 +342,7 @@ export const SingleDatePicker = ({
   hasError = false,
   allowFuture = false,
   className = "",
+  minDate = null,
 }) => {
   const [open, setOpen] = useState(false);
 
@@ -368,12 +377,18 @@ export const SingleDatePicker = ({
   };
 
   const isDateDisabled = (date) => {
+    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const min = parseDate(minDate);
+    if (min) {
+      min.setHours(0, 0, 0, 0);
+      if (day < min) return true;
+    }
     if (allowFuture) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     return day > today;
   };
+  const minDateObj = parseDate(minDate);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -407,7 +422,7 @@ export const SingleDatePicker = ({
           disabled={isDateDisabled}
           initialFocus
           captionLayout="dropdown"
-          fromYear={1990}
+          fromYear={minDateObj ? minDateObj.getFullYear() : 1990}
           toYear={new Date().getFullYear() + (allowFuture ? 1 : 0)}
           className="rounded-md bg-white"
         />
@@ -428,12 +443,27 @@ export const MonthYearPicker = ({
   compact = false,
   /** When true, months/years after the current calendar month can be selected (needed for roster planning). */
   allowFutureMonths = false,
+  /** YYYY-MM or SEP2026 — months before this cannot be selected. */
+  minMonthYear = null,
 }) => {
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const now = new Date();
   const currentYear = now.getFullYear();
   const maxYear = allowFutureMonths ? currentYear + 2 : currentYear;
+  const minMonth = (() => {
+    if (!minMonthYear) return null;
+    const raw = String(minMonthYear).trim();
+    const iso = raw.match(/^(\d{4})-(\d{2})$/);
+    if (iso) return { year: Number(iso[1]), monthIndex: Number(iso[2]) - 1 };
+    const named = raw.toUpperCase().match(/^([A-Z]{3})(\d{4})$/);
+    if (!named) return null;
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const monthIndex = months.indexOf(named[1]);
+    if (monthIndex < 0) return null;
+    return { year: Number(named[2]), monthIndex };
+  })();
+  const minYear = minMonth ? minMonth.year : currentYear - 10;
 
   useEffect(() => {
     if (!selectedMonthYear || selectedMonthYear === 'all') return;
@@ -516,7 +546,13 @@ export const MonthYearPicker = ({
                 <button
                   type="button"
                   onClick={() => setCalendarYear(calendarYear - 1)}
-                  className="p-2 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0"
+                  disabled={calendarYear <= minYear}
+                  className={cn(
+                    "p-2 rounded-lg transition-colors flex-shrink-0",
+                    calendarYear <= minYear
+                      ? "opacity-50 cursor-not-allowed bg-slate-100"
+                      : "hover:bg-blue-50"
+                  )}
                   title="Previous Year"
                 >
                   <ChevronLeft className="w-5 h-5 text-blue-600" />
@@ -528,7 +564,7 @@ export const MonthYearPicker = ({
                   onChange={(e) => setCalendarYear(parseInt(e.target.value))}
                   className="flex-1 px-3 py-1.5 text-base font-bold text-slate-800 bg-slate-50 border-2 border-blue-200 rounded-lg hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors cursor-pointer text-center"
                 >
-                  {Array.from({ length: maxYear - (currentYear - 10) + 1 }, (_, i) => currentYear - 10 + i).map((y) => {
+                  {Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i).map((y) => {
                     const isYearDisabled = !allowFutureMonths && y > currentYear;
                     return (
                       <option key={y} value={y} disabled={isYearDisabled}>
@@ -568,7 +604,12 @@ export const MonthYearPicker = ({
                     calendarYear > now.getFullYear() ||
                     (calendarYear === now.getFullYear() && index > now.getMonth())
                   );
-                  const canSelect = isAvailable && !isFutureMonth;
+                  const isBeforeMinMonth = Boolean(
+                    minMonth &&
+                    (calendarYear < minMonth.year ||
+                      (calendarYear === minMonth.year && index < minMonth.monthIndex))
+                  );
+                  const canSelect = isAvailable && !isFutureMonth && !isBeforeMinMonth;
                   
                   return (
                     <button
@@ -578,7 +619,7 @@ export const MonthYearPicker = ({
                       disabled={!canSelect}
                       className={cn(
                         "px-3 py-2 rounded-lg text-sm font-medium transition-all",
-                        isFutureMonth
+                        isFutureMonth || isBeforeMinMonth
                           ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
                           : isSelected 
                             ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md' 

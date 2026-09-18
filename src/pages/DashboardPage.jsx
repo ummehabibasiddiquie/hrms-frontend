@@ -20,6 +20,7 @@ import { useDeviceInfo } from '../hooks/useDeviceInfo';
 import { useUserDropdowns } from '../hooks/useUserDropdowns';
 import BillableReportCommon from '../components/common/BillableReport';
 import AgentBillableReport from '../components/AgentDashboard/AgentBillableReport';
+import KraReport from '../components/dashboard/KraReport';
 
 // Import the split admin components
 import UsersManagement from '../components/dashboard/manage/user/UsersManagement';
@@ -30,11 +31,13 @@ import UserTrackingView from '../components/common/UserTrackingView';
 import { fetchUsersList } from '../services/authService';
 import { fetchProjectsList } from '../services/projectService';
 import { toast } from 'react-hot-toast';
-import { getFriendlyErrorMessage } from '../utils/errorMessages';
+import { getFriendlyErrorMessage, showApiError } from '../utils/errorMessages';
 import ErrorMessage from '../components/common/ErrorMessage';
 import AgentTabsNavigation from '../components/AgentDashboard/AgentTabsNavigation';
 import RosterManagement from '../components/roster/RosterManagement';
+import ReportEmails from '../components/dashboard/manage/ReportEmails';
 import MyRoster from '../components/roster/MyRoster';
+import QAHoursTracker from '../components/QAAgentDashboard/QAHoursTracker';
 import QATabsNavigation from '../components/QAAgentDashboard/QATabsNavigation';
 import SubTabsBar from '../components/common/SubTabsBar';
 import { dashboardTabUrl, isAnalyticsTab } from '../routes/paths';
@@ -70,31 +73,33 @@ const DashboardPage = ({
   const [comparisonMode, setComparisonMode] = useState('previous_period');
   const role = currentUser?.role_name || '';
   const userRole = currentUser?.user_role || '';
-  const designation = currentUser?.designation || currentUser?.user_designation || '';
   const roleId = Number(currentUser?.role_id ?? currentUser?.user_role_id ?? 0);
-  const designationId = Number(currentUser?.designation_id ?? currentUser?.user_designation_id ?? 0);
 
   const roleText = String(role).trim().toLowerCase();
   const userRoleText = String(userRole).trim().toLowerCase();
-  const designationText = String(designation).trim().toLowerCase();
 
+  // Role-based only — designation is never used for access
   const isSuperAdmin =
     roleId === 1 ||
     roleText.includes('super') ||
-    userRoleText.includes('super') ||
-    designationText.includes('super');
+    userRoleText.includes('super');
 
   const isAdmin =
     !isSuperAdmin &&
     (roleId === 2 ||
-      roleText.includes('admin') ||
-      userRoleText === 'admin' ||
-      designationText.includes('admin'));
-  const isAgent = roleId === 6 || String(role).toLowerCase() === 'agent' || String(userRole).toUpperCase() === 'AGENT' || String(designation).toLowerCase() === 'agent';
-  const isQA = roleId === 5 || String(currentUser?.user_designation).toLowerCase() === 'qa' || String(designation).toLowerCase() === 'qa' || String(role).toLowerCase().includes('qa');
-  const isAssistantManager = roleId === 4 || String(designation).toLowerCase() === 'assistant manager' || String(role).toLowerCase().includes('assistant');
-  const isProjectManager = roleId === 3 || String(designation).toLowerCase() === 'project manager' || String(role).toLowerCase().includes('project manager');
-  const canViewTrackerReport = isQA || isAssistantManager || isProjectManager;
+      roleText === 'admin' ||
+      userRoleText === 'admin');
+  const isAgent = roleId === 6 || roleText === 'agent' || userRoleText === 'agent';
+  const isQA = roleId === 5 || roleText === 'qa' || roleText.includes('qa');
+  const isTeamLeader = roleId === 7 || roleText.includes('team leader');
+  const isAssistantManager =
+    !isTeamLeader &&
+    (roleId === 4 ||
+      roleText === 'assistant manager' ||
+      (roleText.includes('assistant') && !roleText.includes('team leader')));
+  const canViewAsAm = isAssistantManager || isTeamLeader;
+  const isProjectManager = roleId === 3 || roleText.includes('project manager');
+  const canViewTrackerReport = isQA || canViewAsAm || isProjectManager;
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
   const [adminRequests, setAdminRequests] = useState([]);
   const [managedUsers, setManagedUsers] = useState([]);
@@ -103,7 +108,8 @@ const DashboardPage = ({
   const [loadingManagedProjects, setLoadingManagedProjects] = useState(false);
   const [adminActiveTab, setAdminActiveTab] = useState(() => searchParams.get('adminTab') || 'users');
   const [error, setError] = useState(null);
-  const canAccessRoster = isSuperAdmin || isAdmin || isProjectManager || isAssistantManager;
+  const canAccessRoster = isSuperAdmin || isAdmin || isProjectManager || isAssistantManager || isTeamLeader;
+  const canManageReportEmails = isSuperAdmin;
   const canAccessManage = canManageUsers || canManageProjects || isSuperAdmin || canAccessRoster;
   const canViewIncentivesTab = isAdmin || userRole === 'FINANCE_HR' || userRole === 'PROJECT_MANAGER' || isSuperAdmin;
   const canViewAdherence = isAdmin || userRole === 'PROJECT_MANAGER' || isQA || isSuperAdmin;
@@ -134,15 +140,15 @@ const DashboardPage = ({
   useEffect(() => {
     if (activeTab !== 'manage') return;
     const visibleTabs = [
-      ...(canManageUsers || isSuperAdmin || isAdmin ? ['users'] : []),
+      ...(canManageUsers || isSuperAdmin || isAdmin || isProjectManager ? ['users'] : []),
       ...(isAssistantManager || canManageProjects ? ['projects', 'afd'] : []),
-      ...(isSuperAdmin || isAdmin || isAssistantManager ? ['category', 'permissions'] : []),
+      ...(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager ? ['category', 'permissions'] : []),
       ...(canAccessRoster ? ['roster'] : []),
     ];
     if (!visibleTabs.includes(adminActiveTab) && visibleTabs.length > 0) {
       setManageSubTab(visibleTabs[0]);
     }
-  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, canManageProjects, canAccessRoster, setManageSubTab]);
+  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, canManageProjects, canAccessRoster, canManageReportEmails, setManageSubTab]);
 
   const setDashboardTab = useCallback((tab) => {
     setActiveTab(tab);
@@ -207,11 +213,10 @@ const DashboardPage = ({
         console.log('[AssistantManager] Formatted projects:', formatted);
         setManagedProjects(formatted);
       } else {
-        setError(getFriendlyErrorMessage(res.message || 'Failed to load projects'));
-        console.error('[AssistantManager] Error loading projects:', res.message || res);
+        toast.error(getFriendlyErrorMessage(res.message || 'Failed to load projects'));
       }
     } catch (err) {
-      setError(getFriendlyErrorMessage(err));
+      showApiError(err);
       console.error('[AssistantManager] Exception loading projects:', err);
     } finally {
       setLoadingManagedProjects(false);
@@ -286,10 +291,10 @@ const DashboardPage = ({
         });
         setManagedUsers(formatted);
       } else {
-        setError(getFriendlyErrorMessage(res.message || 'Failed to load users'));
+        toast.error(getFriendlyErrorMessage(res.message || 'Failed to load users'));
       }
     } catch (err) {
-      setError(getFriendlyErrorMessage(err));
+      showApiError(err);
     } finally {
       setLoadingManagedUsers(false);
     }
@@ -319,9 +324,10 @@ const DashboardPage = ({
   if (error) {
     return <ErrorMessage message={error} />;
   }
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || isAssistantManager) && activeTab === 'tracker_report') {
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || canViewAsAm) && activeTab === 'tracker_report') {
     return <QATrackerReport />;
   }
+  // Team Leaders: no Agent Files & QC Report
   if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || isAssistantManager) && activeTab === 'agent_file_report') {
     return <QAAgentList />;
   }
@@ -375,19 +381,20 @@ const DashboardPage = ({
         const emptyHourlyChartData = [];
         if (isAdmin || isSuperAdmin || isProjectManager) {
           return <AdminDashboard initialTab="overview" />;
-        } else if (isAssistantManager) {
+        } else if (canViewAsAm) {
           return <AssistantManagerDashboard />;
         } else if (isQA) {
-          // my_roster has a dedicated block below with MyRoster
-          if (activeTab === 'my_roster') return null;
+          // my_roster / my_hours have dedicated blocks below (main menu, not Analytics)
+          if (activeTab === 'my_roster' || activeTab === 'my_hours') return null;
           return <QAAgentDashboard embedded={true} />;
         } else if (isAgent) {
-          if (activeTab === 'billable_report') {
+          if (activeTab === 'billable_report' || activeTab === 'kra_report') {
             return (
               <div className="max-w-7xl mx-auto mt-2">
                 <AgentTabsNavigation activeTab={activeTab} setActiveTab={setDashboardTab} />
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-4">
-                  <AgentBillableReport hideTabBar />
+                  {activeTab === 'billable_report' && <AgentBillableReport hideTabBar />}
+                  {activeTab === 'kra_report' && <KraReport />}
                 </div>
               </div>
             );
@@ -423,15 +430,15 @@ const DashboardPage = ({
 
       {/* User Monthly Report — handled by role dashboards via ?tab=user_monthly_report */}
 
-      {/* Agent's Files & QC Report tab for Assistant Manager and QA */}
+      {/* Agent's Files & QC Report tab for Assistant Manager and QA (not Team Leader) */}
       {activeTab === 'agent_file_report' && (isAssistantManager || isQA) && (
         <div className="max-w-7xl mx-auto mt-6">
           <QAAgentList />
         </div>
       )}
 
-      {/* Tracker Report tab for Assistant Manager and QA */}
-      {activeTab === 'tracker_report' && (isAssistantManager || isQA) && (
+      {/* Tracker Report tab for Assistant Manager, Team Leader and QA */}
+      {activeTab === 'tracker_report' && (canViewAsAm || isQA) && (
         <div className="max-w-7xl mx-auto mt-6">
           <QATrackerReport />
         </div>
@@ -463,7 +470,7 @@ const DashboardPage = ({
                 {
                   id: 'users',
                   label: 'User Management',
-                  hidden: !(canManageUsers || isSuperAdmin || isAdmin),
+                  hidden: !(canManageUsers || isSuperAdmin || isAdmin || isProjectManager),
                 },
                 {
                   id: 'projects',
@@ -478,12 +485,12 @@ const DashboardPage = ({
                 {
                   id: 'category',
                   label: 'Project Category',
-                  hidden: !(isSuperAdmin || isAdmin || isAssistantManager),
+                  hidden: !(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager),
                 },
                 {
                   id: 'permissions',
                   label: 'User Permission',
-                  hidden: !(isSuperAdmin || isAdmin || isAssistantManager),
+                  hidden: !(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager),
                 },
                 {
                   id: 'roster',
@@ -589,9 +596,21 @@ const DashboardPage = ({
       )}
 
       {/* My Roster — Agent & QA read-only (standalone, no analytics sub-tabs) */}
+      {activeTab === 'report_emails' && canManageReportEmails && (
+        <div className="max-w-7xl mx-auto mt-2">
+          <ReportEmails />
+        </div>
+      )}
+
       {activeTab === 'my_roster' && (isAgent || isQA) && (
         <div className="max-w-7xl mx-auto mt-2">
           <MyRoster />
+        </div>
+      )}
+
+      {activeTab === 'my_hours' && isQA && (
+        <div className="max-w-7xl mx-auto mt-2">
+          <QAHoursTracker mode="self" />
         </div>
       )}
 
