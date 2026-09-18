@@ -8,6 +8,7 @@ import {
   FileCheck2,
   Percent,
   Funnel,
+  Clock,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { MonthYearPicker, getCurrentYyyyMm, yyyyMmToMonthYear } from "../common/CustomCalendar";
@@ -268,7 +269,7 @@ export default function KraReport() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
             <ScoreCard
               title="Productivity"
               weight="33%"
@@ -298,10 +299,17 @@ export default function KraReport() {
               icon={FileCheck2}
             />
             <ScoreCard
+              title="Timeliness"
+              weight="10%"
+              value={scores.timeliness}
+              hint="Fill in Excel (KRA Score D13)"
+              icon={Clock}
+            />
+            <ScoreCard
               title="KRA"
-              weight={`${report.totals?.applicable_weight || 90}%`}
+              weight={`${report.totals?.applicable_weight || 100}%`}
               value={report.totals?.kra_percent}
-              hint="Earned / applicable (points 1–4)"
+              hint={`Earned ${formatScore(report.totals?.earned)} / ${report.totals?.applicable_weight || 100}`}
               icon={Percent}
               accent
             />

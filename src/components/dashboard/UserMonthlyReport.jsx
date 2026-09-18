@@ -9,7 +9,7 @@ import { exportToCSV } from '../../utils/csvExport';
 import { MonthYearPicker } from '../common/CustomCalendar';
 import SearchableSelect from '../common/SearchableSelect';
 import DeleteConfirmationModal from '../common/DeleteConfirmationModal';
-import { getCurrentMonthYear, getDefaultRecentMonthYears } from '../../utils/rosterUtils';
+import { getCurrentMonthYear, getDefaultRecentMonthYears, parseMonthYear } from '../../utils/rosterUtils';
 import { getFriendlyErrorMessage, showApiError } from '../../utils/errorMessages';
 
 const sortTeamWise = (a, b) => {
@@ -508,17 +508,31 @@ const UserMonthlyReport = () => {
     return <LoadingSpinner />;
   }
 
-  // Build table rows: tracker data + empty rows for users missing a record in each visible month
+  // Build table rows: tracker data + empty rows for users missing a record.
+  // Past months: only users who already have goal data (no placeholders for new joiners).
+  // Current / future months: placeholders so managers can add goals for active agents.
   const getTableData = () => {
     const defaultMonths = getDefaultRecentMonthYears(reportData.map((r) => r.month_year));
     const visibleMonths = selectedMonthFilter !== 'all'
       ? [selectedMonthFilter]
       : defaultMonths;
 
+    const current = parseMonthYear(getCurrentMonthYear());
+    const isPastMonthKey = (monthKey) => {
+      const parsed = parseMonthYear(monthKey);
+      if (!parsed || !current) return false;
+      return (
+        parsed.year < current.year ||
+        (parsed.year === current.year && parsed.month < current.month)
+      );
+    };
+
     const allData = reportData.filter((r) => visibleMonths.includes(r.month_year));
     const monthsNeedingPlaceholders = new Set(visibleMonths);
 
     monthsNeedingPlaceholders.forEach((monthKey) => {
+      if (isPastMonthKey(monthKey)) return;
+
       const monthUserIds = new Set(
         reportData.filter((r) => r.month_year === monthKey).map((r) => r.user_id)
       );
