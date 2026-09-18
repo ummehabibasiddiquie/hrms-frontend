@@ -44,6 +44,7 @@ export const ANALYTICS_TABS = [
   "my_hours",
   "qa_hours",
   "adherence",
+  "kra_report",
 ];
 
 export function isAnalyticsTab(tab) {

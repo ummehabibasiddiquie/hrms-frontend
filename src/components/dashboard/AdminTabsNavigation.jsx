@@ -1,12 +1,14 @@
 import React from 'react';
 import UserMonthlyReport from './UserMonthlyReport';
 import ProjectMonthlyReport from './ProjectMonthlyReport';
+import KraReport from './KraReport';
 import {
   LayoutGrid,
   Briefcase,
   Users,
   FolderKanban,
-  Clock
+  Clock,
+  ClipboardList
 } from 'lucide-react';
 
 const AdminTabsNavigation = ({ activeTab, setActiveTab, compact = false }) => {
@@ -16,6 +18,7 @@ const AdminTabsNavigation = ({ activeTab, setActiveTab, compact = false }) => {
     { id: 'qa_hours', label: 'QA Report', icon: Clock },
     { id: 'user_monthly_report', label: 'User Monthly Report', icon: Users },
     { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
+    { id: 'kra_report', label: 'KRA', icon: ClipboardList },
   
   ];
 
@@ -56,18 +59,18 @@ const AdminTabsNavigation = ({ activeTab, setActiveTab, compact = false }) => {
       {/* Gap between cards */}
       {activeTab === 'user_monthly_report' && <div className="h-4" />}
       {activeTab === 'project_monthly_report' && <div className="h-4" />}
-      {/* Filter and Table Card for User Monthly Report */}
+      {activeTab === 'kra_report' && <div className="h-4" />}
       {activeTab === 'user_monthly_report' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <UserMonthlyReport />
         </div>
       )}
-      {/* Project Monthly Report Tab */}
       {activeTab === 'project_monthly_report' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <ProjectMonthlyReport />
         </div>
       )}
+      {activeTab === 'kra_report' && <KraReport />}
     </div>
   );
 };

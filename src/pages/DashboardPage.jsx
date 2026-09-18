@@ -20,6 +20,7 @@ import { useDeviceInfo } from '../hooks/useDeviceInfo';
 import { useUserDropdowns } from '../hooks/useUserDropdowns';
 import BillableReportCommon from '../components/common/BillableReport';
 import AgentBillableReport from '../components/AgentDashboard/AgentBillableReport';
+import KraReport from '../components/dashboard/KraReport';
 
 // Import the split admin components
 import UsersManagement from '../components/dashboard/manage/user/UsersManagement';
@@ -387,12 +388,13 @@ const DashboardPage = ({
           if (activeTab === 'my_roster' || activeTab === 'my_hours') return null;
           return <QAAgentDashboard embedded={true} />;
         } else if (isAgent) {
-          if (activeTab === 'billable_report') {
+          if (activeTab === 'billable_report' || activeTab === 'kra_report') {
             return (
               <div className="max-w-7xl mx-auto mt-2">
                 <AgentTabsNavigation activeTab={activeTab} setActiveTab={setDashboardTab} />
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-4">
-                  <AgentBillableReport hideTabBar />
+                  {activeTab === 'billable_report' && <AgentBillableReport hideTabBar />}
+                  {activeTab === 'kra_report' && <KraReport />}
                 </div>
               </div>
             );

@@ -3,6 +3,7 @@ import {
   LayoutGrid,
   Briefcase,
   FileCheck,
+  ClipboardList,
 } from 'lucide-react';
 import SubTabsBar from '../common/SubTabsBar';
 
@@ -10,7 +11,8 @@ const QATabsNavigation = ({ activeTab, setActiveTab }) => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'billable_report', label: 'Agents Billable Report', shortLabel: 'Agents Billable', icon: Briefcase },
-    { id: 'audit_report', label: 'Audit Report', icon: FileCheck }
+    { id: 'audit_report', label: 'Audit Report', icon: FileCheck },
+    { id: 'kra_report', label: 'KRA', icon: ClipboardList },
   ];
 
   return (

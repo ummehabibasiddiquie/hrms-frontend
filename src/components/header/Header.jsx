@@ -315,7 +315,7 @@ const Header = ({
 
     // Check for Analytics/Dashboard
     if (view === ViewState.DASHBOARD || view === 'Analytics') {
-      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report', 'qa_hours'];
+      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report', 'qa_hours', 'kra_report'];
       return currentPath === '/dashboard' && (!currentTab || analyticsTabs.includes(currentTab));
     }
 

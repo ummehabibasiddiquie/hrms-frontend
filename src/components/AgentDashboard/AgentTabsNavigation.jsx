@@ -2,13 +2,15 @@ import React from 'react';
 import {
   LayoutGrid,
   Briefcase,
+  ClipboardList,
 } from 'lucide-react';
 import SubTabsBar from '../common/SubTabsBar';
 
 const AgentTabsNavigation = ({ activeTab, setActiveTab }) => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
-    { id: 'billable_report', label: 'Billable & QC Report', icon: Briefcase }
+    { id: 'billable_report', label: 'Billable & QC Report', icon: Briefcase },
+    { id: 'kra_report', label: 'KRA', icon: ClipboardList },
   ];
 
   return (

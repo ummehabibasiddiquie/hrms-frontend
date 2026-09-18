@@ -19,6 +19,7 @@ import ErrorMessage from '../common/ErrorMessage';
 import AppLayout from "../../layouts/AppLayout";
 import QATabsNavigation from "./QATabsNavigation";
 import BillableReport from "../common/BillableReport";
+import KraReport from "../dashboard/KraReport";
 import QAFilterBar from "./QAFilterBar";
 import QAIndividualAuditReport from "./QAIndividualAuditReport";
 import QAAgentQCFormReport from "../dashboard/QAAgentQCFormReport";
@@ -449,6 +450,7 @@ const QAAgentDashboard = ({ embedded = false }) => {
       )}
       
       {activeTab === 'billable_report' && <BillableReport title="Agents Billable Report" />}
+      {activeTab === 'kra_report' && <KraReport />}
       
       {activeTab === 'my_hours' && <QAHoursTracker mode="self" />}
       
