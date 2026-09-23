@@ -361,7 +361,83 @@ export function statusBadgeClass(status) {
 export function isRosterEditable(roster, readOnly) {
   if (readOnly || !roster) return false;
   const status = roster.status || "";
-  return status === "Draft" || status === "Approved";
+  // Pending Approval only freezes weeks that have submitted pending requests
+  return status === "Draft" || status === "Approved" || status === "Pending Approval";
+}
+
+/**
+ * Collect YYYY-MM-DD dates touched by a change request payload (mirrors backend).
+ */
+export function datesFromChangeRequest(req) {
+  const changeType = (req?.change_type || "").trim().toUpperCase();
+  const p = parsePayload(req?.change_payload);
+  const out = [];
+  const add = (val) => {
+    const s = toDateOnlyString(val);
+    if (s) out.push(s);
+  };
+
+  if (changeType === "DAY_UPDATE" || changeType === "EXTRA_HOURS_UPDATE" || changeType === "LEAVE_DELETE") {
+    add(p.roster_date);
+    const applyRest = p.apply_through_month_end;
+    if (
+      changeType === "DAY_UPDATE" &&
+      (applyRest === true || applyRest === 1 || String(applyRest).trim() === "1")
+    ) {
+      eachDateInRange(
+        p.roster_date,
+        p.through_end_date || p.roster_end_date || p.roster_date
+      ).forEach((d) => out.push(d));
+    }
+  } else if (changeType === "LEAVE_ADD" || changeType === "LEAVE_UPDATE") {
+    eachDateInRange(p.start_date, p.end_date || p.start_date).forEach((d) => out.push(d));
+  } else if (changeType === "WEEKOFF_SWAP") {
+    ["week_off_dates", "new_week_off_dates", "proposed_week_off_dates"].forEach((key) => {
+      (p[key] || []).forEach(add);
+    });
+    (p.changes || []).forEach((c) => add(c?.roster_date));
+  }
+
+  return [...new Set(out.filter(Boolean))];
+}
+
+/**
+ * Week numbers that have submitted pending requests (Pending + batch_id) for a roster month.
+ */
+export function getPendingApprovalWeekNumbers(pendingRequests, rosterMonthId, monthYear) {
+  if (!rosterMonthId || !monthYear) return new Set();
+  const weeks = getWeeksInMonth(monthYear);
+  if (!weeks.length) return new Set();
+
+  const dateToWeek = new Map();
+  weeks.forEach((w) => {
+    (w.dates || []).forEach((d) => {
+      if (d?.dateStr) dateToWeek.set(d.dateStr, Number(w.week_number));
+    });
+  });
+
+  const blocked = new Set();
+  (pendingRequests || []).forEach((req) => {
+    if ((req.status || "") !== "Pending" || !req.batch_id) return;
+    if (String(req.roster_month_id) !== String(rosterMonthId)) return;
+    datesFromChangeRequest(req).forEach((dateStr) => {
+      const wn = dateToWeek.get(dateStr);
+      if (wn != null) blocked.add(wn);
+    });
+  });
+  return blocked;
+}
+
+export function isWeekPendingApproval(pendingWeekNumbers, weekNumber) {
+  return (pendingWeekNumbers || new Set()).has(Number(weekNumber));
+}
+
+export function getPendingApprovalWeekMessage(weekNumber) {
+  const wn = Number(weekNumber);
+  return (
+    `Week ${wn} has pending approval requests; ` +
+    "withdraw or wait for review before editing that week."
+  );
 }
 
 export function isRosterLocked(roster) {

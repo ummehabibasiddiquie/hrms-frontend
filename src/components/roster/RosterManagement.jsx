@@ -43,6 +43,11 @@ import {
   isRosterEditable,
   isRosterLocked,
   getRosterLockMessage,
+  getPendingApprovalWeekNumbers,
+  isWeekPendingApproval,
+  getPendingApprovalWeekMessage,
+  getWeeksInMonth,
+  toDateOnlyString,
 } from "../../utils/rosterUtils";
 import LoadingSpinner from "../common/LoadingSpinner";
 import { MonthYearPicker } from "../common/CustomCalendar";
@@ -752,7 +757,7 @@ const RosterManagement = () => {
     });
   };
 
-  const handleTeamCellClick = ({ roster, day }) => {
+  const handleTeamCellClick = ({ roster, day, weekNumber }) => {
     if (!canManageRoster || !roster) return;
     if (monthCalendarLocked || isRosterLocked(roster)) {
       toast.error(
@@ -762,10 +767,26 @@ const RosterManagement = () => {
       );
       return;
     }
-    if ((roster.status || "") === "Pending Approval") {
-      toast.error("This roster is pending approval and cannot be edited.");
+
+    let wn = weekNumber != null ? Number(weekNumber) : null;
+    if (wn == null) {
+      const dateStr = toDateOnlyString(day?.roster_date);
+      const week = getWeeksInMonth(monthYear).find((w) =>
+        (w.dates || []).some((d) => d.dateStr === dateStr)
+      );
+      wn = week?.week_number ?? null;
+    }
+
+    const pendingWeeks = getPendingApprovalWeekNumbers(
+      monthPendingAll,
+      roster.roster_month_id,
+      monthYear
+    );
+    if (wn != null && isWeekPendingApproval(pendingWeeks, wn)) {
+      toast.error(getPendingApprovalWeekMessage(wn));
       return;
     }
+
     const rosterReadOnly =
       roster.access_mode === "read_only" || !isRosterEditable(roster, false);
     if (!isRosterEditable(roster, rosterReadOnly)) {
@@ -1152,14 +1173,31 @@ const RosterManagement = () => {
         isOpen={!!editorDay}
         day={editorDay}
         roster={editorRoster || selectedRoster}
-        readOnly={
-          !canManageRoster ||
-          (editorRoster || selectedRoster)?.access_mode === "read_only" ||
-          !isRosterEditable(editorRoster || selectedRoster, false) ||
-          monthCalendarLocked ||
-          isRosterLocked(editorRoster || selectedRoster) ||
-          ((editorRoster || selectedRoster)?.status || "") === "Pending Approval"
-        }
+        readOnly={(() => {
+          const roster = editorRoster || selectedRoster;
+          if (
+            !canManageRoster ||
+            roster?.access_mode === "read_only" ||
+            !isRosterEditable(roster, false) ||
+            monthCalendarLocked ||
+            isRosterLocked(roster)
+          ) {
+            return true;
+          }
+          const dateStr = toDateOnlyString(editorDay?.roster_date);
+          const week = getWeeksInMonth(monthYear).find((w) =>
+            (w.dates || []).some((d) => d.dateStr === dateStr)
+          );
+          const pendingWeeks = getPendingApprovalWeekNumbers(
+            monthPendingAll,
+            roster?.roster_month_id,
+            monthYear
+          );
+          return (
+            week?.week_number != null &&
+            isWeekPendingApproval(pendingWeeks, week.week_number)
+          );
+        })()}
         onClose={() => {
           setEditorDay(null);
           setEditorRoster(null);

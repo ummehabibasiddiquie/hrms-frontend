@@ -4,6 +4,9 @@ import {
   getWeeksInMonth,
   toDateOnlyString,
   buildPendingCalendarOverlay,
+  getPendingApprovalWeekNumbers,
+  isWeekPendingApproval,
+  getPendingApprovalWeekMessage,
 } from "../../utils/rosterUtils";
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -40,6 +43,19 @@ const RosterTeamWeekGrid = ({
   }, [weekLocks]);
 
   const activeWeekLocked = lockedWeekNumbers.has(Number(activeWeek));
+
+  /** roster_month_id -> Set of week numbers frozen by submitted pending requests */
+  const pendingApprovalWeeksByRoster = useMemo(() => {
+    const map = new Map();
+    (rosters || []).forEach((r) => {
+      if (!r?.roster_month_id) return;
+      map.set(
+        String(r.roster_month_id),
+        getPendingApprovalWeekNumbers(pendingRequests, r.roster_month_id, monthYear)
+      );
+    });
+    return map;
+  }, [rosters, pendingRequests, monthYear]);
 
   useEffect(() => {
     if (!weeks.length) return;
@@ -200,11 +216,26 @@ const RosterTeamWeekGrid = ({
                   pendingRequests,
                   roster?.roster_month_id
                 );
+                const pendingWeeks =
+                  pendingApprovalWeeksByRoster.get(String(roster?.roster_month_id)) ||
+                  new Set();
+                const weekPendingApproval = isWeekPendingApproval(
+                  pendingWeeks,
+                  activeWeek
+                );
                 const frozen =
                   monthCalendarLocked ||
                   activeWeekLocked ||
                   Boolean(roster?.locked_date) ||
-                  (roster?.status || "") === "Pending Approval";
+                  weekPendingApproval;
+
+                let freezeTitle = "Locked";
+                if (monthCalendarLocked) freezeTitle = "Month calendar locked";
+                else if (activeWeekLocked) freezeTitle = "Week locked";
+                else if (roster?.locked_date) freezeTitle = "Roster locked";
+                else if (weekPendingApproval) {
+                  freezeTitle = getPendingApprovalWeekMessage(activeWeek);
+                }
 
                 return (
                   <tr key={row.user_id} className="border-b border-slate-100 hover:bg-slate-50/80">
@@ -217,6 +248,11 @@ const RosterTeamWeekGrid = ({
                       )}
                       {!roster && (
                         <div className="text-[10px] text-amber-600 mt-0.5">No roster</div>
+                      )}
+                      {weekPendingApproval && (
+                        <div className="text-[10px] text-amber-700 mt-0.5 font-medium">
+                          Week {activeWeek} pending approval
+                        </div>
                       )}
                     </td>
                     {(week?.dates || []).map((d) => {
@@ -252,7 +288,7 @@ const RosterTeamWeekGrid = ({
                             disabled={!clickable}
                             title={
                               info.pendingTooltip ||
-                              (frozen ? "Locked / pending approval" : info.primaryLabel) ||
+                              (frozen ? freezeTitle : info.primaryLabel) ||
                               undefined
                             }
                             onClick={() =>
@@ -263,6 +299,7 @@ const RosterTeamWeekGrid = ({
                                   roster_date: d.dateStr,
                                   ...pending?.preview,
                                 },
+                                weekNumber: activeWeek,
                               })
                             }
                             className={`w-full min-h-[52px] rounded-md border px-1 py-1 text-left transition-all ${

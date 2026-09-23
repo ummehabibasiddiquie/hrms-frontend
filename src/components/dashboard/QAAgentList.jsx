@@ -3,7 +3,7 @@
  * Author: Naitik Maisuriya
  * Description: QA Agent List - Shows assigned agents with their tracker data (files only)
  */
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2, RefreshCw, AlertTriangle, XCircle, AlertCircle, CheckCircle2, Clock } from "lucide-react";
@@ -22,13 +22,81 @@ import { useClientPagination } from "../../hooks/useClientPagination";
 import TablePaginationBar from "../common/TablePaginationBar";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
 import SubTabsBar from "../common/SubTabsBar";
-import { formatISTDateTimeLong, formatISTDateTimeParts } from "../../utils/dateTimeIST";
+import { formatISTDateTimeLong, formatISTDateTimeParts, getISTParts, todayISTISO } from "../../utils/dateTimeIST";
 
 
-// Helper to get today's date in YYYY-MM-DD format
-const getTodayDate = () => {
-  const today = new Date();
-  return today.toISOString().split('T')[0];
+// Helper to get today's date in YYYY-MM-DD format (IST)
+const getTodayDate = () => todayISTISO() || new Date().toISOString().split('T')[0];
+
+/** Compare a datetime to YYYY-MM-DD range using IST calendar day. */
+const isDateInRange = (dateValue, startDate, endDate) => {
+  if (!startDate || !endDate) return true;
+  const parts = getISTParts(dateValue);
+  let iso = null;
+  if (parts) {
+    iso = `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+  } else {
+    const raw = String(dateValue || "").trim().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) iso = raw;
+  }
+  if (!iso) return false;
+  return iso >= startDate && iso <= endDate;
+};
+
+/** Map one pending QC API record to a sidebar/detail file row (prefer rework over correction). */
+const mapPendingQcRecord = (record) => {
+  const hasRework = record.latest_rework && Object.keys(record.latest_rework).length > 0;
+  const hasCorrection = record.latest_correction && Object.keys(record.latest_correction).length > 0;
+
+  let type, updatedAt, attempt, previousScore, previousErrors, filePath, qcRecordId, trackerFile;
+
+  if (hasRework) {
+    type = "rework";
+    updatedAt = record.latest_rework.updated_at;
+    attempt = record.latest_rework.rework_count;
+    previousScore = record.latest_rework.previous_qc_score;
+    previousErrors = record.latest_rework.previous_error_list;
+    filePath = record.latest_rework.rework_file_path;
+    qcRecordId = record.latest_rework.qc_record_id;
+    trackerFile = record.latest_rework.rework_file_path;
+  } else if (hasCorrection) {
+    type = "correction";
+    updatedAt = record.latest_correction.updated_at;
+    attempt = record.latest_correction.correction_count;
+    previousScore = record.latest_correction.previous_qc_score;
+    previousErrors = record.latest_correction.previous_error_list;
+    filePath = record.latest_correction.correction_file_path;
+    qcRecordId = record.latest_correction.qc_record_id;
+    trackerFile = record.latest_correction.correction_file_path;
+  } else {
+    return null;
+  }
+
+  const agentId = record.agent_id ?? record.user_id;
+
+  return {
+    ...record,
+    id: qcRecordId,
+    agent_name: record.agent_name,
+    project_name: record.project_name,
+    task_name: record.task_name,
+    type,
+    updated_at: updatedAt,
+    attempt,
+    previous_qc_score: previousScore,
+    previous_error_list: previousErrors,
+    file_path: filePath,
+    qc_record_id: qcRecordId,
+    tracker_file: trackerFile,
+    tracker_id: record.tracker_id,
+    agent_id: agentId,
+    user_id: agentId,
+    project_id: record.project_id,
+    task_id: record.task_id,
+    project_category_id: record.project_category_id,
+    qc_percentage: record.sampling_percentage || record.qc_percentage || 50,
+    date_of_file_submission: updatedAt,
+  };
 };
 
 const formatSlaRemaining = (hoursRemaining, isOverdue) => {
@@ -178,7 +246,7 @@ const resolveTrackerSla = (tracker) => {
   };
 };
 
-const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedAgentId, getTodayDate, fetchReworkTrackers }) => {
+const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedAgentId }) => {
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
   const trackerPagination = useClientPagination(trackers, { resetKeys: [selectedAgentId, trackers.length] });
 
@@ -461,6 +529,7 @@ const QAAgentList = () => {
   // Local state for correction status selection per tracker
   const [correctionStatus, setCorrectionStatus] = useState({});
   const [savingStatus, setSavingStatus] = useState({});
+  const fileLoadRequestId = useRef(0);
 
 
   // Fetch project/task mapping, then tracker data
@@ -577,44 +646,11 @@ const QAAgentList = () => {
         }
         
         const allAgents = Object.values(agentsMap);
-        
-        // 4. Fetch today's tracker data to get initial file counts
-        const today = getTodayDate();
-        const todayTrackersRes = await api.post("/tracker/view", {
-          logged_in_user_id: user?.user_id,
-          device_id: device_id,
-          device_type: device_type,
-          date_from: today,
-          date_to: today,
-          qc_pending: 0  // Fetch only QC pending trackers
-        });
-        const todayTrackerData = todayTrackersRes.data?.data || {};
-        const todayTrackers = todayTrackerData.trackers || [];
-        let myTodayTrackers = todayTrackers;
-        if (myTodayTrackers.some(t => t.qa_agent_id !== undefined)) {
-          myTodayTrackers = myTodayTrackers.filter(t => String(t.qa_agent_id) === String(user?.user_id));
-        }
-        myTodayTrackers = myTodayTrackers.filter(trackerVisibleInListing);
-        
-        // Build initial trackers by agent for today (for file counts)
-        const initialTrackersByAgent = {};
-        allAgents.forEach(agent => {
-          initialTrackersByAgent[agent.user_id] = myTodayTrackers
-            .filter(t => String(t.user_id) === String(agent.user_id) && t.tracker_file)
-            .map(tracker => ({
-              ...tracker,
-              user_name: tracker.user_name || agent.user_name || '-',
-              project_name: tracker.project_name || pMap[String(tracker.project_id)] || '-',
-              task_name: tracker.task_name || tMap[String(tracker.task_id)] || '-',
-            }));
-        });
-        
-        setAgents(allAgents);
-        setAgentTrackers(initialTrackersByAgent);
-        
-        // No need to initialize per-agent filters anymore
 
-        
+        // File counts are loaded separately for ALL agents (same source as detail panel)
+        setAgents(allAgents);
+        setAgentTrackers({});
+
         // Auto-select first agent if available
         if (allAgents.length > 0) {
           setSelectedAgentId(allAgents[0].user_id);
@@ -633,21 +669,127 @@ const QAAgentList = () => {
     fetchAllData();
   }, [user?.user_id, device_id, device_type]);
 
-  // Re-fetch data when tab changes and agent is selected
-  useEffect(() => {
-    if (selectedAgentId && (activeTab === 'agent_files' || activeTab === 'agent_rework_files' || activeTab === 'rework_review')) {
-      if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-        fetchReworkTrackers(selectedAgentId, globalDateFilter.startDate, globalDateFilter.endDate);
-      } else {
-        fetchAgentTrackers(selectedAgentId);
+  // Build tracker-file map for EVERY agent using the same API + date filters as the detail panel
+  const loadAllTrackerFiles = async (dateFrom, dateTo) => {
+    if (!user?.user_id || agents.length === 0) return;
+    const requestId = ++fileLoadRequestId.current;
+    setAgentLoading(true);
+    try {
+      log('[QAAgentList] Loading tracker files for all agents:', { dateFrom, dateTo });
+
+      const trackerRes = await api.post("/tracker/view", {
+        logged_in_user_id: user?.user_id,
+        device_id: device_id,
+        device_type: device_type,
+        date_from: dateFrom,
+        date_to: dateTo,
+        qc_pending: 0,
+      });
+
+      if (requestId !== fileLoadRequestId.current) return;
+
+      const allTrackers = trackerRes.data?.data?.trackers || [];
+      let myTrackers = allTrackers;
+      if (myTrackers.some((t) => t.qa_agent_id !== undefined)) {
+        myTrackers = myTrackers.filter((t) => String(t.qa_agent_id) === String(user?.user_id));
+      }
+
+      const byAgent = {};
+      agents.forEach((agent) => {
+        byAgent[String(agent.user_id)] = [];
+      });
+
+      myTrackers.forEach((tracker) => {
+        if (!tracker.tracker_file) return;
+        const key = String(tracker.user_id);
+        if (byAgent[key] === undefined) return;
+        byAgent[key].push({
+          ...tracker,
+          user_name: tracker.user_name || agents.find((a) => String(a.user_id) === key)?.user_name || "-",
+          project_name: tracker.project_name || projectNameMap[String(tracker.project_id)] || "-",
+          task_name: tracker.task_name || taskNameMap[String(tracker.task_id)] || "-",
+        });
+      });
+
+      setAgentTrackers(byAgent);
+      log('[QAAgentList] Tracker file counts loaded for agents:', Object.keys(byAgent).length);
+    } catch (error) {
+      if (requestId !== fileLoadRequestId.current) return;
+      logError("[QAAgentList] Error loading tracker files:", error);
+      toast.error("Failed to fetch tracker data");
+      setAgentTrackers({});
+    } finally {
+      if (requestId === fileLoadRequestId.current) {
+        setAgentLoading(false);
       }
     }
-  }, [selectedAgentId, activeTab, globalDateFilter.startDate, globalDateFilter.endDate]);
+  };
+
+  // Build rework/correction map for EVERY agent using the same filters as the detail panel
+  const loadAllReworkFiles = async (dateFrom, dateTo) => {
+    if (!user?.user_id || agents.length === 0) return;
+    const requestId = ++fileLoadRequestId.current;
+    setAgentLoading(true);
+    try {
+      log('[QAAgentList] Loading pending rework/correction files for all agents:', { dateFrom, dateTo });
+
+      const response = await api.post("/qc_rework/view_pending_qc_files", {});
+      if (requestId !== fileLoadRequestId.current) return;
+
+      const records = response.data?.data?.record || [];
+
+      const mapped = records.map(mapPendingQcRecord).filter(Boolean);
+      const dated = mapped.filter((file) => isDateInRange(file.updated_at, dateFrom, dateTo));
+
+      const byAgent = {};
+      agents.forEach((agent) => {
+        byAgent[String(agent.user_id)] = [];
+      });
+
+      dated.forEach((file) => {
+        const agentId = file.agent_id ?? file.user_id;
+        let key = String(agentId);
+        if (byAgent[key] === undefined) {
+          const byName = agents.find((a) => a.user_name === file.agent_name);
+          if (byName) key = String(byName.user_id);
+        }
+        if (byAgent[key] === undefined) return;
+        byAgent[key].push(file);
+      });
+
+      setAgentTrackers(byAgent);
+      log('[QAAgentList] Rework/correction file counts loaded:', {
+        totalPending: mapped.length,
+        inDateRange: dated.length,
+        agents: Object.keys(byAgent).length,
+      });
+    } catch (error) {
+      if (requestId !== fileLoadRequestId.current) return;
+      logError("[QAAgentList] Error loading pending QC files:", error);
+      toast.error("Failed to fetch pending QC files data");
+      setAgentTrackers({});
+    } finally {
+      if (requestId === fileLoadRequestId.current) {
+        setAgentLoading(false);
+      }
+    }
+  };
+
+  // Rebuild left-side counts + detail data whenever tab or date range changes
+  useEffect(() => {
+    if (loading || agents.length === 0) return;
+    if (activeTab === "agent_files") {
+      loadAllTrackerFiles(globalDateFilter.startDate, globalDateFilter.endDate);
+    } else if (activeTab === "agent_rework_files" || activeTab === "rework_review") {
+      loadAllReworkFiles(globalDateFilter.startDate, globalDateFilter.endDate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: reload only on tab/date/agents
+  }, [agents, activeTab, globalDateFilter.startDate, globalDateFilter.endDate, loading]);
 
   // Initialize correction status when trackers change
   useEffect(() => {
     if (activeTab === 'rework_review' && selectedAgentId) {
-      const trackers = agentTrackers[selectedAgentId] || [];
+      const trackers = agentTrackers[String(selectedAgentId)] || agentTrackers[selectedAgentId] || [];
       const initial = {};
       trackers.forEach((tracker, idx) => {
         if (tracker.type === 'correction') {
@@ -658,202 +800,6 @@ const QAAgentList = () => {
       setCorrectionStatus(initial);
     }
   }, [agentTrackers, selectedAgentId, activeTab]);
-
-  // Fetch tracker data for specific agent with date range
-  const fetchAgentTrackers = async (agentId, startDate = null, endDate = null) => {
-    setAgentLoading(true);
-    try {
-      // Use provided dates or fall back to global date filter
-      const dateFrom = startDate || globalDateFilter.startDate;
-      const dateTo = endDate || globalDateFilter.endDate;
-      log('[QAAgentList] Fetching trackers for agent:', agentId, 'with dates:', { startDate: dateFrom, endDate: dateTo });
-
-      const trackerRes = await api.post("/tracker/view", {
-        logged_in_user_id: user?.user_id,
-        device_id: device_id,
-        device_type: device_type,
-        date_from: dateFrom,
-        date_to: dateTo,
-        qc_pending: 0  // Fetch only QC pending trackers
-      });
-
-      const trackerData = trackerRes.data?.data || {};
-      const allTrackers = trackerData.trackers || [];
-      
-      // Filter for trackers assigned to logged-in QA
-      let myTrackers = allTrackers;
-      if (myTrackers.some(t => t.qa_agent_id !== undefined)) {
-        myTrackers = myTrackers.filter(t => String(t.qa_agent_id) === String(user?.user_id));
-      }
-      
-      // Filter for this specific agent and only trackers with files
-      const agentSpecificTrackers = myTrackers
-        .filter((tracker) => String(tracker.user_id) === String(agentId) && tracker.tracker_file)
-        .map(tracker => ({
-          ...tracker,
-          project_name: tracker.project_name || projectNameMap[String(tracker.project_id)] || '-',
-          task_name: tracker.task_name || taskNameMap[String(tracker.task_id)] || '-',
-        }));
-      
-      log('[QAAgentList] Found trackers for agent:', agentSpecificTrackers.length);
-      
-      setAgentTrackers(prev => ({
-        ...prev,
-        [agentId]: agentSpecificTrackers
-      }));
-    } catch (error) {
-      logError("[QAAgentList] Error fetching agent trackers:", error);
-      toast.error("Failed to fetch tracker data");
-    } finally {
-      setAgentLoading(false);
-    }
-  };
-
-  // Fetch pending QC files data (rework & correction) for specific agent
-  const fetchReworkTrackers = async (agentId, startDate = null, endDate = null) => {
-    setAgentLoading(true);
-    try {
-      log('[QAAgentList] Fetching pending QC files for agent:', agentId);
-      
-      // Call new API endpoint
-      const response = await api.post('/qc_rework/view_pending_qc_files', {});
-      
-      const records = response.data?.data?.record || [];
-      
-      // Log the first record to see structure
-      if (records.length > 0) {
-        console.group('[QAAgentList] 🔍 API Response Analysis');
-        console.log('Sample API record structure:', records[0]);
-        console.log('Available fields:', Object.keys(records[0]));
-        console.table({
-          'tracker_id': records[0].tracker_id,
-          'agent_id': records[0].agent_id,
-          'project_id': records[0].project_id,
-          'task_id': records[0].task_id,
-          'project_category_id': records[0].project_category_id,
-          'sampling_percentage': records[0].sampling_percentage,
-          'agent_name': records[0].agent_name,
-          'project_name': records[0].project_name,
-          'task_name': records[0].task_name
-        });
-        console.log('✅ API is returning all required IDs correctly!');
-        console.groupEnd();
-      }
-      
-      // Find the agent name for this agentId
-      const selectedAgent = agents.find(a => String(a.user_id) === String(agentId));
-      const agentName = selectedAgent?.user_name;
-      
-      // Filter records for this specific agent and transform data
-      let agentPendingFiles = records
-        .filter(record => record.agent_name === agentName)
-        .map(record => {
-          // Determine if we have rework or correction data
-          const hasRework = record.latest_rework && Object.keys(record.latest_rework).length > 0;
-          const hasCorrection = record.latest_correction && Object.keys(record.latest_correction).length > 0;
-          
-          let type, updatedAt, attempt, previousScore, previousErrors, filePath, qcRecordId, trackerFile;
-          
-          if (hasRework) {
-            type = 'rework';
-            updatedAt = record.latest_rework.updated_at;
-            attempt = record.latest_rework.rework_count;
-            previousScore = record.latest_rework.previous_qc_score;
-            previousErrors = record.latest_rework.previous_error_list;
-            filePath = record.latest_rework.rework_file_path;
-            qcRecordId = record.latest_rework.qc_record_id;
-            trackerFile = record.latest_rework.rework_file_path;
-          } else if (hasCorrection) {
-            type = 'correction';
-            updatedAt = record.latest_correction.updated_at;
-            attempt = record.latest_correction.correction_count;
-            previousScore = record.latest_correction.previous_qc_score;
-            previousErrors = record.latest_correction.previous_error_list;
-            filePath = record.latest_correction.correction_file_path;
-            qcRecordId = record.latest_correction.qc_record_id;
-            trackerFile = record.latest_correction.correction_file_path;
-          } else {
-            return null; // Skip if neither rework nor correction data exists
-          }
-          
-          return {
-            ...record, // Spread record first to get all top-level fields including IDs
-            // Override with specific nested values (these take precedence)
-            id: qcRecordId,
-            agent_name: record.agent_name,
-            project_name: record.project_name,
-            task_name: record.task_name,
-            type: type,
-            updated_at: updatedAt,
-            attempt: attempt,
-            previous_qc_score: previousScore,
-            previous_error_list: previousErrors,
-            file_path: filePath,
-            qc_record_id: qcRecordId,
-            tracker_file: trackerFile,
-            // Explicitly preserve critical IDs from API (must be explicit to avoid undefined override)
-            tracker_id: record.tracker_id,
-            agent_id: record.agent_id,
-            user_id: record.agent_id, // Use agent_id as user_id since API doesn't provide user_id
-            project_id: record.project_id,
-            task_id: record.task_id,
-            project_category_id: record.project_category_id,
-            qc_percentage: record.sampling_percentage || record.qc_percentage || 50, // API uses sampling_percentage
-            date_of_file_submission: updatedAt, // Use rework/correction updated_at as submission date
-          };
-        })
-        .filter(Boolean); // Remove null entries
-      
-      // Log the first mapped file to see structure
-      if (agentPendingFiles.length > 0) {
-        console.group('[QAAgentList] 📦 Mapped Data Analysis');
-        console.log('First mapped pending file:', agentPendingFiles[0]);
-        console.table({
-          'tracker_id': agentPendingFiles[0].tracker_id,
-          'agent_id': agentPendingFiles[0].agent_id,
-          'user_id': agentPendingFiles[0].user_id,
-          'project_id': agentPendingFiles[0].project_id,
-          'task_id': agentPendingFiles[0].task_id,
-          'project_category_id': agentPendingFiles[0].project_category_id,
-          'qc_percentage': agentPendingFiles[0].qc_percentage
-        });
-        console.log('✅ All required IDs are present and ready to pass to QC Form');
-        console.groupEnd();
-      }
-      
-      // Frontend date filtering if dates are provided
-      if (startDate && endDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        
-        agentPendingFiles = agentPendingFiles.filter(file => {
-          const fileDate = new Date(file.updated_at);
-          return fileDate >= start && fileDate <= end;
-        });
-        
-        log('[QAAgentList] Filtered pending files by date:', {
-          startDate,
-          endDate,
-          totalRecords: records.length,
-          filteredRecords: agentPendingFiles.length
-        });
-      }
-      
-      log('[QAAgentList] Found pending QC files for agent:', agentPendingFiles.length);
-      
-      setAgentTrackers(prev => ({
-        ...prev,
-        [agentId]: agentPendingFiles
-      }));
-    } catch (error) {
-      logError("[QAAgentList] Error fetching pending QC files:", error);
-      toast.error("Failed to fetch pending QC files data");
-    } finally {
-      setAgentLoading(false);
-    }
-  };
 
   // Filter and sort agents based on search query
   const filteredAndSortedAgents = useMemo(() => {
@@ -914,7 +860,7 @@ const QAAgentList = () => {
 
   const selectedAgentTrackers = useMemo(() => {
     if (!selectedAgentId) return [];
-    return agentTrackers[selectedAgentId] || [];
+    return agentTrackers[String(selectedAgentId)] || agentTrackers[selectedAgentId] || [];
   }, [selectedAgentId, agentTrackers]);
 
   const agentListPagination = useClientPagination(filteredAndSortedAgents, {
@@ -929,54 +875,24 @@ const QAAgentList = () => {
     setSearchQuery("");
   };
 
-  // Handle global date changes
+  // Handle global date changes — counts reload via useEffect for ALL agents
   const handleGlobalStartDateChange = (dateValue) => {
-    const newFilters = {
-      ...globalDateFilter,
-      startDate: dateValue
-    };
-    setGlobalDateFilter(newFilters);
-    
-    // Fetch updated data for current agent if selected
-    if (selectedAgentId) {
-      if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-        fetchReworkTrackers(selectedAgentId, newFilters.startDate, newFilters.endDate);
-      } else {
-        // fetchAgentTrackers already uses globalDateFilter internally, but we should trigger it manually if we don't rely on useEffect
-        fetchAgentTrackers(selectedAgentId, newFilters.startDate, newFilters.endDate);
-      }
-    }
+    setGlobalDateFilter((prev) => ({
+      ...prev,
+      startDate: dateValue,
+    }));
   };
 
   const handleGlobalEndDateChange = (dateValue) => {
-    const newFilters = {
-      ...globalDateFilter,
-      endDate: dateValue
-    };
-    setGlobalDateFilter(newFilters);
-    
-    // Fetch updated data for current agent if selected
-    if (selectedAgentId) {
-      if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-        fetchReworkTrackers(selectedAgentId, newFilters.startDate, newFilters.endDate);
-      } else {
-        fetchAgentTrackers(selectedAgentId, newFilters.startDate, newFilters.endDate);
-      }
-    }
+    setGlobalDateFilter((prev) => ({
+      ...prev,
+      endDate: dateValue,
+    }));
   };
 
   const handleResetGlobalFilters = () => {
     const today = getTodayDate();
-    const newFilters = { startDate: today, endDate: today };
-    setGlobalDateFilter(newFilters);
-    
-    if (selectedAgentId) {
-      if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-        fetchReworkTrackers(selectedAgentId, today, today);
-      } else {
-        fetchAgentTrackers(selectedAgentId, today, today);
-      }
-    }
+    setGlobalDateFilter({ startDate: today, endDate: today });
   };
 
   // Handler to save correction status
@@ -1046,14 +962,11 @@ const QAAgentList = () => {
       if (response.status >= 200 && response.status < 300) {
         toast.success('Status saved successfully!');
         
-        // Refresh the data after successful save
-        if (selectedAgentId) {
-          await fetchReworkTrackers(
-            selectedAgentId,
-            globalDateFilter.startDate,
-            globalDateFilter.endDate
-          );
-        }
+        // Refresh all agents' pending files after successful save
+        await loadAllReworkFiles(
+          globalDateFilter.startDate,
+          globalDateFilter.endDate
+        );
       } else {
         toast.error(response.data?.message || 'Failed to save status');
       }
@@ -1499,19 +1412,14 @@ const QAAgentList = () => {
                 {/* Agents List */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
                   {filteredAndSortedAgents.map((agent) => {
-                    const trackers = agentTrackers[agent.user_id] || [];
-                    const isSelected = selectedAgentId === agent.user_id;
+                    const trackers = agentTrackers[String(agent.user_id)] || agentTrackers[agent.user_id] || [];
+                    const isSelected = String(selectedAgentId) === String(agent.user_id);
                     
                     return (
                       <button
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          if (activeTab === 'agent_rework_files' || activeTab === 'rework_review') {
-                            fetchReworkTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
-                          } else {
-                            fetchAgentTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
-                          }
                         }}
                         disabled={agentLoading}
                         className={`w-full text-left p-4 rounded-xl transition-all duration-300 border-2 relative overflow-hidden ${
@@ -1799,15 +1707,14 @@ const QAAgentList = () => {
                 {/* Agents List */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
                   {filteredAndSortedAgents.map((agent) => {
-                    const trackers = agentTrackers[agent.user_id] || [];
-                    const isSelected = selectedAgentId === agent.user_id;
+                    const trackers = agentTrackers[String(agent.user_id)] || agentTrackers[agent.user_id] || [];
+                    const isSelected = String(selectedAgentId) === String(agent.user_id);
                     
                     return (
                       <button
                         key={agent.user_id}
                         onClick={() => {
                           setSelectedAgentId(agent.user_id);
-                          fetchReworkTrackers(agent.user_id, globalDateFilter.startDate, globalDateFilter.endDate);
                         }}
                         disabled={agentLoading}
                         className={`w-full text-left p-4 rounded-xl transition-all duration-300 border-2 relative overflow-hidden ${
@@ -1898,8 +1805,6 @@ const QAAgentList = () => {
                             setCorrectionStatus={setCorrectionStatus}
                             user={user}
                             selectedAgentId={selectedAgentId}
-                            getTodayDate={getTodayDate}
-                            fetchReworkTrackers={fetchReworkTrackers}
                           />
                         ) : (
                           <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">
