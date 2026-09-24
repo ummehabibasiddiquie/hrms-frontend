@@ -8,7 +8,6 @@ import {
   FileCheck2,
   Percent,
   Funnel,
-  Clock,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { MonthYearPicker, getCurrentYyyyMm, yyyyMmToMonthYear } from "../common/CustomCalendar";
@@ -269,26 +268,65 @@ export default function KraReport() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             <ScoreCard
               title="Productivity"
               weight="33%"
               value={scores.productivity}
               hint={`${counts.productivity_yes || 0} of ${counts.working_days || 0} days ≥ 9h`}
+              hintTooltip={`${counts.productivity_yes || 0} of ${counts.working_days || 0} working days achieved ≥ 9.0 billable hours. Formula: (YES days / Working days) × 33%`}
               icon={Target}
+              badges={
+                <>
+                  <span
+                    title={`${counts.productivity_yes ?? 0} working days achieved ≥ 9.0 billable hours`}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-green-50 text-green-700 border border-green-200 cursor-help hover:bg-green-100 transition-colors"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    Yes: {counts.productivity_yes ?? 0}
+                  </span>
+                  <span
+                    title={`${counts.productivity_no ?? 0} working days with < 9.0 billable hours`}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-700 border border-red-200 cursor-help hover:bg-red-100 transition-colors"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                    No: {counts.productivity_no ?? 0}
+                  </span>
+                </>
+              }
             />
             <ScoreCard
               title="Quality"
               weight="33%"
               value={scores.quality}
               hint={`${counts.quality_yes || 0} of ${counts.working_days || 0} days ≥ 98%`}
+              hintTooltip={`${counts.quality_yes || 0} of ${counts.working_days || 0} working days with QC score ≥ 98%. Formula: (QC YES days / Working days) × 33%`}
               icon={Award}
+              badges={
+                <>
+                  <span
+                    title={`${counts.quality_yes ?? 0} working days with QC score ≥ 98%`}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-green-50 text-green-700 border border-green-200 cursor-help hover:bg-green-100 transition-colors"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    Yes: {counts.quality_yes ?? 0}
+                  </span>
+                  <span
+                    title={`${counts.quality_no ?? 0} working days with QC score < 98%`}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-700 border border-red-200 cursor-help hover:bg-red-100 transition-colors"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                    No: {counts.quality_no ?? 0}
+                  </span>
+                </>
+              }
             />
             <ScoreCard
               title="Roster"
               weight="10%"
               value={scores.schedule}
               hint={`${counts.present_days || 0} present / ${counts.working_days || 0} working`}
+              hintTooltip={`${counts.present_days || 0} present, half day, or WFH days out of ${counts.working_days || 0} total working days. Formula: (Present / Working days) × 10%`}
               icon={CalendarDays}
             />
             <ScoreCard
@@ -296,20 +334,15 @@ export default function KraReport() {
               weight="14%"
               value={scores.reporting}
               hint={`${counts.low_tracker_days || 0} days under 7 trackers`}
+              hintTooltip={`${counts.low_tracker_days || 0} working days with fewer than 7 trackers. Tier: 0–3 instances = 14%, 4–6 = 7%, >6 = 0%`}
               icon={FileCheck2}
-            />
-            <ScoreCard
-              title="Timeliness"
-              weight="10%"
-              value={scores.timeliness}
-              hint="Fill in Excel (KRA Score D13)"
-              icon={Clock}
             />
             <ScoreCard
               title="KRA"
               weight={`${report.totals?.applicable_weight || 100}%`}
               value={report.totals?.kra_percent}
               hint={`Earned ${formatScore(report.totals?.earned)} / ${report.totals?.applicable_weight || 100}`}
+              hintTooltip={`Total KRA: Earned ${formatScore(report.totals?.earned)} out of ${report.totals?.applicable_weight || 100}% applicable weight`}
               icon={Percent}
               accent
             />
@@ -382,30 +415,56 @@ export default function KraReport() {
   );
 }
 
-function ScoreCard({ title, weight, value, hint, icon: Icon, accent = false }) {
+function ScoreCard({
+  title,
+  weight,
+  value,
+  hint,
+  hintTooltip,
+  icon: Icon,
+  accent = false,
+  badges = null,
+}) {
   return (
     <div
-      className={`relative overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border-2 ${
+      className={`relative overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border-2 flex flex-col justify-between ${
         accent
           ? "bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 border-blue-600 text-white"
           : "bg-white border-slate-200 hover:border-blue-300"
       }`}
     >
       {!accent && <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full -translate-y-12 translate-x-12" />}
-      <div className="relative p-4 flex items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2 mb-1.5">
-            <p className={`text-xs font-bold uppercase tracking-wide truncate ${accent ? "text-blue-100" : "text-slate-600"}`}>
-              {title}
-            </p>
-            <span className={`text-[11px] font-bold ${accent ? "text-blue-100" : "text-blue-600"}`}>{weight}</span>
+      <div className="relative p-4 flex items-start justify-between gap-2.5 h-full">
+        <div className="min-w-0 flex-1 flex flex-col justify-between h-full">
+          <div>
+            <div className="flex items-center justify-between gap-1.5 mb-1.5">
+              <p
+                title={title}
+                className={`text-xs font-bold uppercase tracking-wide truncate ${accent ? "text-blue-100" : "text-slate-600"}`}
+              >
+                {title}
+              </p>
+              <span className={`text-[11px] font-bold flex-shrink-0 ${accent ? "text-blue-100" : "text-blue-600"}`}>{weight}</span>
+            </div>
+            <h3 className={`text-xl sm:text-2xl font-extrabold tabular-nums ${accent ? "text-white" : "text-slate-900"}`}>
+              {accent && value != null ? `${formatScore(value)}%` : formatScore(value)}
+            </h3>
+            {badges && (
+              <div className="flex items-center gap-1.5 my-1.5 flex-wrap">
+                {badges}
+              </div>
+            )}
           </div>
-          <h3 className={`text-xl sm:text-2xl font-extrabold tabular-nums ${accent ? "text-white" : "text-slate-900"}`}>
-            {accent && value != null ? `${formatScore(value)}%` : formatScore(value)}
-          </h3>
-          <p className={`text-xs font-semibold mt-1 truncate ${accent ? "text-blue-100" : "text-slate-500"}`}>{hint}</p>
+          <p
+            title={hintTooltip || (typeof hint === "string" ? hint : undefined)}
+            className={`text-xs font-semibold ${badges ? "mt-1.5" : "mt-2"} leading-snug break-words cursor-default ${
+              accent ? "text-blue-100" : "text-slate-500"
+            }`}
+          >
+            {hint}
+          </p>
         </div>
-        <div className={`p-3 rounded-xl shadow-sm flex-shrink-0 ${accent ? "bg-white/15" : "bg-blue-100"}`}>
+        <div className={`p-2.5 sm:p-3 rounded-xl shadow-sm flex-shrink-0 self-start ${accent ? "bg-white/15" : "bg-blue-100"}`}>
           <Icon className={`w-5 h-5 ${accent ? "text-white" : "text-blue-600"}`} />
         </div>
       </div>
