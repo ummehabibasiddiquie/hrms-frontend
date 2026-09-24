@@ -176,6 +176,11 @@ export default function KraReport() {
 
   const counts = report?.counts || {};
   const scores = Object.fromEntries((report?.scores || []).map((row) => [row.key, row.earned]));
+  const fullTarget = report?.rules?.productivity_hours ?? 9;
+  const halfTarget = report?.rules?.productivity_half_day_hours ?? (fullTarget / 2);
+  const tenureVal = report?.effective_tenure ?? 1;
+  const targetLabel = fullTarget === 9 ? "≥ 9h (Half: 4.5h)" : `≥ ${fullTarget}h (Half: ${halfTarget}h)`;
+  const tenureLabel = tenureVal && tenureVal !== 1 ? ` · Tenure ${tenureVal}` : "";
   const throughLabel = report?.period_end
     ? report.is_current_month
       ? `Through ${report.period_end} (today)`
@@ -196,6 +201,7 @@ export default function KraReport() {
                 From {KRA_GO_LIVE_MONTH}
                 {throughLabel ? ` · ${throughLabel}` : ""}
                 {report?.user_name ? ` · ${report.user_name}` : ""}
+                {tenureLabel}
               </p>
             </div>
           </div>
@@ -273,20 +279,20 @@ export default function KraReport() {
               title="Productivity"
               weight="33%"
               value={scores.productivity}
-              hint={`${counts.productivity_yes || 0} of ${counts.working_days || 0} days ≥ 9h`}
-              hintTooltip={`${counts.productivity_yes || 0} of ${counts.working_days || 0} working days achieved ≥ 9.0 billable hours. Formula: (YES days / Working days) × 33%`}
+              hint={`${counts.productivity_yes || 0} of ${counts.working_days || 0} days met target (${targetLabel})`}
+              hintTooltip={`${counts.productivity_yes || 0} of ${counts.working_days || 0} working days achieved target (Full day: ≥ ${fullTarget}h, Half day: ≥ ${halfTarget}h${tenureLabel}). Formula: (YES days / Working days) × 33%`}
               icon={Target}
               badges={
                 <>
                   <span
-                    title={`${counts.productivity_yes ?? 0} working days achieved ≥ 9.0 billable hours`}
+                    title={`${counts.productivity_yes ?? 0} working days achieved target (≥ ${fullTarget}h / ${halfTarget}h)`}
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-green-50 text-green-700 border border-green-200 cursor-help hover:bg-green-100 transition-colors"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                     Yes: {counts.productivity_yes ?? 0}
                   </span>
                   <span
-                    title={`${counts.productivity_no ?? 0} working days with < 9.0 billable hours`}
+                    title={`${counts.productivity_no ?? 0} working days below target (< ${fullTarget}h / ${halfTarget}h)`}
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-red-50 text-red-700 border border-red-200 cursor-help hover:bg-red-100 transition-colors"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
@@ -333,8 +339,8 @@ export default function KraReport() {
               title="Reporting"
               weight="14%"
               value={scores.reporting}
-              hint={`${counts.low_tracker_days || 0} days under 7 trackers`}
-              hintTooltip={`${counts.low_tracker_days || 0} working days with fewer than 7 trackers. Tier: 0–3 instances = 14%, 4–6 = 7%, >6 = 0%`}
+              hint={`${counts.low_tracker_days || 0} low tracker days (< 7 full / < 4 half)`}
+              hintTooltip={`${counts.low_tracker_days || 0} working days with low trackers (< 7 on full day, < 4 on half day). Tier: 0–3 instances = 14%, 4–6 = 7%, >6 = 0%`}
               icon={FileCheck2}
             />
             <ScoreCard
@@ -379,7 +385,10 @@ export default function KraReport() {
                         {day.billable_hours == null ? "—" : Number(day.billable_hours).toFixed(2)}
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className={`px-2 py-0.5 rounded-lg text-xs font-bold inline-block ${flagClass(day.productivity)}`}>
+                        <span
+                          title={day.target_hours ? `Target: ≥ ${day.target_hours}h` : undefined}
+                          className={`px-2 py-0.5 rounded-lg text-xs font-bold inline-block ${day.target_hours ? "cursor-help" : ""} ${flagClass(day.productivity)}`}
+                        >
                           {day.productivity || "—"}
                         </span>
                       </td>
@@ -391,7 +400,16 @@ export default function KraReport() {
                           {day.quality || "—"}
                         </span>
                       </td>
-                      <td className={`px-4 py-2.5 tabular-nums font-semibold ${day.low_tracker ? "text-red-600" : "text-slate-800"}`}>
+                      <td
+                        title={
+                          day.tracker_count != null
+                            ? day.attendance === "HALF DAY"
+                              ? `Target: ≥ 4 trackers (${day.tracker_count < 4 ? "Non-compliant (<4)" : "Compliant"})`
+                              : `Target: ≥ 7 trackers (${day.tracker_count < 7 ? "Non-compliant (<7)" : "Compliant"})`
+                            : undefined
+                        }
+                        className={`px-4 py-2.5 tabular-nums font-semibold cursor-default ${day.low_tracker ? "text-red-600" : "text-slate-800"}`}
+                      >
                         {day.tracker_count == null ? "—" : day.tracker_count}
                       </td>
                       <td className="px-4 py-2.5">
