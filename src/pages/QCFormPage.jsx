@@ -537,23 +537,38 @@ const QCFormPage = () => {
         throw new Error('Missing tracker data or user information');
       }
 
-      // Format error list from formRows
+      // Format error list from formRows + enrich each sampled record with its errors
       const errorList = [];
-      formRows.forEach((row, rowIndex) => {
-        row.errors.forEach(error => {
-          const category = afdData?.categories.find(cat => cat.qc_afd_id === error.categoryId);
-          const subcategory = category?.subcategories.find(sub => sub.qc_afd_id === error.subcategoryId);
-          
+      const enrichedRecords = formRows.map((row, rowIndex) => {
+        const resolvedErrors = [];
+
+        row.errors.forEach((error) => {
+          const category = afdData?.categories.find((cat) => cat.qc_afd_id === error.categoryId);
+          const subcategory = category?.subcategories.find((sub) => sub.qc_afd_id === error.subcategoryId);
+
           if (category && subcategory) {
-            errorList.push({
+            const entry = {
               row: rowIndex + 1,
               category: category.name,
               subcategory: subcategory.name,
               error: `${category.name} - ${subcategory.name}`,
-              points: subcategory.points
+              points: Number(subcategory.points) || 0,
+            };
+            errorList.push(entry);
+            resolvedErrors.push({
+              category: entry.category,
+              subcategory: entry.subcategory,
+              error: entry.error,
+              points: entry.points,
             });
           }
         });
+
+        return {
+          ...(row.originalData || {}),
+          has_error: resolvedErrors.length > 0,
+          qc_errors: resolvedErrors,
+        };
       });
 
       // Use the user-selected submission type as the status
@@ -664,7 +679,7 @@ const QCFormPage = () => {
         qc_generated_count: sampleSize || errorMetrics.sampleCount,
         object_count: objectCount,
         qc_object_count: qcObjectCount,
-        qc_file_records: formData, 
+        qc_file_records: enrichedRecords,
         error_list: errorList, 
         comments: comments || '',
         sampling_percentage: samplingPercentage

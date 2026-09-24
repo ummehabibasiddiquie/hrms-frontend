@@ -624,8 +624,8 @@ const RosterManagement = () => {
 
   const handleResetRegenerate = () => {
     setConfirmAction({
-      title: "Reset & Regenerate (All)",
-      message: `This will deactivate all rosters for ${formatMonthYearLabel(monthYear)}, clear Pending/Approved/Rejected request history for the month, and regenerate. Continue?`,
+      title: "Reset & Regeneraate (All)",
+      message: `This will dectivate all rosters for ${formatMonthYearLabel(monthYear)}, clear Pending/Approved/Rejected request history for the month, and regenerate. Continue?`,
       destructive: true,
       onConfirm: () =>
         runAction("reset", async () => {

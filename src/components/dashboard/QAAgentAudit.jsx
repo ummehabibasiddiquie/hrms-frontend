@@ -1458,24 +1458,57 @@ const QAAgentAudit = () => {
               ) : (
                 <div className="space-y-3">
                   {selectedErrorList.map((error, index) => {
-                    const errorLabel = typeof error === 'object' 
-                      ? (error.error || error.name || error.message || JSON.stringify(error)) 
+                    const errorLabel = typeof error === 'object'
+                      ? (error.error || error.name || error.message || [
+                          error.category,
+                          error.subcategory,
+                        ].filter(Boolean).join(' - ') || JSON.stringify(error))
                       : String(error);
-                    
+
+                    const rowNumber =
+                      typeof error === 'object' && error != null && error.row != null && error.row !== ''
+                        ? Number(error.row)
+                        : null;
+                    const points =
+                      typeof error === 'object' && error != null && error.points != null && error.points !== ''
+                        ? Number(error.points)
+                        : null;
+
                     return (
                       <div
                         key={index}
                         className="flex items-start gap-4 p-4 bg-red-50 border-2 border-red-200 rounded-xl hover:bg-red-100 hover:border-red-300 transition-all group"
                       >
-                        <div className="flex items-center justify-center w-8 h-8 bg-red-200 rounded-lg shrink-0 mt-0.5 group-hover:bg-red-300 transition-all">
-                          <span className="text-red-700 font-bold text-sm">#{index + 1}</span>
+                        <div className="flex flex-col items-center gap-1 shrink-0 mt-0.5">
+                          <div className="flex items-center justify-center w-8 h-8 bg-red-200 rounded-lg group-hover:bg-red-300 transition-all">
+                            <span className="text-red-700 font-bold text-sm">#{index + 1}</span>
+                          </div>
+                          {Number.isFinite(rowNumber) && (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-bold tracking-wide">
+                              Row {rowNumber}
+                            </span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start gap-3">
                             <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
-                            <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">
-                              {errorLabel}
-                            </p>
+                            <div className="min-w-0">
+                              <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">
+                                {errorLabel}
+                              </p>
+                              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                                {Number.isFinite(rowNumber) && (
+                                  <span className="font-semibold text-slate-700">
+                                    Sample row: {rowNumber}
+                                  </span>
+                                )}
+                                {Number.isFinite(points) && (
+                                  <span className="px-2 py-0.5 rounded-full bg-white border border-red-200 text-red-700 font-semibold">
+                                    {points} pts
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
