@@ -130,7 +130,7 @@ const Header = ({
       return;
     }
     if (view === 'QA_AGENT_AUDIT') {
-      navigate(dashboardTabUrl('qa_agent_audit'));
+      navigate(dashboardTabUrl('qa_agent_audit', { subtab: 'audit_form' }));
       setIsMobileMenuOpen(false);
       return;
     }
@@ -156,7 +156,7 @@ const Header = ({
       return;
     }
     
-    if (roleId === 6 || role.includes('AGENT')) {
+    if (roleId === 6 || (role.includes('AGENT') && !role.includes('QA') && roleId !== 5)) {
       if (view === ViewState.ENTRY || view === 'ENTRY') {
         navigate(ROUTES.AGENT);
       } else if (view === ViewState.DASHBOARD || view === 'DASHBOARD') {
@@ -205,8 +205,8 @@ const Header = ({
       }
       return items;
     }
-    // For agents (role_id 6 or role includes 'AGENT')
-    if (roleId === 6 || role.includes('AGENT')) {
+    // For field agents only — "QA AGENT" also contains "AGENT"
+    if (roleId === 6 || (role.includes('AGENT') && !role.includes('QA') && roleId !== 5)) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },

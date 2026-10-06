@@ -25,7 +25,8 @@ import {
   Plus,
   X,
   User,
-  AlertCircle
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { getFriendlyErrorMessage } from '../../utils/errorMessages';
 import ErrorMessage from '../common/ErrorMessage';
@@ -36,10 +37,13 @@ import { DateRangePicker } from '../common/CustomCalendar';
 import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
 
 
-const QAAgentAudit = () => {
-  const { user } = useAuth();
+const QA_AUDIT_SUBTABS = ['audit_form', 'audit_report'];
 
-  console.log('[QAAgentAudit] Component rendered. User:', user);
+const QAAgentAudit = ({
+  defaultTab = 'audit_form',
+  hideTabNavigation = false,
+}) => {
+  const { user } = useAuth();
 
   // Helper function to get QC score color classes
   const getQCScoreColorClass = (score) => {
@@ -92,6 +96,52 @@ const QAAgentAudit = () => {
     }
   };
 
+  const getErrorLabel = (error) => {
+    if (error == null) return '';
+    if (typeof error !== 'object') return String(error);
+    return (
+      error.error ||
+      (error.category && error.subcategory ? `${error.category} - ${error.subcategory}` : '') ||
+      error.name ||
+      error.message ||
+      JSON.stringify(error)
+    );
+  };
+
+  const handleAnnotatedQcDownload = async (row) => {
+    const qcId = row?.audit_id || row?.id;
+    if (!qcId) {
+      handleFileDownload(row?.file_name, row?.qc_file_path);
+      return;
+    }
+    try {
+      toast.loading('Preparing file with errors...', { id: 'qc-annotated-dl' });
+      const response = await nodeApi.get(`/qc-records/download-annotated/${qcId}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `QC_Errors_${row.agent_name || 'file'}_${qcId}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Downloading file with highlighted errors...', { id: 'qc-annotated-dl' });
+    } catch (error) {
+      console.error('[QAAgentAudit] Annotated download failed:', error);
+      toast.dismiss('qc-annotated-dl');
+      if (row?.qc_file_path && row.qc_file_path !== 'N/A') {
+        handleFileDownload(row.file_name, row.qc_file_path);
+      } else {
+        toast.error('Failed to download file');
+      }
+    }
+  };
+
   // Helper function to get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
     const now = new Date();
@@ -99,8 +149,9 @@ const QAAgentAudit = () => {
   };
 
   // State management — synced to ?subtab=
-  const [activeTab, setActiveTab] = useRoutedSubTab('audit_form', {
+  const [activeTab, setActiveTab] = useRoutedSubTab(defaultTab, {
     parentTab: 'qa_agent_audit',
+    allowedValues: QA_AUDIT_SUBTABS,
   });
   
   // Separate state for form filters
@@ -488,9 +539,9 @@ const QAAgentAudit = () => {
       console.log('[QAAgentAudit] Fetching all QC audit data...');
 
       // Call the API endpoint - fetch all QC records
-      const response = await nodeApi.get('/qc-records/list');
+      const response = await nodeApi.get('/qc-records/list', { timeout: 60000 });
 
-      console.log('[QAAgentAudit] API Response:', response.data);
+      console.log('[QAAgentAudit] API records:', (response.data?.data || []).length);
 
       // Map API response to expected structure
       const apiData = response.data?.data || [];
@@ -504,7 +555,7 @@ const QAAgentAudit = () => {
         project_name: record.project_name,
         task_name: record.task_name,
         qc_file_path: record.qc_file_path || record['10%_file_path'] || record.file_path || 'N/A',
-        file_name: record.qc_file_path ? record.qc_file_path.split('/').pop() : (record['10%_file_path'] ? record['10%_file_path'].split('/').pop() : (record.file_path ? record.file_path.split('/').pop() : 'N/A')),
+        file_name: record.qc_file_path ? String(record.qc_file_path).split('/').pop() : (record['10%_file_path'] ? String(record['10%_file_path']).split('/').pop() : (record.file_path ? String(record.file_path).split('/').pop() : 'N/A')),
         file_url: record.qc_file_path || record['10%_file_path'] || record.file_path || '', // URL for downloading
         total_qc_performed: record['10%_data_generated_count'] || record.file_record_count || 0,
         '10%_data_generated_count': record['10%_data_generated_count'] || 0, // Keep original field
@@ -551,7 +602,6 @@ const QAAgentAudit = () => {
       });
 
       setAuditData(sortedData);
-      console.log('[QAAgentAudit] Mapped data:', sortedData);
       console.log('[QAAgentAudit] Total records fetched:', sortedData.length);
 
     } catch (err) {
@@ -567,10 +617,10 @@ const QAAgentAudit = () => {
   // Fetch audit form data on component mount and tab change
   useEffect(() => {
     if (activeTab !== 'audit_form') return;
-    if (user?.user_id) {
+    if (user?.user_id || user?.id) {
       fetchAuditData();
     }
-  }, [user, activeTab]);
+  }, [user?.user_id, user?.id, activeTab]);
 
   // Fetch audit report data
   useEffect(() => {
@@ -585,7 +635,7 @@ const QAAgentAudit = () => {
 
         // Call the Python API endpoint with user_id and date range
         const response = await api.post('/qc_audit/report', {
-          logged_in_user_id: user?.user_id,
+          logged_in_user_id: user?.user_id || user?.id,
           start_date: reportDateRange.start,
           end_date: reportDateRange.end
         });
@@ -629,10 +679,10 @@ const QAAgentAudit = () => {
       }
     };
 
-    if (user?.user_id) {
+    if (user?.user_id || user?.id) {
       fetchReportData();
     }
-  }, [user, activeTab, reportDateRange]);
+  }, [user?.user_id, user?.id, activeTab, reportDateRange]);
 
   // Export to Excel - exports ALL user data regardless of filters
   const handleExportExcel = () => {
@@ -736,17 +786,18 @@ const QAAgentAudit = () => {
           </div>
         </div>
 
-        {/* Tabs Navigation */}
+        {!hideTabNavigation && (
         <SubTabsBar
           bordered
           equalWidth
           activeTab={activeTab}
           onChange={setActiveTab}
           tabs={[
-            { id: 'audit_form', label: 'QA Agent Audit Form', icon: FileText },
-            { id: 'audit_report', label: 'QA Agent Audit Report', icon: FileCheck },
+            { id: 'audit_form', label: 'QA Agent Audit Form', shortLabel: 'Form', icon: FileText },
+            { id: 'audit_report', label: 'QA Agent Audit Report', shortLabel: 'Report', icon: FileCheck },
           ]}
         />
+        )}
 
         {/* Tab Content */}
         {activeTab === 'audit_form' && (
@@ -790,12 +841,7 @@ const QAAgentAudit = () => {
       {/* Grouped QA Agent Audit Report */}
       <div className="space-y-4">
         {(() => {
-          console.log('[QAAgentAudit] ========== RENDER CHECK ==========');
-          console.log('[QAAgentAudit] Render - Loading:', loading);
-          console.log('[QAAgentAudit] Render - Error:', error);
-          console.log('[QAAgentAudit] Render - Filtered QA Agents:', filteredQAAgents);
-          console.log('[QAAgentAudit] Render - Filtered QA Agents Length:', filteredQAAgents.length);
-          console.log('[QAAgentAudit] Render - Search Query:', activeTab === 'audit_form' ? formSearchQuery : reportSearchQuery);
+          console.log('[QAAgentAudit] Render - Loading:', loading, 'Error:', error, 'QA agents:', filteredQAAgents.length);
           return null;
         })()}
         {loading ? (
@@ -805,7 +851,7 @@ const QAAgentAudit = () => {
           </div>
         ) : error ? (
           <div className="bg-white rounded-xl shadow-md border border-blue-100 p-6">
-            <ErrorMessage message={error} />
+            <ErrorMessage message={error} onRetry={fetchAuditData} />
           </div>
         ) : filteredQAAgents.length === 0 ? (
           <div className="bg-white rounded-xl shadow-md border border-blue-100 p-12 text-center">
@@ -954,16 +1000,14 @@ const QAAgentAudit = () => {
                             <td className="px-6 py-4 text-gray-900">{row.task_name || '-'}</td>
                             <td className="px-6 py-4 text-center">
                               {row.qc_file_path && row.qc_file_path !== 'N/A' ? (
-                                <a
-                                  href={row.qc_file_path || '#'}
-                                  download={row.qc_file_path.split('/').pop()}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                <button
+                                  type="button"
+                                  onClick={() => handleAnnotatedQcDownload(row)}
                                   className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 text-sm font-bold transition-colors group/link"
                                 >
                                   <Download className="w-4 h-4 group-hover/link:animate-bounce" aria-hidden="true" />
                                   Download
-                                </a>
+                                </button>
                               ) : (
                                 <span className="text-gray-400">-</span>
                               )}
@@ -1458,9 +1502,9 @@ const QAAgentAudit = () => {
               ) : (
                 <div className="space-y-3">
                   {selectedErrorList.map((error, index) => {
-                    const errorLabel = typeof error === 'object' 
-                      ? (error.error || error.name || error.message || JSON.stringify(error)) 
-                      : String(error);
+                    const errorLabel = getErrorLabel(error);
+                    const rowNumber = typeof error === 'object' ? error.row : null;
+                    const points = typeof error === 'object' ? error.points : null;
                     
                     return (
                       <div
@@ -1473,9 +1517,19 @@ const QAAgentAudit = () => {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start gap-3">
                             <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
-                            <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">
-                              {errorLabel}
-                            </p>
+                            <div>
+                              {rowNumber != null && rowNumber !== '' && (
+                                <p className="text-xs font-bold uppercase tracking-wide text-red-700 mb-1">
+                                  Row {rowNumber}
+                                </p>
+                              )}
+                              <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">
+                                {errorLabel}
+                              </p>
+                              {points != null && points !== '' && (
+                                <p className="text-xs text-slate-500 mt-1">Points: {points}</p>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
