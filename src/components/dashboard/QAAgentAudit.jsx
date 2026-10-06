@@ -111,34 +111,57 @@ const QAAgentAudit = ({
   const handleAnnotatedQcDownload = async (row) => {
     const qcId = row?.audit_id || row?.id;
     if (!qcId) {
-      handleFileDownload(row?.file_name, row?.qc_file_path);
+      toast.error('QC record id missing — cannot attach errors');
       return;
     }
-    try {
-      toast.loading('Preparing file with errors...', { id: 'qc-annotated-dl' });
-      const response = await nodeApi.get(`/qc-records/download-annotated/${qcId}`, {
-        responseType: 'blob',
-      });
-      const blob = new Blob([response.data], {
+
+    const saveBlob = (data, fileName) => {
+      const blob = new Blob([data], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `QC_Errors_${row.agent_name || 'file'}_${qcId}.xlsx`;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
+    };
+
+    const looksLikeExcel = (response) => {
+      const type = String(response.headers?.['content-type'] || response.data?.type || '');
+      if (type.includes('json') || type.includes('text/html')) return false;
+      return true;
+    };
+
+    toast.loading('Preparing file with errors...', { id: 'qc-annotated-dl' });
+    const fileName = `QC_Errors_${row.agent_name || 'file'}_${qcId}.xlsx`;
+    try {
+      let response;
+      try {
+        response = await nodeApi.get(`/qc-records/download-annotated/${qcId}`, {
+          responseType: 'blob',
+          timeout: 90000,
+        });
+        if (!looksLikeExcel(response)) throw new Error('Node annotated download did not return Excel');
+      } catch (nodeErr) {
+        console.warn('[QAAgentAudit] Node annotated download failed, trying Flask', nodeErr);
+        response = await api.get(`/qc_audit/download_annotated/${qcId}`, {
+          responseType: 'blob',
+          timeout: 90000,
+        });
+        if (!looksLikeExcel(response)) {
+          throw new Error('Annotated download did not return Excel');
+        }
+      }
+      saveBlob(response.data, fileName);
       toast.success('Downloading file with highlighted errors...', { id: 'qc-annotated-dl' });
     } catch (error) {
       console.error('[QAAgentAudit] Annotated download failed:', error);
-      toast.dismiss('qc-annotated-dl');
-      if (row?.qc_file_path && row.qc_file_path !== 'N/A') {
-        handleFileDownload(row.file_name, row.qc_file_path);
-      } else {
-        toast.error('Failed to download file');
-      }
+      toast.error(getFriendlyErrorMessage(error) || 'Failed to download file with errors', {
+        id: 'qc-annotated-dl',
+      });
     }
   };
 
