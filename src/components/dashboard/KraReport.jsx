@@ -22,6 +22,8 @@ const STATUS_STYLE = {
   "HALF DAY": "bg-amber-50 text-amber-700 border border-amber-200",
   ABSENT: "bg-red-50 text-red-700 border border-red-200",
   LEAVE: "bg-yellow-50 text-yellow-800 border border-yellow-200",
+  "LEAVE (ROSTER)": "bg-yellow-50 text-yellow-800 border border-yellow-200",
+  "LEAVE (UNROSTERED)": "bg-amber-50 text-amber-800 border border-amber-200",
   "WEEK OFF": "bg-sky-50 text-sky-700 border border-sky-200",
   WFH: "bg-teal-50 text-teal-700 border border-teal-200",
   UNROSTERED: "bg-orange-50 text-orange-700 border border-orange-300",
@@ -32,6 +34,8 @@ const STATUS_ROW_TINT = {
   "WEEK OFF": "bg-sky-50/70",
   HOLIDAY: "bg-indigo-50/50",
   LEAVE: "bg-yellow-50/60",
+  "LEAVE (ROSTER)": "bg-yellow-50/60",
+  "LEAVE (UNROSTERED)": "bg-amber-50/50",
   ABSENT: "bg-red-50/40",
   "HALF DAY": "bg-amber-50/40",
 };
@@ -331,8 +335,8 @@ export default function KraReport() {
               title="Roster"
               weight="10%"
               value={scores.schedule}
-              hint={`${counts.present_days || 0} present / ${counts.working_days || 0} working`}
-              hintTooltip={`${counts.present_days || 0} present, half day, or WFH days out of ${counts.working_days || 0} total working days. Formula: (Present / Working days) × 10%`}
+              hint={`${counts.present_days || 0} present / ${counts.schedule_working_days ?? counts.working_days ?? 0} working`}
+              hintTooltip={`${counts.present_days || 0} present, half day, or WFH days out of ${counts.schedule_working_days ?? counts.working_days ?? 0} schedule working days (Leave Roster excluded; Leave Unrostered still counts). Formula: (Present / Working days) × 10%`}
               icon={CalendarDays}
             />
             <ScoreCard
