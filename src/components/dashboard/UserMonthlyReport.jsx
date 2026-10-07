@@ -44,8 +44,7 @@ const UserMonthlyReport = () => {
       normalizedRole === 'assistant manager' ||
       (normalizedRole.includes('assistant') && !normalizedRole.includes('team leader')));
   const canManageAssignedHours = (isAssistantManager || isProjectManager || isAdmin || isSuperAdmin) && !isTeamLeader;
-  // Monthly target is set by roster generate and is not edited afterwards.
-  const canEditMonthlyBaseline = false;
+  const canEditMonthlyBaseline = canManageAssignedHours;
   const canEditExtraHours = canManageAssignedHours;
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
   const canViewTeamColumn = isAdmin || isSuperAdmin || isProjectManager;
