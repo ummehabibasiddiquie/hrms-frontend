@@ -39,6 +39,66 @@ import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
 
 const QA_AUDIT_SUBTABS = ['audit_form', 'audit_report'];
 
+function toDateKey(value) {
+  if (!value) return '';
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+}
+
+function inDateRange(value, range) {
+  if (!range?.start && !range?.end) return true;
+  const key = toDateKey(value);
+  if (!key) return false;
+  if (range.start && key < range.start) return false;
+  if (range.end && key > range.end) return false;
+  return true;
+}
+
+function DualDateFilters({ workedRange, qcRange, onWorkedChange, onQcChange }) {
+  return (
+    <div className="flex flex-wrap items-end gap-x-5 gap-y-3 flex-1 min-w-0">
+      <div>
+        <p className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">Worked Date</p>
+        <DateRangePicker
+          startDate={workedRange.start}
+          endDate={workedRange.end}
+          onStartDateChange={(date) => onWorkedChange((prev) => ({ ...prev, start: date }))}
+          onEndDateChange={(date) => onWorkedChange((prev) => ({ ...prev, end: date }))}
+          label=""
+          description=""
+          showClearButton={false}
+          noWrapper={true}
+          fieldWidth="148px"
+        />
+      </div>
+      <div>
+        <p className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">QC Date</p>
+        <DateRangePicker
+          startDate={qcRange.start}
+          endDate={qcRange.end}
+          onStartDateChange={(date) => onQcChange((prev) => ({ ...prev, start: date }))}
+          onEndDateChange={(date) => onQcChange((prev) => ({ ...prev, end: date }))}
+          label=""
+          description=""
+          showClearButton={false}
+          noWrapper={true}
+          fieldWidth="148px"
+        />
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          onWorkedChange({ start: '', end: '' });
+          onQcChange({ start: '', end: '' });
+        }}
+        className="h-11 px-4 text-sm font-bold text-white rounded-lg bg-blue-600 hover:bg-blue-700 shadow-sm"
+      >
+        Reset
+      </button>
+    </div>
+  );
+}
+
 const QAAgentAudit = ({
   defaultTab = 'audit_form',
   hideTabNavigation = false,
@@ -179,10 +239,12 @@ const QAAgentAudit = ({
   
   // Separate state for form filters
   const [formDateRange, setFormDateRange] = useState({ start: '', end: '' });
+  const [formQcDateRange, setFormQcDateRange] = useState({ start: '', end: '' });
   const [formSearchQuery, setFormSearchQuery] = useState('');
   
   // Separate state for report filters
   const [reportDateRange, setReportDateRange] = useState({ start: '', end: '' });
+  const [reportQcDateRange, setReportQcDateRange] = useState({ start: '', end: '' });
   const [reportSearchQuery, setReportSearchQuery] = useState('');
   
   const [auditData, setAuditData] = useState([]);
@@ -212,9 +274,11 @@ const QAAgentAudit = ({
     console.log('[QAAgentAudit] Grouping audit data. Total records:', auditData.length);
     console.log('[QAAgentAudit] Sample record:', auditData[0]);
     
-    // Backend handles date filtering, so use data as-is
-    let filteredData = auditData;
-    console.log('[QAAgentAudit] Using backend-filtered data:', filteredData.length, 'records');
+    const filteredData = auditData.filter((record) =>
+      inDateRange(record.worked_date, formDateRange) &&
+      inDateRange(record.qc_date, formQcDateRange)
+    );
+    console.log('[QAAgentAudit] Date-filtered form data:', filteredData.length, 'records');
     
     filteredData.forEach(record => {
       const qaName = record.qc_agent_name || 
@@ -279,7 +343,7 @@ const QAAgentAudit = ({
     console.log('[QAAgentAudit] Grouped by QA Agent:', result.length, 'QA agents');
     console.log('[QAAgentAudit] Grouped data:', result);
     return result;
-  }, [auditData]);
+  }, [auditData, formDateRange, formQcDateRange]);
 
   // Group report data by Agent
   const groupedReportData = React.useMemo(() => {
@@ -287,9 +351,11 @@ const QAAgentAudit = ({
     
     console.log('[QAAgentAudit] Grouping report data. Total records:', reportData.length);
     
-    // Backend handles date filtering, so use data as-is
-    let filteredData = reportData;
-    console.log('[QAAgentAudit] Using backend-filtered report data:', filteredData.length, 'records');
+    const filteredData = reportData.filter((record) =>
+      inDateRange(record.worked_date, reportDateRange) &&
+      inDateRange(record.qc_date, reportQcDateRange)
+    );
+    console.log('[QAAgentAudit] Date-filtered report data:', filteredData.length, 'records');
     
     filteredData.forEach(record => {
       const qaAgentKey = record.qc_agent_name || 
@@ -353,7 +419,7 @@ const QAAgentAudit = ({
     
     console.log('[QAAgentAudit] Grouped report data:', result.length, 'QA agents');
     return result;
-  }, [reportData]);
+  }, [reportData, reportDateRange, reportQcDateRange]);
 
   // Filter grouped data by search query
   const filteredQAAgents = React.useMemo(() => {
@@ -610,6 +676,7 @@ const QAAgentAudit = ({
         task_id: record.task_id,
         // Add worked_date for consistent filtering across both tabs
         worked_date: record.date_of_file_submission || record.timestamp || record.audit_datetime,
+        qc_date: record.created_at || record.updated_at || record.timestamp,
         // Audit-related fields (from QC audit submissions)
         qc_checked_file: record.qc_checked_file || null,
         error_notes: record.error_notes || null,
@@ -660,7 +727,9 @@ const QAAgentAudit = ({
         const response = await api.post('/qc_audit/report', {
           logged_in_user_id: user?.user_id || user?.id,
           start_date: reportDateRange.start,
-          end_date: reportDateRange.end
+          end_date: reportDateRange.end,
+          qc_start_date: reportQcDateRange.start,
+          qc_end_date: reportQcDateRange.end,
         });
 
         console.log('[QAAgentAudit] Report API Response:', response.data);
@@ -675,6 +744,7 @@ const QAAgentAudit = ({
           audit_datetime: record.audit_datetime,
           evaluation_date: record.evaluation_date,
           worked_date: record.worked_date,
+          qc_date: record.qc_date || record.evaluation_date,
           project_name: record.project,
           task_name: record.task,
           total_qc_performed: record.total_qcs,
@@ -705,7 +775,7 @@ const QAAgentAudit = ({
     if (user?.user_id || user?.id) {
       fetchReportData();
     }
-  }, [user?.user_id, user?.id, activeTab, reportDateRange]);
+  }, [user?.user_id, user?.id, activeTab, reportDateRange, reportQcDateRange]);
 
   // Export to Excel - exports ALL user data regardless of filters
   const handleExportExcel = () => {
@@ -724,6 +794,7 @@ const QAAgentAudit = ({
         // Export format for audit report - ALL users
         exportData = dataToExport.map(row => ({
           'Worked Date & Time': row.worked_date || '-',
+          'QC Date & Time': row.qc_date || row.evaluation_date || '-',
           'Agent Name': row.agent_name || '-',
           'Project': row.project_name || '-',
           'Task': row.task_name || '-',
@@ -753,6 +824,7 @@ const QAAgentAudit = ({
         // Export format for audit form - ALL QA agents and users
         exportData = dataToExport.map(row => ({
           'Worked Date & Time': row.worked_date || '-',
+          'QC Date & Time': row.qc_date || row.evaluation_date || '-',
           'QA Agent': row.qa_agent_name || '-',
           'Agent Name': row.agent_name || '-',
           'Project': row.project_name || '-',
@@ -843,21 +915,12 @@ const QAAgentAudit = ({
             />
           </div>
 
-          {/* Date Range Filter */}
-          <div className="flex-1">
-            <DateRangePicker
-              startDate={formDateRange.start}
-              endDate={formDateRange.end}
-              onStartDateChange={(date) => setFormDateRange(prev => ({ ...prev, start: date }))}
-              onEndDateChange={(date) => setFormDateRange(prev => ({ ...prev, end: date }))}
-              onClear={() => setFormDateRange({ start: '', end: '' })}
-              label=""
-              description=""
-              showClearButton={true}
-              noWrapper={true}
-              fieldWidth="250px"
-            />
-          </div>
+          <DualDateFilters
+            workedRange={formDateRange}
+            qcRange={formQcDateRange}
+            onWorkedChange={setFormDateRange}
+            onQcChange={setFormQcDateRange}
+          />
         </div>
       </div>
 
@@ -987,6 +1050,7 @@ const QAAgentAudit = ({
                       <thead className="bg-blue-50">
                         <tr>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Worked Date & Time</th>
+                          <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">QC Date & Time</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Agent Name</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Project Name</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Task Name</th>
@@ -1000,7 +1064,7 @@ const QAAgentAudit = ({
                       <tbody className="bg-white divide-y divide-blue-50">
                         {pagedItems.length === 0 ? (
                           <tr>
-                            <td colSpan="9" className="px-6 py-12 text-center">
+                            <td colSpan="10" className="px-6 py-12 text-center">
                               <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
                                 <Users className="w-10 h-10 text-slate-400" />
                               </div>
@@ -1016,6 +1080,12 @@ const QAAgentAudit = ({
                               <div className="flex flex-col">
                                 <span className="text-sm font-semibold">{formatDateTime(row.worked_date).date}</span>
                                 <span className="text-xs text-gray-600">{formatDateTime(row.worked_date).time}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
+                              <div className="flex flex-col">
+                                <span className="text-sm font-semibold">{formatDateTime(row.qc_date).date}</span>
+                                <span className="text-xs text-gray-600">{formatDateTime(row.qc_date).time}</span>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-gray-900 font-medium">{row.agent_name || '-'}</td>
@@ -1119,21 +1189,12 @@ const QAAgentAudit = ({
             />
           </div>
 
-          {/* Date Range Filter */}
-          <div className="flex-1 min-w-[200px] flex items-end">
-            <DateRangePicker
-              startDate={reportDateRange.start}
-              endDate={reportDateRange.end}
-              onStartDateChange={(date) => setReportDateRange(prev => ({ ...prev, start: date }))}
-              onEndDateChange={(date) => setReportDateRange(prev => ({ ...prev, end: date }))}
-              onClear={() => setReportDateRange({ start: '', end: '' })}
-              label=""
-              description=""
-              showClearButton={true}
-              noWrapper={true}
-              fieldWidth="250px"
-            />
-          </div>
+          <DualDateFilters
+            workedRange={reportDateRange}
+            qcRange={reportQcDateRange}
+            onWorkedChange={setReportDateRange}
+            onQcChange={setReportQcDateRange}
+          />
           
           {/* Export Button */}
           <div className="flex items-end flex-shrink-0 ml-4">
@@ -1271,7 +1332,7 @@ const QAAgentAudit = ({
                       <thead className="bg-blue-50">
                         <tr>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Worked Date & Time</th>
-                          <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Evaluation Date & Time</th>
+                          <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">QC Date & Time</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Agent Name</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Project</th>
                           <th className="px-6 py-4 text-left text-xs font-bold text-blue-700 uppercase tracking-wider">Task</th>
@@ -1303,8 +1364,8 @@ const QAAgentAudit = ({
                             </td>
                             <td className="px-6 py-4 text-gray-900 font-medium whitespace-nowrap">
                               <div className="flex flex-col">
-                                <span className="text-sm font-semibold">{formatDateTime(row.evaluation_date).date}</span>
-                                <span className="text-xs text-gray-600">{formatDateTime(row.evaluation_date).time}</span>
+                                <span className="text-sm font-semibold">{formatDateTime(row.qc_date || row.evaluation_date).date}</span>
+                                <span className="text-xs text-gray-600">{formatDateTime(row.qc_date || row.evaluation_date).time}</span>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-gray-900">{row.agent_name || '-'}</td>
