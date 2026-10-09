@@ -2,7 +2,7 @@
  * File: QAAgentQCFormReport.jsx
  * Description: QA Agent's view of all QC forms they've submitted with complete history
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useClientPagination } from '../../hooks/useClientPagination';
 import TablePaginationBar from '../common/TablePaginationBar';
 import { toast } from 'react-hot-toast';
@@ -106,15 +106,8 @@ const QAAgentQCFormReport = () => {
     fetchQCHistory();
   }, []);
 
-  useEffect(() => {
-    if (qcFilter === 'all') return;
-    if (!qcFilterOptions.some((option) => option.value === qcFilter)) {
-      setQcFilter('all');
-    }
-  }, [qcFilter, qcFilterOptions]);
-
   // QC names still on the team, or gone for less than 3 months.
-  const qcFilterOptions = [
+  const qcFilterOptions = useMemo(() => [
     { value: 'all', label: 'All QC' },
     ...[...new Map(
       qcRecords
@@ -123,7 +116,14 @@ const QAAgentQCFormReport = () => {
     ).values()]
       .sort((a, b) => a.localeCompare(b))
       .map(name => ({ value: name, label: name }))
-  ];
+  ], [qcRecords]);
+
+  useEffect(() => {
+    if (qcFilter === 'all') return;
+    if (!qcFilterOptions.some((option) => option.value === qcFilter)) {
+      setQcFilter('all');
+    }
+  }, [qcFilter, qcFilterOptions]);
 
   // Apply filters when search, status, QC, or date range changes
   useEffect(() => {
