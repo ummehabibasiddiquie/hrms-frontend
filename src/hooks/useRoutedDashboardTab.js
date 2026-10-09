@@ -30,11 +30,16 @@ export function useRoutedSubTab(defaultSubtab, options = {}) {
     paramName = "subtab",
     parentTab,
     extraParams = {},
+    allowedValues,
   } = options;
 
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const activeSubTab = searchParams.get(paramName) || defaultSubtab;
+  const rawSubTab = searchParams.get(paramName);
+  const activeSubTab =
+    rawSubTab && (!allowedValues || allowedValues.includes(rawSubTab))
+      ? rawSubTab
+      : defaultSubtab;
   const currentTab = parentTab || searchParams.get("tab") || "overview";
 
   const setActiveSubTab = useCallback(

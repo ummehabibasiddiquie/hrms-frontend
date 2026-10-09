@@ -24,127 +24,53 @@ export default defineConfig(({ mode }) => {
 
     server: {
       port: 5173,
-
+      host: true,
       open: true,
-
-      proxy: {
-        // ...existing code...
-
-        "/auth": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/user": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/tracker": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/dropdown": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/project": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/task": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        // Only proxy dashboard API endpoints, not the frontend route
-        "^/dashboard/(filter|api)": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/permission": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/password_reset": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/user_monthly_tracker": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/qc": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/qc_afd": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/roster": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-
-        "/report_email": {
-          target: apiBaseURL,
-
-          changeOrigin: true,
-
-          secure: false,
-        },
-      },
+      proxy: Object.fromEntries(
+        [
+          "/auth",
+          "/user",
+          "/tracker",
+          "/dropdown",
+          "/project",
+          "/project_category",
+          "/task",
+          "/permission",
+          "/password_reset",
+          "/user_monthly_tracker",
+          "/project_monthly_tracker",
+          "/qc",
+          "/qc_afd",
+          "/qc_audit",
+          "/qc_rework",
+          "/qc_history_user",
+          "/roster",
+          "/report_email",
+          "/qa_tracker",
+          "/kra",
+          "/holiday",
+          "/api_log_list",
+          "/user_monthly_report",
+          "/health",
+        ].map((pathPrefix) => [
+          pathPrefix,
+          { target: apiBaseURL, changeOrigin: true, secure: false },
+        ]).concat([
+          [
+            "^/dashboard/(filter|api)",
+            { target: apiBaseURL, changeOrigin: true, secure: false },
+          ],
+          [
+            "/api/v1",
+            {
+              target: "http://127.0.0.1:8000",
+              changeOrigin: true,
+              secure: false,
+            },
+          ],
+        ])
+      ),
       middlewareMode: false,
-
       historyApiFallback: true,
     },
   };

@@ -8,6 +8,18 @@ import {
 import { showApiError } from "../../utils/errorMessages";
 import { toDateOnlyString, getRosterLockMessage, isRosterLocked } from "../../utils/rosterUtils";
 
+const LEAVE_ROSTER = "LeaveRoster";
+const LEAVE_UNROSTERED = "LeaveUnrostered";
+
+function isLeaveChoice(dayType) {
+  return dayType === LEAVE_ROSTER || dayType === LEAVE_UNROSTERED || dayType === "Leave";
+}
+
+function leaveChoiceForDay(day) {
+  const flag = day?.leave_is_rostered ?? day?.is_rostered;
+  return Number(flag) === 0 ? LEAVE_UNROSTERED : LEAVE_ROSTER;
+}
+
 const RosterDayEditor = ({
   isOpen,
   onClose,
@@ -34,7 +46,7 @@ const RosterDayEditor = ({
   useEffect(() => {
     if (!isOpen || !day) return;
     const isLeaveDay = day.day_type === "Leave";
-    const proposedType = isLeaveDay ? "Leave" : day.day_type || "Working";
+    const proposedType = isLeaveDay ? leaveChoiceForDay(day) : day.day_type || "Working";
     const wasHalf =
       (day.working_type || "").toLowerCase() === "half" ||
       Number(day.is_half_day) === 1 ||
@@ -114,13 +126,13 @@ const RosterDayEditor = ({
 
   const handleDayUpdate = () => {
     let dayType = dayForm.day_type;
-    if (dayType === "Leave") {
+    if (isLeaveChoice(dayType)) {
       dayType = "Working";
     }
     if (isHolidayDay && dayType === "WeekOff") {
       dayType = "Holiday";
     }
-    if (isHolidayDay && dayType === "Leave") {
+    if (isHolidayDay && isLeaveChoice(dayType)) {
       toast.error(
         "Leave or half day cannot be added on a Holiday. Set Working (day or night) if this person must work."
       );
@@ -152,7 +164,7 @@ const RosterDayEditor = ({
       reason: coveringLeave?.reason || "",
       affect_target: leaveForm.affect_target ? 1 : 0,
       is_half_day: leaveForm.is_half_day ? 1 : 0,
-      is_rostered: 1,
+      is_rostered: dayForm.day_type === LEAVE_UNROSTERED ? 0 : 1,
     };
     if (coveringLeave?.leave_id) {
       submitChange("LEAVE_UPDATE", { ...payload, leave_id: coveringLeave.leave_id });
@@ -163,7 +175,7 @@ const RosterDayEditor = ({
 
   const handleSave = () => {
     if (loading) return;
-    if (dayForm.day_type === "Leave") {
+    if (isLeaveChoice(dayForm.day_type)) {
       handleLeaveSave();
       return;
     }
@@ -206,7 +218,7 @@ const RosterDayEditor = ({
                   person must work. Leave and half day cannot be added here.
                 </p>
               )}
-              {day?.day_type === "Leave" && dayForm.day_type !== "Leave" && (
+              {day?.day_type === "Leave" && !isLeaveChoice(dayForm.day_type) && (
                 <p className="sm:col-span-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                   This day is on leave. Set Day Type to Working (or Week Off) and save to restore it
                   after approval.
@@ -234,7 +246,8 @@ const RosterDayEditor = ({
                 >
                   <option value="Working">Working</option>
                   <option value="WeekOff">Week Off</option>
-                  {!isHolidayDay && <option value="Leave">Leave</option>}
+                  {!isHolidayDay && <option value={LEAVE_ROSTER}>Leave (Roster)</option>}
+                  {!isHolidayDay && <option value={LEAVE_UNROSTERED}>Leave (Unrostered)</option>}
                   <option value="Left">Left</option>
                   {(isHolidayDay || dayForm.day_type === "Holiday") && (
                     <option value="Holiday">Holiday</option>
@@ -242,7 +255,7 @@ const RosterDayEditor = ({
                 </select>
               </label>
 
-              {dayForm.day_type === "Leave" && !isHolidayDay && (
+              {isLeaveChoice(dayForm.day_type) && !isHolidayDay && (
                 <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
                   <label className="flex items-start gap-2">
                     <input
@@ -275,7 +288,7 @@ const RosterDayEditor = ({
                 </div>
               )}
 
-              {dayForm.day_type !== "Left" && dayForm.day_type !== "Leave" && (
+              {dayForm.day_type !== "Left" && !isLeaveChoice(dayForm.day_type) && (
                 <>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Shift</span>
@@ -327,7 +340,7 @@ const RosterDayEditor = ({
                   className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  {dayForm.day_type === "Leave" ? "Save Leave Request" : "Save Day Change Request"}
+                  {isLeaveChoice(dayForm.day_type) ? "Save Leave Request" : "Save Day Change Request"}
                 </button>
               </div>
             </div>

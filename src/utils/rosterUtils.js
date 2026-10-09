@@ -209,6 +209,11 @@ export function getDayDisplayInfo(day, options = null) {
   let primaryLabel = effectiveDay.day_type || "";
   let cellClass = "bg-white border-slate-200";
 
+  const leaveLabel =
+    Number(effectiveDay.leave_is_rostered ?? effectiveDay.is_rostered) === 0
+      ? "Leave (Unrostered)"
+      : "Leave (Roster)";
+
   const isHalfLeave =
     effectiveDay.day_type === "Leave" &&
     (effectiveDay.working_type === "Half" ||
@@ -231,7 +236,7 @@ export function getDayDisplayInfo(day, options = null) {
     primaryLabel = "Half Working";
     badges.push("Half Day");
     if (isHalfLeave) {
-      badges.push("Leave");
+      badges.push(leaveLabel);
       const affectTarget =
         Number(effectiveDay.leave_affect_target) === 1 ||
         effectiveDay.leave_affect_target === true ||
@@ -243,7 +248,7 @@ export function getDayDisplayInfo(day, options = null) {
     }
   } else if (effectiveDay.day_type === "Leave") {
     cellClass = "bg-amber-50 border-amber-200";
-    primaryLabel = "Leave";
+    primaryLabel = leaveLabel;
     badges.push("Full Day");
   } else if (effectiveDay.day_type === "Left") {
     cellClass = "bg-rose-50 border-rose-300";
@@ -783,6 +788,8 @@ export function buildPendingCalendarOverlay(requests, rosterMonthId) {
             is_half_day: half,
             leave_affect_target: affect,
             affect_target: affect,
+            leave_is_rostered: Number(p.is_rostered) === 0 ? 0 : 1,
+            is_rostered: Number(p.is_rostered) === 0 ? 0 : 1,
             display_as_half_working: half,
             _pendingLeaveType: "Leave",
           }, summary, overlayOpts);
