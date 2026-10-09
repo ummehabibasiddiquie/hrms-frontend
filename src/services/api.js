@@ -51,8 +51,13 @@ api.interceptors.response.use(
     const isAuthEndpoint = error.config?.url?.includes('/auth/');
     const isLoginPage = window.location.pathname === '/login' || window.location.pathname === '/';
     
-    if (error.response?.status === 401 && !isAuthEndpoint && !isLoginPage) {
-      console.log('[API] 401 detected, redirecting to login');
+    const apiMessage = error.response?.data?.message || "";
+    const accountClosed =
+      apiMessage === "User account is inactive" ||
+      apiMessage === "Logged in user not found";
+
+    if ((error.response?.status === 401 || accountClosed) && !isAuthEndpoint && !isLoginPage) {
+      console.log('[API] Session is no longer valid, redirecting to login');
       localStorage.removeItem(config.tokenKey);
       localStorage.removeItem(config.userKey);
       sessionStorage.clear();

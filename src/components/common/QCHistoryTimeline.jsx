@@ -13,7 +13,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { formatISTDateMedium } from '../../utils/dateTimeIST';
-import { getErrorIdentity } from '../../utils/qcErrorIdentity';
+import { getErrorIdentity, enrichErrorListFromFile } from '../../utils/qcErrorIdentity';
 
 const QCHistoryTimeline = ({ qcRecord, correctionHistory = [], reworkHistory = [], showLateSubmission = false }) => {
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
@@ -122,8 +122,12 @@ const QCHistoryTimeline = ({ qcRecord, correctionHistory = [], reworkHistory = [
     return Array.isArray(errors) ? errors : [];
   };
 
-  const openErrorModal = (errors, type) => {
-    setErrorModal({ open: true, errors: parseErrors(errors), title: `${type} - Errors` });
+  const openErrorModal = (errors, type, fileUrl) => {
+    const parsed = parseErrors(errors);
+    setErrorModal({ open: true, errors: parsed, title: `${type} - Errors` });
+    enrichErrorListFromFile(parsed, fileUrl).then((enriched) => {
+      setErrorModal((prev) => (prev.open ? { ...prev, errors: enriched } : prev));
+    });
   };
 
   const closeErrorModal = () => {
@@ -180,7 +184,7 @@ const QCHistoryTimeline = ({ qcRecord, correctionHistory = [], reworkHistory = [
                   <td className="px-3 py-2 text-center">
                     {errors.length > 0 ? (
                       <button
-                        onClick={() => openErrorModal(event.errors, event.type)}
+                        onClick={() => openErrorModal(event.errors, event.type, event.filePath)}
                         className="relative inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors shadow-sm"
                       >
                         View Errors

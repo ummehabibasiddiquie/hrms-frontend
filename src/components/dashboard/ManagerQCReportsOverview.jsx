@@ -29,21 +29,26 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 import { DateRangePicker } from '../common/CustomCalendar';
 import { exportToCSV } from '../../utils/csvExport';
-import { formatISTDateISO, formatISTDateMedium, formatISTDateTimeParts, formatISTTime, getISTParts } from "../../utils/dateTimeIST";
-import { getErrorIdentity } from "../../utils/qcErrorIdentity";
+import { formatISTDateISO, formatISTDateMedium, formatISTDateTimeParts, formatISTTime, getISTParts, todayISTISO } from "../../utils/dateTimeIST";
+import { getErrorIdentity, enrichErrorListFromFile } from "../../utils/qcErrorIdentity";
 
-const formatLocalDate = (date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+const toDayISO = (value) => {
+  if (value == null || value === "") return "";
+  const raw = String(value).trim();
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+  return formatISTDateISO(raw, "");
 };
 
 const getDefaultDateRange = () => {
-  const today = new Date();
+  const today = todayISTISO() || formatISTDateISO(new Date(), "");
+  const parts = getISTParts(today) || getISTParts(new Date());
+  const monthStart = parts
+    ? `${parts.year}-${String(parts.month).padStart(2, "0")}-01`
+    : today;
   return {
-    startDate: formatLocalDate(new Date(today.getFullYear(), today.getMonth(), 1)),
-    endDate: formatLocalDate(today),
+    startDate: monthStart,
+    endDate: today,
   };
 };
 
@@ -54,7 +59,8 @@ const CompactDateCell = ({ value, showTime = true }) => {
   if (!value || !parts) {
     return <span className="text-xs text-slate-400">—</span>;
   }
-  const includeTime = showTime && !isDateOnlyValue(value);
+  const isMidnight = parts.hours === 0 && parts.minutes === 0 && parts.seconds === 0;
+  const includeTime = showTime && !isDateOnlyValue(value) && !isMidnight;
   return (
     <div className="leading-tight">
       <div className="text-xs font-semibold text-slate-800 whitespace-nowrap">
@@ -71,6 +77,35 @@ const CompactDateCell = ({ value, showTime = true }) => {
 
 const qcEvalDate = (record) => record?.created_at || record?.evaluation_date || record?.updated_at;
 const qcWorkDate = (record) => record?.date_of_file_submission || record?.work_date_only;
+
+/** Agent upload time stored in the Cloudinary file URL (`/v<unix>/` or a 13-digit suffix). */
+const fileUploadedAt = (fileUrl) => {
+  const raw = String(fileUrl || "");
+  const version = raw.match(/\/v(\d{9,11})\//);
+  if (version) {
+    const uploaded = new Date(Number(version[1]) * 1000);
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  const millis = raw.match(/_(\d{13})(?:\D|$)/);
+  if (millis) {
+    const uploaded = new Date(Number(millis[1]));
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  return null;
+};
+
+const reworkEvalAt = (row) => {
+  if (!isCompletedQcStatus(row?.rework_file_qc_status) && !hasStoredScore(row?.rework_qc_score)) return null;
+  return row?.updated_at || null;
+};
+
+const correctionEvalAt = (row) => {
+  if (!isCompletedQcStatus(row?.correction_file_qc_status) && !hasStoredScore(row?.correction_qc_score)) return null;
+  return row?.updated_at || null;
+};
+
+const reworkFileAt = (row) => row?.file_submitted_at || fileUploadedAt(row?.rework_file_path);
+const correctionFileAt = (row) => row?.file_submitted_at || fileUploadedAt(row?.correction_file_path);
 
 const isPendingQcStatus = (status) => String(status || "").toLowerCase() === "pending";
 const isCompletedQcStatus = (status) => String(status || "").toLowerCase() === "completed";
@@ -101,11 +136,19 @@ const getCorrectionCycleState = (c) => {
   return "awaiting_agent";
 };
 
+const statusBadgeClass = (label) => {
+  const status = String(label || "").toLowerCase();
+  if (status === "rework") return "bg-red-100 text-red-700";
+  if (status === "correction") return "bg-yellow-100 text-yellow-700";
+  return "bg-green-100 text-green-700";
+};
+
 const CycleStatusBadge = ({ state, doneLabel, awaitingAgentLabel }) => {
   if (state === "done") {
+    const label = doneLabel || "Completed";
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-green-100 text-green-700">
-        {doneLabel || "Completed"}
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${statusBadgeClass(label)}`}>
+        {label}
       </span>
     );
   }
@@ -124,11 +167,19 @@ const CycleStatusBadge = ({ state, doneLabel, awaitingAgentLabel }) => {
 };
 
 const dayInRange = (value, startDate, endDate) => {
-  const day = formatISTDateISO(value);
+  const day = toDayISO(value);
   if (!day) return false;
-  if (startDate && day < startDate) return false;
-  if (endDate && day > endDate) return false;
+  const from = toDayISO(startDate);
+  const to = toDayISO(endDate);
+  if (from && day < from) return false;
+  if (to && day > to) return false;
   return true;
+};
+
+/** Keep a row only when its work date is inside the selected range. */
+const recordMatchesDateRange = (record, startDate, endDate) => {
+  if (!startDate && !endDate) return true;
+  return dayInRange(qcWorkDate(record), startDate, endDate);
 };
 
 const getVisibleReworks = (record) => [...(record.qc_rework || [])];
@@ -244,7 +295,7 @@ const ManagerQCReportsOverview = () => {
     }
 
     if (startDate || endDate) {
-      filtered = filtered.filter((record) => dayInRange(qcWorkDate(record), startDate, endDate));
+      filtered = filtered.filter((record) => recordMatchesDateRange(record, startDate, endDate));
     }
 
     setFilteredRecords(filtered);
@@ -343,8 +394,12 @@ const ManagerQCReportsOverview = () => {
     return { types: uniqueTypes, count: errors.length };
   };
 
-  const openErrorModal = (errors, title) => {
-    setErrorModal({ open: true, errors: parseErrors(errors), title });
+  const openErrorModal = (errors, title, fileUrls) => {
+    const parsed = parseErrors(errors);
+    setErrorModal({ open: true, errors: parsed, title });
+    enrichErrorListFromFile(parsed, fileUrls).then((enriched) => {
+      setErrorModal((prev) => (prev.open ? { ...prev, errors: enriched } : prev));
+    });
   };
 
   const handleReset = () => {
@@ -434,14 +489,13 @@ const ManagerQCReportsOverview = () => {
             const workDt = formatDate(record.date_of_file_submission);
             
             historyData.push({
-              'Type': 'Rework',
+              'Type': rework.rework_count ? `Rework #${rework.rework_count}` : 'Rework',
               'Evaluation Date': evalDt.date,
               'Work Date': workDt.date,
               'QA Name': record.qa_agent_name || 'N/A',
               'Agent Name': record.agent_name || 'N/A',
               'Project Name': record.project_name || 'N/A',
               'Task Name': record.task_name || 'N/A',
-              'Count': rework.rework_count || '-',
               'Records': rework.file_record_count || 0,
               'QC Records': rework.qc_data_generated_count || 0,
               'No. of Errors': count,
@@ -458,14 +512,13 @@ const ManagerQCReportsOverview = () => {
             const workDt = formatDate(record.date_of_file_submission);
             
             historyData.push({
-              'Type': 'Correction',
+              'Type': correction.correction_count ? `Correction #${correction.correction_count}` : 'Correction',
               'Evaluation Date': evalDt.date,
               'Work Date': workDt.date,
               'QA Name': record.qa_agent_name || 'N/A',
               'Agent Name': record.agent_name || 'N/A',
               'Project Name': record.project_name || 'N/A',
               'Task Name': record.task_name || 'N/A',
-              'Count': correction.correction_count || '-',
               'Records': '-',
               'QC Records': '-',
               'No. of Errors': '-',
@@ -482,10 +535,10 @@ const ManagerQCReportsOverview = () => {
       }
 
       // Calculate summary
-      const totalRework = historyData.filter(h => h.Type === 'Rework').length;
-      const totalCorrection = historyData.filter(h => h.Type === 'Correction').length;
+      const totalRework = historyData.filter(h => String(h.Type).startsWith('Rework')).length;
+      const totalCorrection = historyData.filter(h => String(h.Type).startsWith('Correction')).length;
       const totalReworkErrors = historyData
-        .filter(h => h.Type === 'Rework' && h['No. of Errors'] !== '-')
+        .filter(h => String(h.Type).startsWith('Rework') && h['No. of Errors'] !== '-')
         .reduce((sum, h) => sum + (parseInt(h['No. of Errors']) || 0), 0);
 
       historyData.push({
@@ -496,7 +549,6 @@ const ManagerQCReportsOverview = () => {
         'Agent Name': '',
         'Project Name': `Total Rework: ${totalRework}`,
         'Task Name': `Total Correction: ${totalCorrection}`,
-        'Count': '',
         'Records': '',
         'QC Records': '',
         'No. of Errors': totalReworkErrors,
@@ -710,20 +762,33 @@ const ManagerQCReportsOverview = () => {
             </div>
           </div>
 
-          {/* Date Range Filter - Applied to Work Date */}
+          {/* Date Range Filter */}
           <div className="date-range-compact">
             <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
               <Calendar className="w-3 h-3 text-blue-600" />
-              Work Date Range
+              Work Date
             </label>
             <DateRangePicker
-              startDate={startDate}
-              endDate={endDate}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
+              startDate={toDayISO(startDate)}
+              endDate={toDayISO(endDate)}
+              onStartDateChange={(value) => {
+                const next = toDayISO(value);
+                setStartDate(next);
+                if (next && endDate && toDayISO(endDate) < next) {
+                  setEndDate(next);
+                }
+              }}
+              onEndDateChange={(value) => {
+                const next = toDayISO(value);
+                setEndDate(next);
+                if (next && startDate && next < toDayISO(startDate)) {
+                  setStartDate(next);
+                }
+              }}
               showClearButton={false}
               noWrapper={true}
               compact={true}
+              fieldWidth="148px"
             />
           </div>
         </div>
@@ -865,7 +930,7 @@ const ManagerQCReportsOverview = () => {
                               </span>
                               {hasMore && (
                                 <button
-                                  onClick={() => openErrorModal(record.error_list, `All Errors (${count})`)}
+                                  onClick={() => openErrorModal(record.error_list, `All Errors (${count})`, [record.qc_file_path, record.whole_file_path, record.tracker_file])}
                                   className="text-xs text-blue-600 hover:text-blue-800 font-semibold text-left hover:underline"
                                 >
                                   View
@@ -907,8 +972,7 @@ const ManagerQCReportsOverview = () => {
                                   <tr>
                                     <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Type</th>
                                     <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Eval Date</th>
-                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Submitted</th>
-                                    <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Count</th>
+                                    <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Work Date</th>
                                     <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Records</th>
                                     <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">QC Rec</th>
                                     <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Errors</th>
@@ -932,12 +996,11 @@ const ManagerQCReportsOverview = () => {
                                           </span>
                                         </td>
                                         <td className="px-3 py-2 whitespace-nowrap">
-                                          {qcDone ? <CompactDateCell value={rework.updated_at || rework.created_at} showTime /> : <Dash />}
+                                          {reworkEvalAt(rework) ? <CompactDateCell value={reworkEvalAt(rework)} showTime /> : <Dash />}
                                         </td>
                                         <td className="px-3 py-2 whitespace-nowrap">
-                                          {qcDone ? <CompactDateCell value={rework.updated_at || rework.created_at} showTime /> : <Dash />}
+                                          {reworkFileAt(rework) ? <CompactDateCell value={reworkFileAt(rework)} showTime /> : <Dash />}
                                         </td>
-                                        <td className="px-3 py-2 text-center font-bold text-orange-600">{rework.rework_count || '-'}</td>
                                         <td className="px-3 py-2 text-center">{qcDone ? (rework.file_record_count ?? '-') : <Dash />}</td>
                                         <td className="px-3 py-2 text-center">{qcDone ? (rework.qc_data_generated_count ?? '-') : <Dash />}</td>
                                         <td className="px-3 py-2 text-center">
@@ -964,7 +1027,7 @@ const ManagerQCReportsOverview = () => {
                                               {(types.length > 1 || count > 1) && (
                                                 <button
                                                   type="button"
-                                                  onClick={() => openErrorModal(rework.rework_error_list, `Rework Errors (${count})`)}
+                                                  onClick={() => openErrorModal(rework.rework_error_list, `Rework Errors (${count})`, [rework.rework_file_path, record.qc_file_path])}
                                                   className="text-xs text-blue-600 font-semibold text-left hover:underline"
                                                 >
                                                   View
@@ -997,12 +1060,11 @@ const ManagerQCReportsOverview = () => {
                                           </span>
                                         </td>
                                         <td className="px-3 py-2 whitespace-nowrap">
-                                          {qcDone ? <CompactDateCell value={correction.updated_at || correction.created_at} showTime /> : <Dash />}
+                                          {correctionEvalAt(correction) ? <CompactDateCell value={correctionEvalAt(correction)} showTime /> : <Dash />}
                                         </td>
                                         <td className="px-3 py-2 whitespace-nowrap">
-                                          {qcDone ? <CompactDateCell value={correction.updated_at || correction.created_at} showTime /> : <Dash />}
+                                          {correctionFileAt(correction) ? <CompactDateCell value={correctionFileAt(correction)} showTime /> : <Dash />}
                                         </td>
-                                        <td className="px-3 py-2 text-center font-bold text-yellow-700">{correction.correction_count || '-'}</td>
                                         <td className="px-3 py-2 text-center">{qcDone ? (correction.file_record_count ?? '-') : <Dash />}</td>
                                         <td className="px-3 py-2 text-center">{qcDone ? (correction.qc_generated_count ?? correction.qc_data_generated_count ?? '-') : <Dash />}</td>
                                         <td className="px-3 py-2 text-center">
@@ -1029,7 +1091,7 @@ const ManagerQCReportsOverview = () => {
                                               {(types.length > 1 || count > 1) && (
                                                 <button
                                                   type="button"
-                                                  onClick={() => openErrorModal(correction.correction_error_list, `Correction Errors (${count})`)}
+                                                  onClick={() => openErrorModal(correction.correction_error_list, `Correction Errors (${count})`, [correction.correction_file_path, correction.qc_file_path, record.qc_file_path])}
                                                   className="text-xs text-blue-600 font-semibold text-left hover:underline"
                                                 >
                                                   View

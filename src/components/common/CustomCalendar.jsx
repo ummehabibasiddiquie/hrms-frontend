@@ -62,14 +62,19 @@ export const DateRangePicker = ({
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
 
-  // Convert yyyy-mm-dd to Date object (local midnight — avoid UTC shift)
+  // Convert stored date to Date object (local midnight — avoid UTC shift)
   const parseDate = (dateStr) => {
     if (!dateStr) return undefined;
-    const match = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-      return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    const ymd = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (ymd) {
+      return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
     }
-    return new Date(dateStr);
+    const dmy = String(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dmy) {
+      return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+    }
+    const parsed = new Date(dateStr);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   };
 
   // Convert Date to yyyy-mm-dd (local calendar day)

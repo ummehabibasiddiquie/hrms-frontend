@@ -6,7 +6,7 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
-import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2, RefreshCw, AlertTriangle, XCircle, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileText, FileCheck, Users as UsersIcon, Search, X, RotateCcw, Check, Loader2, RefreshCw, AlertTriangle, XCircle, AlertCircle, CheckCircle2, Clock, FolderOpen } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
 import nodeApi from "../../services/nodeApi";
@@ -22,8 +22,8 @@ import { useClientPagination } from "../../hooks/useClientPagination";
 import TablePaginationBar from "../common/TablePaginationBar";
 import { useRoutedSubTab } from "../../hooks/useRoutedDashboardTab";
 import SubTabsBar from "../common/SubTabsBar";
-import { formatISTDateTimeLong, formatISTDateTimeParts, getISTParts, todayISTISO } from "../../utils/dateTimeIST";
-import { getErrorIdentity } from "../../utils/qcErrorIdentity";
+import { formatISTDateTimeParts, getISTParts, todayISTISO } from "../../utils/dateTimeIST";
+import { getErrorIdentity, enrichErrorListFromFile } from "../../utils/qcErrorIdentity";
 
 
 // Helper to get today's date in YYYY-MM-DD format (IST)
@@ -40,7 +40,8 @@ const isDateInRange = (dateValue, startDate, endDate) => {
     const raw = String(dateValue || "").trim().slice(0, 10);
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) iso = raw;
   }
-  if (!iso) return false;
+  // Keep the row if the date cannot be parsed — pending files must not vanish.
+  if (!iso) return true;
   return iso >= startDate && iso <= endDate;
 };
 
@@ -53,7 +54,7 @@ const mapPendingQcRecord = (record) => {
 
   if (hasRework) {
     type = "rework";
-    updatedAt = record.latest_rework.updated_at;
+    updatedAt = record.latest_rework.updated_at || record.latest_rework.created_at;
     attempt = record.latest_rework.rework_count;
     previousScore = record.latest_rework.previous_qc_score;
     previousErrors = record.latest_rework.previous_error_list;
@@ -62,7 +63,7 @@ const mapPendingQcRecord = (record) => {
     trackerFile = record.latest_rework.rework_file_path;
   } else if (hasCorrection) {
     type = "correction";
-    updatedAt = record.latest_correction.updated_at;
+    updatedAt = record.latest_correction.updated_at || record.latest_correction.created_at;
     attempt = record.latest_correction.correction_count;
     previousScore = record.latest_correction.previous_qc_score;
     previousErrors = record.latest_correction.previous_error_list;
@@ -96,7 +97,9 @@ const mapPendingQcRecord = (record) => {
     task_id: record.task_id,
     project_category_id: record.project_category_id,
     qc_percentage: record.sampling_percentage || record.qc_percentage || 50,
-    date_of_file_submission: updatedAt,
+    work_date: record.work_date || record.date_time || null,
+    rework_at: updatedAt,
+    date_of_file_submission: record.work_date || record.date_time || updatedAt,
   };
 };
 
@@ -143,6 +146,19 @@ const parseTrackerDate = (value) => {
   const text = String(value).trim().replace("T", " ").slice(0, 19);
   const d = new Date(text.includes(" ") ? text.replace(" ", "T") : text);
   return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const taskGroupKey = (projectId, taskId) => `${projectId ?? "p"}::${taskId ?? "t"}`;
+
+/** Files in a task: tracker order (oldest/first submitted), never name A–Z or newest-first. */
+const compareFilesInTaskOrder = (a, b) => {
+  const aid = Number(a?.tracker_id);
+  const bid = Number(b?.tracker_id);
+  if (Number.isFinite(aid) && Number.isFinite(bid) && aid !== bid) return aid - bid;
+  const at = parseTrackerDate(a?.date_time || a?.updated_at || a?.file_submitted_at || a?.date_of_file_submission);
+  const bt = parseTrackerDate(b?.date_time || b?.updated_at || b?.file_submitted_at || b?.date_of_file_submission);
+  if (at && bt && at.getTime() !== bt.getTime()) return at.getTime() - bt.getTime();
+  return 0;
 };
 
 const isWeekend = (d) => {
@@ -247,14 +263,14 @@ const resolveTrackerSla = (tracker) => {
   };
 };
 
-const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedAgentId }) => {
+const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSaveStatus, savingStatus, correctionStatus, setCorrectionStatus, user, selectedGroupKey }) => {
   const [errorModal, setErrorModal] = useState({ open: false, errors: [], title: '' });
-  const trackerPagination = useClientPagination(trackers, { resetKeys: [selectedAgentId, trackers.length] });
+  const trackerPagination = useClientPagination(trackers, { resetKeys: [selectedGroupKey, trackers.length] });
 
 
   const formatDateTime = (dateString) => {
-    if (!dateString) return '—';
-    return formatISTDateTimeLong(dateString, dateString);
+    if (!dateString) return { date: '—', time: '' };
+    return formatISTDateTimeParts(dateString);
   };
 
   const getScoreClass = (score) => {
@@ -272,8 +288,12 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
     return Array.isArray(errors) ? errors : [];
   };
 
-  const openErrorModal = (errors, title) => {
-    setErrorModal({ open: true, errors: parseErrors(errors), title });
+  const openErrorModal = (errors, title, fileUrls) => {
+    const parsed = parseErrors(errors);
+    setErrorModal({ open: true, errors: parsed, title });
+    enrichErrorListFromFile(parsed, fileUrls).then((enriched) => {
+      setErrorModal((prev) => (prev.open ? { ...prev, errors: enriched } : prev));
+    });
   };
 
   const getTypeBadge = (type) => {
@@ -295,13 +315,15 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-x-auto">
+        <table className="w-full min-w-[980px] text-sm">
           <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold">Type</th>
-              <th className="px-4 py-3 text-left font-semibold">Project / Task</th>
-              <th className="px-4 py-3 text-left font-semibold">Submitted Date & Time</th>
+              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Type</th>
+              <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Agent</th>
+              <th className="px-3 py-3 text-left font-semibold min-w-[220px]">Project / Task</th>
+              <th className="px-3 py-3 text-left font-semibold w-[7.5rem]">Work Date</th>
+              <th className="px-3 py-3 text-left font-semibold w-[7.5rem]">Rework / Correction<br />Date & Time</th>
               <th className="px-4 py-3 text-center font-semibold">Attempt</th>
               <th className="px-4 py-3 text-center font-semibold">Previous Score</th>
               <th className="px-4 py-3 text-center font-semibold">Previous Errors</th>
@@ -318,14 +340,36 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
                   <td className="px-4 py-3">
                     {getTypeBadge(tracker.type)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 font-medium text-slate-800">
+                    {tracker.agent_name || tracker.user_name || "—"}
+                  </td>
+                  <td className="px-3 py-3 align-top max-w-[260px]">
                     <div>
-                      <p className="font-medium text-slate-800">{tracker.project_name || '—'}</p>
-                      <p className="text-xs text-slate-500">{tracker.task_name || '—'}</p>
+                      <p className="font-medium text-slate-800 break-all leading-snug">{tracker.project_name || '—'}</p>
+                      <p className="text-xs text-slate-500 break-all leading-snug">{tracker.task_name || '—'}</p>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {formatDateTime(tracker.updated_at)}
+                  <td className="px-3 py-3 text-slate-600 align-top w-[7.5rem]">
+                    {(() => {
+                      const dateTime = formatDateTime(tracker.work_date);
+                      return (
+                        <div>
+                          <p className="font-medium leading-snug">{dateTime.date}</p>
+                          {dateTime.time ? <p className="text-xs text-slate-500 leading-snug">{dateTime.time}</p> : null}
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-3 py-3 text-slate-600 align-top w-[7.5rem]">
+                    {(() => {
+                      const dateTime = formatDateTime(tracker.rework_at || tracker.updated_at);
+                      return (
+                        <div>
+                          <p className="font-medium leading-snug">{dateTime.date}</p>
+                          {dateTime.time ? <p className="text-xs text-slate-500 leading-snug">{dateTime.time}</p> : null}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-700">
@@ -338,7 +382,11 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
                   <td className="px-4 py-3 text-center">
                     {errors.length > 0 ? (
                       <button
-                        onClick={() => openErrorModal(tracker.previous_error_list, `Previous Errors - ${tracker.type === 'rework' ? 'Rework' : 'Correction'} #${tracker.attempt}`)}
+                        onClick={() => openErrorModal(
+                          tracker.previous_error_list,
+                          `Previous Errors - ${tracker.type === 'rework' ? 'Rework' : 'Correction'} #${tracker.attempt}`,
+                          [tracker.qc_file_path, tracker.file_path, tracker.tracker_file]
+                        )}
                         className="relative inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors"
                       >
                         View
@@ -495,11 +543,12 @@ const QAAgentList = () => {
   const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
   const roleText = String(user?.role_name || user?.role || user?.user_role || '').trim().toLowerCase();
   const isQA = roleId === 5 || roleText === 'qa' || roleText.includes('qa');
-  const [agents, setAgents] = useState([]);
+  const [listingReady, setListingReady] = useState(false);
+  const [listingAgentIds, setListingAgentIds] = useState(null);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
   const [qcFormLoading, setQcFormLoading] = useState(null); // Track specific tracker_id that's loading
-  const [agentTrackers, setAgentTrackers] = useState({});
+  const [fileGroups, setFileGroups] = useState({});
   const [allPendingTrackers, setAllPendingTrackers] = useState([]);
   const [showAllUrgent, setShowAllUrgent] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -514,8 +563,7 @@ const QAAgentList = () => {
       setActiveTab('agent_files');
     }
   }, [activeTab, isQA, setActiveTab]);  
-  // Selected agent for split view
-  const [selectedAgentId, setSelectedAgentId] = useState(null);
+  const [selectedGroupKey, setSelectedGroupKey] = useState(null);
   
   // Global date filter state
   const [globalDateFilter, setGlobalDateFilter] = useState({ 
@@ -599,70 +647,14 @@ const QAAgentList = () => {
 
         myTrackers = myTrackers.filter(trackerVisibleInListing);
         setAllPendingTrackers(myTrackers);
-        
-        // Build agents list from pending trackers (already 3-month filtered)
-        const agentsMap = {};
-        myTrackers.forEach(tracker => {
-          if (!agentsMap[String(tracker.user_id)]) {
-            agentsMap[String(tracker.user_id)] = {
-              user_id: tracker.user_id,
-              user_name: tracker.user_name || '-',
-            };
-          }
-        });
-        
-        // Also fetch pending QC files to get agents with rework/correction files
-        try {
-          const pendingQCRes = await api.post('/qc_rework/view_pending_qc_files', {});
-          const pendingRecords = pendingQCRes.data?.data?.record || [];
-          
-          // Add agents from pending QC files to agents map (only if still in 3-month listing)
-          pendingRecords.forEach(record => {
-            const agentName = record.agent_name;
-            const agentUserId = record.user_id ?? record.agent_id;
-            if (agentUserId != null) {
-              if (listingAgentIds && listingAgentIds.size > 0 && !listingAgentIds.has(String(agentUserId))) {
-                return;
-              }
-              if (!agentsMap[String(agentUserId)]) {
-                agentsMap[String(agentUserId)] = {
-                  user_id: agentUserId,
-                  user_name: agentName || '-',
-                };
-              }
-              return;
-            }
-            const existingAgent = Object.values(agentsMap).find(a => a.user_name === agentName);
-            if (!existingAgent && agentName) {
-              const tempId = `temp_${agentName.replace(/\s+/g, '_')}`;
-              agentsMap[tempId] = {
-                user_id: tempId,
-                user_name: agentName,
-              };
-            }
-          });
-        } catch (err) {
-          logError('[QAAgentList] Error fetching pending QC files for agents:', err);
-          // Continue without pending QC agents
-        }
-        
-        const allAgents = Object.values(agentsMap);
-
-        // File counts are loaded separately for ALL agents (same source as detail panel)
-        setAgents(allAgents);
-        setAgentTrackers({});
-
-        // Auto-select first agent if available
-        if (allAgents.length > 0) {
-          setSelectedAgentId(allAgents[0].user_id);
-        }
-        
-        log('[QAAgentList] Agents loaded:', allAgents.length);
+        setListingAgentIds(listingAgentIds);
+        setListingReady(true);
+        log("[QAAgentList] Listing ready for project/task groups");
       } catch (err) {
         logError('[QAAgentList] Error fetching agent list data:', err);
         toast.error("Failed to load agent data");
-        setAgents([]);
-        setAgentTrackers({});
+        setListingReady(false);
+        setFileGroups({});
       } finally {
         setLoading(false);
       }
@@ -670,13 +662,23 @@ const QAAgentList = () => {
     fetchAllData();
   }, [user?.user_id, device_id, device_type]);
 
-  // Build tracker-file map for EVERY agent using the same API + date filters as the detail panel
+  const isTrackerVisible = (tracker) => {
+    const uid = String(tracker.user_id ?? tracker.agent_id ?? "");
+    if (listingAgentIds && listingAgentIds.size > 0) {
+      return listingAgentIds.has(uid);
+    }
+    const isActive = tracker.user_is_active ?? tracker.is_active;
+    const deactivatedAt = tracker.user_deactivated_at ?? tracker.deactivated_at;
+    if (isActive === undefined && deactivatedAt === undefined) return true;
+    return isAgentVisibleInListing(isActive, deactivatedAt);
+  };
+
   const loadAllTrackerFiles = async (dateFrom, dateTo) => {
-    if (!user?.user_id || agents.length === 0) return;
+    if (!user?.user_id) return;
     const requestId = ++fileLoadRequestId.current;
     setAgentLoading(true);
     try {
-      log('[QAAgentList] Loading tracker files for all agents:', { dateFrom, dateTo });
+      log("[QAAgentList] Loading tracker files by project/task:", { dateFrom, dateTo });
 
       const trackerRes = await api.post("/tracker/view", {
         logged_in_user_id: user?.user_id,
@@ -695,30 +697,30 @@ const QAAgentList = () => {
         myTrackers = myTrackers.filter((t) => String(t.qa_agent_id) === String(user?.user_id));
       }
 
-      const byAgent = {};
-      agents.forEach((agent) => {
-        byAgent[String(agent.user_id)] = [];
-      });
-
+      const byTask = {};
       myTrackers.forEach((tracker) => {
         if (!tracker.tracker_file) return;
-        const key = String(tracker.user_id);
-        if (byAgent[key] === undefined) return;
-        byAgent[key].push({
+        if (!isTrackerVisible(tracker)) return;
+        const key = taskGroupKey(tracker.project_id, tracker.task_id);
+        if (!byTask[key]) byTask[key] = [];
+        byTask[key].push({
           ...tracker,
-          user_name: tracker.user_name || agents.find((a) => String(a.user_id) === key)?.user_name || "-",
+          user_name: tracker.user_name || "-",
           project_name: tracker.project_name || projectNameMap[String(tracker.project_id)] || "-",
           task_name: tracker.task_name || taskNameMap[String(tracker.task_id)] || "-",
         });
       });
+      Object.keys(byTask).forEach((key) => {
+        byTask[key].sort(compareFilesInTaskOrder);
+      });
 
-      setAgentTrackers(byAgent);
-      log('[QAAgentList] Tracker file counts loaded for agents:', Object.keys(byAgent).length);
+      setFileGroups(byTask);
+      log("[QAAgentList] Tracker files grouped by project/task:", Object.keys(byTask).length);
     } catch (error) {
       if (requestId !== fileLoadRequestId.current) return;
       logError("[QAAgentList] Error loading tracker files:", error);
       toast.error("Failed to fetch tracker data");
-      setAgentTrackers({});
+      setFileGroups({});
     } finally {
       if (requestId === fileLoadRequestId.current) {
         setAgentLoading(false);
@@ -726,49 +728,46 @@ const QAAgentList = () => {
     }
   };
 
-  // Build rework/correction map for EVERY agent using the same filters as the detail panel
   const loadAllReworkFiles = async (dateFrom, dateTo) => {
-    if (!user?.user_id || agents.length === 0) return;
+    if (!user?.user_id) return;
     const requestId = ++fileLoadRequestId.current;
     setAgentLoading(true);
     try {
-      log('[QAAgentList] Loading pending rework/correction files for all agents:', { dateFrom, dateTo });
+      log("[QAAgentList] Loading pending rework/correction files by project/task:", { dateFrom, dateTo });
 
       const response = await api.post("/qc_rework/view_pending_qc_files", {});
       if (requestId !== fileLoadRequestId.current) return;
 
       const records = response.data?.data?.record || [];
-
       const mapped = records.map(mapPendingQcRecord).filter(Boolean);
-      const dated = mapped.filter((file) => isDateInRange(file.updated_at, dateFrom, dateTo));
+      const dated = mapped.filter((file) => isDateInRange(file.work_date, dateFrom, dateTo));
 
-      const byAgent = {};
-      agents.forEach((agent) => {
-        byAgent[String(agent.user_id)] = [];
-      });
-
+      const byTask = {};
       dated.forEach((file) => {
-        const agentId = file.agent_id ?? file.user_id;
-        let key = String(agentId);
-        if (byAgent[key] === undefined) {
-          const byName = agents.find((a) => a.user_name === file.agent_name);
-          if (byName) key = String(byName.user_id);
-        }
-        if (byAgent[key] === undefined) return;
-        byAgent[key].push(file);
+        if (!isTrackerVisible(file)) return;
+        const key = taskGroupKey(file.project_id, file.task_id);
+        if (!byTask[key]) byTask[key] = [];
+        byTask[key].push({
+          ...file,
+          project_name: file.project_name || projectNameMap[String(file.project_id)] || "-",
+          task_name: file.task_name || taskNameMap[String(file.task_id)] || "-",
+        });
+      });
+      Object.keys(byTask).forEach((key) => {
+        byTask[key].sort(compareFilesInTaskOrder);
       });
 
-      setAgentTrackers(byAgent);
-      log('[QAAgentList] Rework/correction file counts loaded:', {
+      setFileGroups(byTask);
+      log("[QAAgentList] Rework/correction grouped by project/task:", {
         totalPending: mapped.length,
         inDateRange: dated.length,
-        agents: Object.keys(byAgent).length,
+        groups: Object.keys(byTask).length,
       });
     } catch (error) {
       if (requestId !== fileLoadRequestId.current) return;
       logError("[QAAgentList] Error loading pending QC files:", error);
       toast.error("Failed to fetch pending QC files data");
-      setAgentTrackers({});
+      setFileGroups({});
     } finally {
       if (requestId === fileLoadRequestId.current) {
         setAgentLoading(false);
@@ -776,55 +775,73 @@ const QAAgentList = () => {
     }
   };
 
-  // Rebuild left-side counts + detail data whenever tab or date range changes
   useEffect(() => {
-    if (loading || agents.length === 0) return;
+    if (!user?.user_id) return;
     if (activeTab === "agent_files") {
       loadAllTrackerFiles(globalDateFilter.startDate, globalDateFilter.endDate);
     } else if (activeTab === "agent_rework_files" || activeTab === "rework_review") {
       loadAllReworkFiles(globalDateFilter.startDate, globalDateFilter.endDate);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: reload only on tab/date/agents
-  }, [agents, activeTab, globalDateFilter.startDate, globalDateFilter.endDate, loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on tab/date/listing
+  }, [user?.user_id, listingReady, listingAgentIds, activeTab, globalDateFilter.startDate, globalDateFilter.endDate]);
 
-  // Initialize correction status when trackers change
+  const taskGroups = useMemo(() => {
+    const groups = Object.entries(fileGroups)
+      .filter(([, files]) => (files || []).length > 0)
+      .map(([id, files]) => {
+        const sample = files[0] || {};
+        return {
+          id,
+          project_id: sample.project_id,
+          task_id: sample.task_id,
+          project_name: sample.project_name || projectNameMap[String(sample.project_id)] || "—",
+          task_name: sample.task_name || taskNameMap[String(sample.task_id)] || "—",
+          fileCount: files.length,
+        };
+      });
+    groups.sort((a, b) => b.fileCount - a.fileCount);
+    return groups;
+  }, [fileGroups, projectNameMap, taskNameMap]);
+
   useEffect(() => {
-    if (activeTab === 'rework_review' && selectedAgentId) {
-      const trackers = agentTrackers[String(selectedAgentId)] || agentTrackers[selectedAgentId] || [];
+    if (activeTab === "rework_review" && selectedGroupKey) {
+      const trackers = fileGroups[selectedGroupKey] || [];
       const initial = {};
       trackers.forEach((tracker, idx) => {
-        if (tracker.type === 'correction') {
+        if (tracker.type === "correction") {
           const trackerId = tracker.qc_record_id || tracker.id || `tracker-${idx}`;
-          initial[trackerId] = '';
+          initial[trackerId] = "";
         }
       });
       setCorrectionStatus(initial);
     }
-  }, [agentTrackers, selectedAgentId, activeTab]);
+  }, [fileGroups, selectedGroupKey, activeTab]);
 
-  // Filter and sort agents based on search query
-  const filteredAndSortedAgents = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return agents;
-    }
-    
+  const filteredTaskGroups = useMemo(() => {
+    if (!searchQuery.trim()) return taskGroups;
     const query = searchQuery.toLowerCase();
-    const filtered = agents.filter(agent => 
-      agent.user_name.toLowerCase().includes(query)
-    );
-    
-    // Sort: exact matches first, then partial matches
-    return filtered.sort((a, b) => {
-      const aName = a.user_name.toLowerCase();
-      const bName = b.user_name.toLowerCase();
-      const aStartsWith = aName.startsWith(query);
-      const bStartsWith = bName.startsWith(query);
-      
-      if (aStartsWith && !bStartsWith) return -1;
-      if (!aStartsWith && bStartsWith) return 1;
-      return aName.localeCompare(bName);
+    return taskGroups.filter((group) => {
+      const files = fileGroups[group.id] || [];
+      const agentHit = files.some((f) =>
+        String(f.user_name || f.agent_name || "").toLowerCase().includes(query)
+      );
+      return (
+        String(group.project_name || "").toLowerCase().includes(query) ||
+        String(group.task_name || "").toLowerCase().includes(query) ||
+        agentHit
+      );
     });
-  }, [agents, searchQuery]);
+  }, [taskGroups, searchQuery, fileGroups]);
+
+  useEffect(() => {
+    if (!filteredTaskGroups.length) {
+      setSelectedGroupKey(null);
+      return;
+    }
+    if (!filteredTaskGroups.some((g) => g.id === selectedGroupKey)) {
+      setSelectedGroupKey(filteredTaskGroups[0].id);
+    }
+  }, [filteredTaskGroups, selectedGroupKey]);
 
   const urgentPendingFiles = useMemo(() => {
     const rows = (allPendingTrackers || [])
@@ -859,16 +876,18 @@ const QAAgentList = () => {
     [urgentPendingFiles, showAllUrgent]
   );
 
-  const selectedAgentTrackers = useMemo(() => {
-    if (!selectedAgentId) return [];
-    return agentTrackers[String(selectedAgentId)] || agentTrackers[selectedAgentId] || [];
-  }, [selectedAgentId, agentTrackers]);
+  const selectedTaskFiles = useMemo(() => {
+    if (!selectedGroupKey) return [];
+    return fileGroups[selectedGroupKey] || [];
+  }, [selectedGroupKey, fileGroups]);
 
-  const agentListPagination = useClientPagination(filteredAndSortedAgents, {
-    resetKeys: [searchQuery, activeTab],
-  });
-  const trackerPagination = useClientPagination(selectedAgentTrackers, {
-    resetKeys: [selectedAgentId, globalDateFilter.startDate, globalDateFilter.endDate],
+  const selectedTaskGroup = useMemo(
+    () => taskGroups.find((g) => g.id === selectedGroupKey) || null,
+    [taskGroups, selectedGroupKey]
+  );
+
+  const trackerPagination = useClientPagination(selectedTaskFiles, {
+    resetKeys: [selectedGroupKey, globalDateFilter.startDate, globalDateFilter.endDate],
   });
 
   // Clear search
@@ -878,6 +897,7 @@ const QAAgentList = () => {
 
   // Handle global date changes — counts reload via useEffect for ALL agents
   const handleGlobalStartDateChange = (dateValue) => {
+    setAgentLoading(true);
     setGlobalDateFilter((prev) => ({
       ...prev,
       startDate: dateValue,
@@ -885,6 +905,7 @@ const QAAgentList = () => {
   };
 
   const handleGlobalEndDateChange = (dateValue) => {
+    setAgentLoading(true);
     setGlobalDateFilter((prev) => ({
       ...prev,
       endDate: dateValue,
@@ -892,6 +913,7 @@ const QAAgentList = () => {
   };
 
   const handleResetGlobalFilters = () => {
+    setAgentLoading(true);
     const today = getTodayDate();
     setGlobalDateFilter({ startDate: today, endDate: today });
   };
@@ -1136,8 +1158,8 @@ const QAAgentList = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 py-6 px-4">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 py-6 px-3">
+      <div className="max-w-[1600px] mx-auto">
         {/* Header Section with Tabs */}
         <div className="bg-white rounded-2xl shadow-xl mb-6 border border-slate-200 overflow-hidden">
           <div className="p-6 pb-4">
@@ -1166,6 +1188,7 @@ const QAAgentList = () => {
 
           {(activeTab === 'agent_files' || activeTab === 'rework_review') && (
             <div className="flex items-center justify-end gap-4 px-6 py-3 border-t border-slate-100">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Work Date</span>
               <DateRangePicker
                 startDate={globalDateFilter.startDate}
                 endDate={globalDateFilter.endDate}
@@ -1249,7 +1272,7 @@ const QAAgentList = () => {
                         key={tracker.tracker_id}
                         className={`border-t border-slate-100 cursor-pointer ${rowClass}`}
                         onClick={() => {
-                          if (tracker.user_id) setSelectedAgentId(tracker.user_id);
+                          setSelectedGroupKey(taskGroupKey(tracker.project_id, tracker.task_id));
                         }}
                       >
                         <td className={`px-4 py-2.5 whitespace-nowrap ${timeClass}`}>
@@ -1260,10 +1283,18 @@ const QAAgentList = () => {
                         </td>
                         <td className="px-4 py-2.5 text-slate-700">{projectName}</td>
                         <td className="px-4 py-2.5 text-slate-600">{taskName}</td>
-                        <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap text-xs">
-                          {formatISTDateTimeLong(tracker.date_time || tracker.file_submitted_at) ||
-                            tracker.date_time ||
-                            "-"}
+                        <td className="px-3 py-2.5 text-slate-500 text-xs align-top w-[7.5rem]">
+                          {(() => {
+                            const dateTime = formatISTDateTimeParts(
+                              tracker.date_time || tracker.file_submitted_at
+                            );
+                            return (
+                              <div>
+                                <p className="leading-snug">{dateTime.date || tracker.date_time || "-"}</p>
+                                {dateTime.time ? <p className="leading-snug">{dateTime.time}</p> : null}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-2.5 text-center">
                           {tracker.tracker_file ? (
@@ -1286,7 +1317,7 @@ const QAAgentList = () => {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (tracker.user_id) setSelectedAgentId(tracker.user_id);
+                              setSelectedGroupKey(taskGroupKey(tracker.project_id, tracker.task_id));
                               handleQCForm(tracker);
                             }}
                             disabled={qcFormLoading === tracker.tracker_id}
@@ -1327,8 +1358,8 @@ const QAAgentList = () => {
         {/* Split View Layout - Agent Files */}
         {activeTab === 'agent_files' && (
           <>
-        <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 400px)', minHeight: '600px' }}>
-          {loading ? (
+        <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '640px' }}>
+          {loading || agentLoading ? (
             <div className="h-full flex flex-col items-center justify-center p-16">
               <div className="relative">
                 <div className="w-20 h-20 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
@@ -1336,21 +1367,21 @@ const QAAgentList = () => {
                   <UsersIcon className="w-8 h-8 text-blue-600 animate-pulse" />
                 </div>
               </div>
-              <p className="text-slate-700 font-bold text-lg mt-6">Loading Agent Data</p>
+              <p className="text-slate-700 font-bold text-lg mt-6">Loading files</p>
               <p className="text-slate-500 text-sm mt-2">Please wait while we fetch the information...</p>
             </div>
-          ) : filteredAndSortedAgents.length === 0 ? (
+          ) : filteredTaskGroups.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center p-16">
               <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mb-6 shadow-inner">
-                <UsersIcon className="w-12 h-12 text-slate-400" />
+                <FolderOpen className="w-12 h-12 text-slate-400" />
               </div>
               <h3 className="text-xl font-bold text-slate-800 mb-3">
-                {searchQuery ? 'No Agents Found' : 'No Agent Data Available'}
+                {searchQuery ? 'No Tasks Found' : 'No Tracker Files'}
               </h3>
               <p className="text-slate-600 text-sm max-w-md mb-6 text-center">
                 {searchQuery 
-                  ? `We couldn't find any agents matching "${searchQuery}". Try adjusting your search.`
-                  : 'No agents are currently assigned to you. Please check back later or contact your administrator.'
+                  ? `We couldn't find any project or task matching "${searchQuery}". Try adjusting your search.`
+                  : 'No pending tracker files for the selected date range.'
                 }
               </p>
               {searchQuery && (
@@ -1366,7 +1397,7 @@ const QAAgentList = () => {
           ) : (
             <div className="flex h-full">
               {/* Left Sidebar - Agent List */}
-              <div className="w-80 border-r-2 border-slate-200 bg-gradient-to-b from-slate-50 to-white flex flex-col">
+              <div className="w-[22rem] shrink-0 border-r-2 border-slate-200 bg-gradient-to-b from-slate-50 to-white flex flex-col">
                 {/* Sidebar Header */}
                 <div className="px-5 py-4 border-b-2 border-slate-200 bg-gradient-to-r from-blue-600 to-indigo-600">
                   <div className="flex items-center gap-3">
@@ -1374,8 +1405,8 @@ const QAAgentList = () => {
                       <UsersIcon className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-white font-bold text-base">Agents</h3>
-                      <p className="text-blue-100 text-xs font-medium">{filteredAndSortedAgents.length} Total</p>
+                      <h3 className="text-white font-bold text-base">Projects / Tasks</h3>
+                      <p className="text-blue-100 text-xs font-medium">{filteredTaskGroups.length} tasks</p>
                     </div>
                   </div>
                 </div>
@@ -1388,7 +1419,7 @@ const QAAgentList = () => {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search agents..."
+                      placeholder="Search project or task..."
                       className="w-full pl-10 pr-9 py-2.5 text-sm font-medium border-2 border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-all placeholder:text-slate-400"
                     />
                     {searchQuery && (
@@ -1404,28 +1435,28 @@ const QAAgentList = () => {
                     <div className="mt-2 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm">
                       <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
                       <span className="font-bold text-xs">
-                        {filteredAndSortedAgents.length} result{filteredAndSortedAgents.length !== 1 ? 's' : ''}
+                        {filteredTaskGroups.length} result{filteredTaskGroups.length !== 1 ? 's' : ''}
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Agents List */}
+                {/* Project / Task list */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {filteredAndSortedAgents.map((agent) => {
-                    const trackers = agentTrackers[String(agent.user_id)] || agentTrackers[agent.user_id] || [];
-                    const isSelected = String(selectedAgentId) === String(agent.user_id);
+                  {filteredTaskGroups.map((group) => {
+                    const trackers = fileGroups[group.id] || [];
+                    const isSelected = selectedGroupKey === group.id;
                     
                     return (
                       <button
-                        key={agent.user_id}
+                        key={group.id}
                         onClick={() => {
-                          setSelectedAgentId(agent.user_id);
+                          setSelectedGroupKey(group.id);
                         }}
                         disabled={agentLoading}
-                        className={`w-full text-left p-4 rounded-xl transition-all duration-300 border-2 relative overflow-hidden ${
+                        className={`w-full text-left p-3 rounded-xl transition-all duration-300 border-2 relative ${
                           isSelected
-                            ? 'bg-white border-blue-600 shadow-lg scale-105'
+                            ? 'bg-white border-blue-600 shadow-md'
                             : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md'
                         } ${agentLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
@@ -1435,20 +1466,21 @@ const QAAgentList = () => {
                         
                         <div className="flex items-center gap-3">
                           <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-sm bg-gradient-to-br from-blue-100 to-indigo-100`}>
-                            <UsersIcon className="w-6 h-6 text-blue-600" />
+                            <FolderOpen className="w-6 h-6 text-blue-600" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-bold text-sm truncate text-slate-900">
-                                {agent.user_name}
+                            <div className="flex flex-wrap items-start gap-1.5 mb-1">
+                              <h4 className="font-bold text-sm text-slate-900 break-all leading-snug flex-1 min-w-0">
+                                {group.task_name}
                               </h4>
                               {isSelected && (
-                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm">
+                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm shrink-0">
                                   <Check className="w-3 h-3" />
                                   <span className="text-xs font-bold">Selected</span>
                                 </div>
                               )}
                             </div>
+                            <p className="text-[11px] text-slate-500 break-all mb-1">{group.project_name}</p>
                             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-700">
                               <FileText className="w-3 h-3" />
                               <span>{trackers.length} file{trackers.length !== 1 ? 's' : ''}</span>
@@ -1462,18 +1494,17 @@ const QAAgentList = () => {
               </div>
 
               {/* Right Panel - Agent Details */}
-              <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-blue-50/30">
+              <div className="flex-1 min-w-0 flex flex-col bg-gradient-to-br from-slate-50 to-blue-50/30">
                 {agentLoading ? (
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center">
                       <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-                      <p className="text-slate-700 font-bold text-lg">Loading Agent Data...</p>
+                      <p className="text-slate-700 font-bold text-lg">Loading files...</p>
                       <p className="text-slate-500 text-sm mt-2">Please wait</p>
                     </div>
                   </div>
-                ) : selectedAgentId ? (() => {
-                  const selectedAgent = agents.find(a => a.user_id === selectedAgentId);
-                  const trackers = selectedAgentTrackers;
+                ) : selectedGroupKey ? (() => {
+                  const trackers = selectedTaskFiles;
                   
                   return (
                     <>
@@ -1482,10 +1513,11 @@ const QAAgentList = () => {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
-                              <UsersIcon className="w-7 h-7 text-white" />
+                              <FolderOpen className="w-7 h-7 text-white" />
                             </div>
-                            <div>
-                              <h2 className="text-xl font-bold text-slate-900">{selectedAgent?.user_name}</h2>
+                            <div className="min-w-0">
+                              <h2 className="text-xl font-bold text-slate-900 break-all leading-snug">{selectedTaskGroup?.task_name || "Task"}</h2>
+                              <p className="text-sm text-slate-500 break-all">{selectedTaskGroup?.project_name}</p>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">
                                   {trackers.length} file{trackers.length !== 1 ? 's' : ''}
@@ -1509,14 +1541,15 @@ const QAAgentList = () => {
                       {/* Files Table */}
                       <div className="flex-1 overflow-y-auto p-6">
                         {trackers.length > 0 ? (
-                          <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-                            <table className="w-full text-sm">
+                          <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-x-auto">
+                            <table className="w-full min-w-[720px] text-sm">
                               <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
                                 <tr>
-                                  <th className="px-4 py-3 text-left font-semibold">Date & Time</th>
-                                  <th className="px-4 py-3 text-left font-semibold">Project / Task</th>
-                                  <th className="px-4 py-3 text-center font-semibold">File</th>
-                                  <th className="px-4 py-3 text-center font-semibold">Action</th>
+                                  <th className="px-3 py-3 text-left font-semibold w-[7.5rem]">Date & Time</th>
+                                  <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Agent</th>
+                                  <th className="px-3 py-3 text-left font-semibold min-w-[200px]">Project / Task</th>
+                                  <th className="px-3 py-3 text-center font-semibold">File</th>
+                                  <th className="px-3 py-3 text-center font-semibold">Action</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
@@ -1530,16 +1563,19 @@ const QAAgentList = () => {
 
                                   return (
                                     <tr key={tracker.tracker_id || index} className="hover:bg-slate-50">
-                                      <td className="px-4 py-3 text-slate-600">
+                                      <td className="px-3 py-3 text-slate-600 align-top w-[7.5rem]">
                                         <div>
-                                          <p className="font-medium">{dateTime.date}</p>
-                                          {dateTime.time && <p className="text-xs text-slate-500">{dateTime.time}</p>}
+                                          <p className="font-medium leading-snug">{dateTime.date}</p>
+                                          {dateTime.time ? <p className="text-xs text-slate-500 leading-snug">{dateTime.time}</p> : null}
                                         </div>
                                       </td>
-                                      <td className="px-4 py-3">
+                                      <td className="px-3 py-3 font-medium text-slate-800 whitespace-nowrap align-top">
+                                        {tracker.user_name || tracker.agent_name || "—"}
+                                      </td>
+                                      <td className="px-3 py-3 align-top max-w-[260px]">
                                         <div>
-                                          <p className="font-medium text-slate-800">{tracker.project_name || '—'}</p>
-                                          <p className="text-xs text-slate-500">{tracker.task_name || '—'}</p>
+                                          <p className="font-medium text-slate-800 break-all leading-snug">{tracker.project_name || '—'}</p>
+                                          <p className="text-xs text-slate-500 break-all leading-snug">{tracker.task_name || '—'}</p>
                                         </div>
                                       </td>
                                       <td className="px-4 py-3 text-center">
@@ -1590,7 +1626,7 @@ const QAAgentList = () => {
                           <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">
                             <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
                             <h3 className="text-lg font-bold text-slate-700">No Files Found</h3>
-                            <p className="text-sm text-slate-500">No tracker files available for this agent in the selected date range.</p>
+                            <p className="text-sm text-slate-500">No tracker files available for this task in the selected date range.</p>
                           </div>
                         )}
                       </div>
@@ -1602,8 +1638,8 @@ const QAAgentList = () => {
                       <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
                         <UsersIcon className="w-12 h-12 text-blue-600" />
                       </div>
-                      <h3 className="text-xl font-bold text-slate-800 mb-2">Select an Agent</h3>
-                      <p className="text-slate-600 text-sm">Choose an agent from the sidebar to view their files</p>
+                      <h3 className="text-xl font-bold text-slate-800 mb-2">Select a task</h3>
+                      <p className="text-slate-600 text-sm">Choose a project/task from the sidebar to view files</p>
                     </div>
                   </div>
                 )}
@@ -1622,8 +1658,8 @@ const QAAgentList = () => {
         {/* Rework & Correction Review Tab */}
         {activeTab === 'rework_review' && (
           <>
-        <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 400px)', minHeight: '600px' }}>
-          {loading ? (
+        <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-200 overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '640px' }}>
+          {loading || agentLoading ? (
             <div className="h-full flex flex-col items-center justify-center p-16">
               <div className="relative">
                 <div className="w-20 h-20 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
@@ -1631,21 +1667,21 @@ const QAAgentList = () => {
                   <UsersIcon className="w-8 h-8 text-blue-600 animate-pulse" />
                 </div>
               </div>
-              <p className="text-slate-700 font-bold text-lg mt-6">Loading Agent Data</p>
+              <p className="text-slate-700 font-bold text-lg mt-6">Loading files</p>
               <p className="text-slate-500 text-sm mt-2">Please wait while we fetch the information...</p>
             </div>
-          ) : filteredAndSortedAgents.length === 0 ? (
+          ) : filteredTaskGroups.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center p-16">
               <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mb-6 shadow-inner">
-                <UsersIcon className="w-12 h-12 text-slate-400" />
+                <FolderOpen className="w-12 h-12 text-slate-400" />
               </div>
               <h3 className="text-xl font-bold text-slate-800 mb-3">
-                {searchQuery ? 'No Agents Found' : 'No Agent Data Available'}
+                {searchQuery ? 'No Tasks Found' : 'No Rework / Correction Files'}
               </h3>
               <p className="text-slate-600 text-sm max-w-md mb-6 text-center">
                 {searchQuery 
-                  ? `We couldn't find any agents matching "${searchQuery}". Try adjusting your search.`
-                  : 'No agents are currently assigned to you. Please check back later or contact your administrator.'
+                  ? `We couldn't find any project or task matching "${searchQuery}". Try adjusting your search.`
+                  : 'No pending rework or correction files for the selected date range.'
                 }
               </p>
               {searchQuery && (
@@ -1661,7 +1697,7 @@ const QAAgentList = () => {
           ) : (
             <div className="flex h-full">
               {/* Left Sidebar - Agent List */}
-              <div className="w-80 border-r-2 border-slate-200 bg-gradient-to-b from-slate-50 to-white flex flex-col">
+              <div className="w-[22rem] shrink-0 border-r-2 border-slate-200 bg-gradient-to-b from-slate-50 to-white flex flex-col">
                 {/* Sidebar Header */}
                 <div className="px-5 py-4 border-b-2 border-slate-200 bg-gradient-to-r from-blue-600 to-indigo-600">
                   <div className="flex items-center gap-3">
@@ -1669,8 +1705,8 @@ const QAAgentList = () => {
                       <UsersIcon className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-white font-bold text-base">Agents</h3>
-                      <p className="text-blue-100 text-xs font-medium">{filteredAndSortedAgents.length} Total</p>
+                      <h3 className="text-white font-bold text-base">Projects / Tasks</h3>
+                      <p className="text-blue-100 text-xs font-medium">{filteredTaskGroups.length} tasks</p>
                     </div>
                   </div>
                 </div>
@@ -1683,7 +1719,7 @@ const QAAgentList = () => {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search agents..."
+                      placeholder="Search project or task..."
                       className="w-full pl-10 pr-9 py-2.5 text-sm font-medium border-2 border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-all placeholder:text-slate-400"
                     />
                     {searchQuery && (
@@ -1699,28 +1735,28 @@ const QAAgentList = () => {
                     <div className="mt-2 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm">
                       <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
                       <span className="font-bold text-xs">
-                        {filteredAndSortedAgents.length} result{filteredAndSortedAgents.length !== 1 ? 's' : ''}
+                        {filteredTaskGroups.length} result{filteredTaskGroups.length !== 1 ? 's' : ''}
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Agents List */}
+                {/* Project / Task list */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                  {filteredAndSortedAgents.map((agent) => {
-                    const trackers = agentTrackers[String(agent.user_id)] || agentTrackers[agent.user_id] || [];
-                    const isSelected = String(selectedAgentId) === String(agent.user_id);
+                  {filteredTaskGroups.map((group) => {
+                    const trackers = fileGroups[group.id] || [];
+                    const isSelected = selectedGroupKey === group.id;
                     
                     return (
                       <button
-                        key={agent.user_id}
+                        key={group.id}
                         onClick={() => {
-                          setSelectedAgentId(agent.user_id);
+                          setSelectedGroupKey(group.id);
                         }}
                         disabled={agentLoading}
-                        className={`w-full text-left p-4 rounded-xl transition-all duration-300 border-2 relative overflow-hidden ${
+                        className={`w-full text-left p-3 rounded-xl transition-all duration-300 border-2 relative ${
                           isSelected
-                            ? 'bg-white border-blue-600 shadow-lg scale-105'
+                            ? 'bg-white border-blue-600 shadow-md'
                             : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md'
                         } ${agentLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
@@ -1730,20 +1766,21 @@ const QAAgentList = () => {
                         
                         <div className="flex items-center gap-3">
                           <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-sm bg-gradient-to-br from-blue-100 to-indigo-100`}>
-                            <UsersIcon className="w-6 h-6 text-blue-600" />
+                            <FolderOpen className="w-6 h-6 text-blue-600" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-bold text-sm truncate text-slate-900">
-                                {agent.user_name}
+                            <div className="flex flex-wrap items-start gap-1.5 mb-1">
+                              <h4 className="font-bold text-sm text-slate-900 break-all leading-snug flex-1 min-w-0">
+                                {group.task_name}
                               </h4>
                               {isSelected && (
-                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm">
+                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm shrink-0">
                                   <Check className="w-3 h-3" />
                                   <span className="text-xs font-bold">Selected</span>
                                 </div>
                               )}
                             </div>
+                            <p className="text-[11px] text-slate-500 break-all mb-1">{group.project_name}</p>
                             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-700">
                               <FileText className="w-3 h-3" />
                               <span>{trackers.length} file{trackers.length !== 1 ? 's' : ''}</span>
@@ -1757,7 +1794,7 @@ const QAAgentList = () => {
               </div>
 
               {/* Right Panel - Agent Details */}
-              <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-blue-50/30">
+              <div className="flex-1 min-w-0 flex flex-col bg-gradient-to-br from-slate-50 to-blue-50/30">
                 {agentLoading ? (
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center">
@@ -1766,9 +1803,8 @@ const QAAgentList = () => {
                       <p className="text-slate-500 text-sm mt-2">Please wait</p>
                     </div>
                   </div>
-                ) : selectedAgentId ? (() => {
-                  const selectedAgent = agents.find(a => a.user_id === selectedAgentId);
-                  const trackers = selectedAgentTrackers;
+                ) : selectedGroupKey ? (() => {
+                  const trackers = selectedTaskFiles;
                   
                   return (
                     <>
@@ -1777,10 +1813,11 @@ const QAAgentList = () => {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
-                              <UsersIcon className="w-7 h-7 text-white" />
+                              <FolderOpen className="w-7 h-7 text-white" />
                             </div>
-                            <div>
-                              <h2 className="text-xl font-bold text-slate-900">{selectedAgent?.user_name}</h2>
+                            <div className="min-w-0">
+                              <h2 className="text-xl font-bold text-slate-900 break-all leading-snug">{selectedTaskGroup?.task_name || "Task"}</h2>
+                              <p className="text-sm text-slate-500 break-all">{selectedTaskGroup?.project_name}</p>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">
                                   {trackers.length} pending file{trackers.length !== 1 ? 's' : ''}
@@ -1805,13 +1842,13 @@ const QAAgentList = () => {
                             correctionStatus={correctionStatus}
                             setCorrectionStatus={setCorrectionStatus}
                             user={user}
-                            selectedAgentId={selectedAgentId}
+                            selectedGroupKey={selectedGroupKey}
                           />
                         ) : (
                           <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">
                             <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
                             <h3 className="text-lg font-bold text-slate-700">No Pending Files</h3>
-                            <p className="text-sm text-slate-500">No pending rework or correction files for this agent.</p>
+                            <p className="text-sm text-slate-500">No pending rework or correction files for this task.</p>
                           </div>
                         )}
                       </div>
@@ -1823,8 +1860,8 @@ const QAAgentList = () => {
                       <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
                         <UsersIcon className="w-12 h-12 text-blue-600" />
                       </div>
-                      <h3 className="text-xl font-bold text-slate-800 mb-2">Select an Agent</h3>
-                      <p className="text-slate-600 text-sm">Choose an agent from the sidebar to view their pending files</p>
+                      <h3 className="text-xl font-bold text-slate-800 mb-2">Select a task</h3>
+                      <p className="text-slate-600 text-sm">Choose a project/task from the sidebar to view pending files</p>
                     </div>
                   </div>
                 )}

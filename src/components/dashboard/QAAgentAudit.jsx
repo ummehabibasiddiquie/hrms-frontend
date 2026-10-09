@@ -35,6 +35,7 @@ import PaginatedSlice from '../common/PaginatedSlice';
 import SubTabsBar from '../common/SubTabsBar';
 import { DateRangePicker } from '../common/CustomCalendar';
 import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
+import { getErrorIdentity } from "../../utils/qcErrorIdentity";
 
 
 const QA_AUDIT_SUBTABS = ['audit_form', 'audit_report'];
@@ -1587,11 +1588,7 @@ const QAAgentAudit = ({
                 <div className="space-y-3">
                   {selectedErrorList.map((error, index) => {
                     const errorLabel = getErrorLabel(error);
-                    const identity = typeof error === 'object'
-                      ? (error.qc_code || error.qcCode
-                        ? `QC Code ${error.qc_code || error.qcCode}`
-                        : (error.row != null && error.row !== '' ? `Row ${error.row}` : null))
-                      : null;
+                    const identity = getErrorIdentity(error);
                     const points = typeof error === 'object' ? error.points : null;
                     
                     return (
@@ -1603,11 +1600,6 @@ const QAAgentAudit = ({
                           <div className="flex items-center justify-center w-8 h-8 bg-red-200 rounded-lg group-hover:bg-red-300 transition-all">
                             <span className="text-red-700 font-bold text-sm">#{index + 1}</span>
                           </div>
-                          {Number.isFinite(rowNumber) && (
-                            <span className="px-2 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-bold tracking-wide">
-                              Row {rowNumber}
-                            </span>
-                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start gap-3">

@@ -29,7 +29,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { exportToCSV } from '../../utils/csvExport';
 import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
-import { getErrorIdentity } from "../../utils/qcErrorIdentity";
+import { getErrorIdentity, enrichErrorListFromFile } from "../../utils/qcErrorIdentity";
 
 
 const QAAgentQCFormReport = () => {
@@ -220,8 +220,12 @@ const QAAgentQCFormReport = () => {
     return Array.isArray(errors) ? errors : [];
   };
 
-  const openErrorModal = (errors, title) => {
-    setErrorModal({ open: true, errors: parseErrors(errors), title });
+  const openErrorModal = (errors, title, fileUrls) => {
+    const parsed = parseErrors(errors);
+    setErrorModal({ open: true, errors: parsed, title });
+    enrichErrorListFromFile(parsed, fileUrls).then((enriched) => {
+      setErrorModal((prev) => (prev.open ? { ...prev, errors: enriched } : prev));
+    });
   };
 
   const getErrorTypes = (errorString) => {
@@ -755,7 +759,7 @@ const QAAgentQCFormReport = () => {
                                           <td className="px-3 py-2 text-center">
                                             {errors.length > 0 ? (
                                               <button
-                                                onClick={() => openErrorModal(item.errors, `${item.type === 'rework' ? 'Rework' : 'Correction'} #${item.count} - Errors`)}
+                                                onClick={() => openErrorModal(item.errors, `${item.type === 'rework' ? 'Rework' : 'Correction'} #${item.count} - Errors`, [item.file_path, record.qc_file_path])}
                                                 className="relative inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors"
                                               >
                                                 View
