@@ -46,7 +46,7 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const QATrackerReport = () => {
   const { user } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
-  x
+
   // Sub-tab state synced to ?subtab= (e.g. /dashboard?tab=tracker_report&subtab=task_eod_report)
   const [activeSubTab, setActiveSubTab] = useRoutedSubTab('tracker_report', {
     parentTab: 'tracker_report',
