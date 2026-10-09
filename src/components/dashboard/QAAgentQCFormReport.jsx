@@ -31,6 +31,20 @@ import { exportToCSV } from '../../utils/csvExport';
 import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
 import { getErrorIdentity, enrichErrorListFromFile } from "../../utils/qcErrorIdentity";
 
+/** All QC dropdown: active, or deactivated within the last 3 months. */
+const isQcVisibleInDropdown = (record) => {
+  if (record.qc_is_active === undefined && record.qc_deactivated_at === undefined) return true;
+  if (Number(record.qc_is_delete) === 0) return false;
+  if (Number(record.qc_is_active) === 1) return true;
+  if (!record.qc_deactivated_at) return false;
+  const left = new Date(String(record.qc_deactivated_at).slice(0, 10));
+  if (Number.isNaN(left.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setMonth(cutoff.getMonth() - 3);
+  return left >= cutoff;
+};
+
 
 const QAAgentQCFormReport = () => {
   const { user } = useAuth();
@@ -59,6 +73,9 @@ const QAAgentQCFormReport = () => {
           task_name: record.task_name,
           qa_user_id: record.qa_user_id,
           qc_name: record.qc_name,
+          qc_is_active: record.qc_is_active,
+          qc_is_delete: record.qc_is_delete,
+          qc_deactivated_at: record.qc_deactivated_at,
           qc_score: record.qc_score,
           status: record.status,
           qc_status: record.qc_status,
@@ -89,10 +106,21 @@ const QAAgentQCFormReport = () => {
     fetchQCHistory();
   }, []);
 
-  // Unique QC names for dropdown (from loaded records)
+  useEffect(() => {
+    if (qcFilter === 'all') return;
+    if (!qcFilterOptions.some((option) => option.value === qcFilter)) {
+      setQcFilter('all');
+    }
+  }, [qcFilter, qcFilterOptions]);
+
+  // QC names still on the team, or gone for less than 3 months.
   const qcFilterOptions = [
     { value: 'all', label: 'All QC' },
-    ...[...new Set(qcRecords.map(r => r.qc_name).filter(Boolean))]
+    ...[...new Map(
+      qcRecords
+        .filter((record) => record.qc_name && isQcVisibleInDropdown(record))
+        .map((record) => [record.qc_name, record.qc_name])
+    ).values()]
       .sort((a, b) => a.localeCompare(b))
       .map(name => ({ value: name, label: name }))
   ];
