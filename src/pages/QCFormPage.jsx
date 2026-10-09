@@ -34,7 +34,8 @@ import ErrorMessage from '../components/common/ErrorMessage';
 import MultiSelectWithCheckbox from '../components/common/MultiSelectWithCheckbox';
 import SearchableSelect from '../components/common/SearchableSelect';
 import QCConfirmationModal from '../components/common/QCConfirmationModal';
-import { formatISTDateTime, getISTParts } from "../utils/dateTimeIST";
+import { formatISTDateTimeParts, getISTParts } from "../utils/dateTimeIST";
+import { extractQcCode, getQcFormDisplayKeys } from "../utils/qcErrorIdentity";
 import {
   Pagination,
   PaginationContent,
@@ -537,23 +538,41 @@ const QCFormPage = () => {
         throw new Error('Missing tracker data or user information');
       }
 
-      // Format error list from formRows
+      // Format error list from formRows + enrich each sampled record with its errors
       const errorList = [];
-      formRows.forEach((row, rowIndex) => {
-        row.errors.forEach(error => {
-          const category = afdData?.categories.find(cat => cat.qc_afd_id === error.categoryId);
-          const subcategory = category?.subcategories.find(sub => sub.qc_afd_id === error.subcategoryId);
-          
+      const enrichedRecords = formRows.map((row, rowIndex) => {
+        const resolvedErrors = [];
+
+        row.errors.forEach((error) => {
+          const category = afdData?.categories.find((cat) => cat.qc_afd_id === error.categoryId);
+          const subcategory = category?.subcategories.find((sub) => sub.qc_afd_id === error.subcategoryId);
+
           if (category && subcategory) {
-            errorList.push({
-              row: rowIndex + 1,
+            const qcCode = extractQcCode(row.originalData);
+            const entry = {
+              row: rowIndex + 2,
+              ...(qcCode ? { qc_code: qcCode } : {}),
               category: category.name,
               subcategory: subcategory.name,
               error: `${category.name} - ${subcategory.name}`,
-              points: subcategory.points
+              points: Number(subcategory.points) || 0,
+            };
+            errorList.push(entry);
+            resolvedErrors.push({
+              category: entry.category,
+              subcategory: entry.subcategory,
+              error: entry.error,
+              points: entry.points,
+              ...(qcCode ? { qc_code: qcCode } : {}),
             });
           }
         });
+
+        return {
+          ...(row.originalData || {}),
+          has_error: resolvedErrors.length > 0,
+          qc_errors: resolvedErrors,
+        };
       });
 
       // Use the user-selected submission type as the status
@@ -664,7 +683,7 @@ const QCFormPage = () => {
         qc_generated_count: sampleSize || errorMetrics.sampleCount,
         object_count: objectCount,
         qc_object_count: qcObjectCount,
-        qc_file_records: formData, 
+        qc_file_records: enrichedRecords,
         error_list: errorList, 
         comments: comments || '',
         sampling_percentage: samplingPercentage
@@ -852,8 +871,8 @@ const QCFormPage = () => {
     );
   }
 
-  // Get the first three keys from the first data object for dynamic columns
-  const dynamicKeys = formData.length > 0 ? Object.keys(formData[0]).filter(key => key !== 'id').slice(0, 3) : [];
+  // Prefer QC Code among the first visible sample columns
+  const dynamicKeys = formData.length > 0 ? getQcFormDisplayKeys(formData[0], 3) : [];
 
   // Generate page numbers for pagination display
   const getPageNumbers = () => {
@@ -903,7 +922,7 @@ const QCFormPage = () => {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-[1600px] mx-auto px-4 py-6 space-y-6 min-w-0">
       {/* Header */}
       <div className="flex items-center justify-between">
         <button
@@ -946,7 +965,7 @@ const QCFormPage = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm text-slate-600 font-medium">File Name</p>
-              <p className="text-lg font-bold text-slate-800 truncate">
+              <p className="text-lg font-bold text-slate-800 break-all leading-snug">
                 {trackerData.tracker_file ? trackerData.tracker_file.split('/').pop() : 'No file'}
               </p>
             </div>
@@ -974,21 +993,26 @@ const QCFormPage = () => {
             <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
               <Calendar className="w-6 h-6 text-purple-600" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-slate-600 font-medium">Submission Date & Time</p>
-              <p className="text-lg font-bold text-slate-800">
-                {trackerData.date_of_file_submission
-                  ? formatISTDateTime(trackerData.date_of_file_submission, 'N/A')
-                  : trackerData.updated_at
-                  ? formatISTDateTime(trackerData.updated_at, 'N/A')
-                  : trackerData.date_time
-                  ? formatISTDateTime(trackerData.date_time, 'N/A')
-                  : trackerData.tracker_date
-                  ? formatISTDateTime(trackerData.tracker_date, 'N/A')
-                  : trackerData.created_at
-                  ? formatISTDateTime(trackerData.created_at, 'N/A')
-                  : 'N/A'}
-              </p>
+              {(() => {
+                const submittedAt =
+                  trackerData.date_of_file_submission ||
+                  trackerData.updated_at ||
+                  trackerData.date_time ||
+                  trackerData.tracker_date ||
+                  trackerData.created_at;
+                if (!submittedAt) {
+                  return <p className="text-lg font-bold text-slate-800">N/A</p>;
+                }
+                const dateTime = formatISTDateTimeParts(submittedAt);
+                return (
+                  <div className="text-lg font-bold text-slate-800 leading-snug">
+                    <p>{dateTime.date}</p>
+                    {dateTime.time ? <p className="text-sm font-semibold text-slate-600">{dateTime.time}</p> : null}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -999,7 +1023,7 @@ const QCFormPage = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm text-slate-600 font-medium">Project Name</p>
-              <p className="text-lg font-bold text-slate-800 truncate">
+              <p className="text-lg font-bold text-slate-800 break-all leading-snug">
                 {trackerData.project_name || 'N/A'}
               </p>
             </div>
@@ -1012,7 +1036,7 @@ const QCFormPage = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm text-slate-600 font-medium">Task Name</p>
-              <p className="text-lg font-bold text-slate-800 truncate">
+              <p className="text-lg font-bold text-slate-800 break-all leading-snug">
                 {trackerData.task_name || 'N/A'}
               </p>
             </div>
@@ -1022,32 +1046,31 @@ const QCFormPage = () => {
 
       {/* QC Form Table */}
       <div className="bg-white rounded-xl shadow-lg border-2 border-slate-200">
-        <div className="overflow-x-auto" style={{overflowY: 'visible'}}>
-          <div className="min-w-max">
-        <table className="w-full">
+        <div className="overflow-x-auto min-w-0">
+          <table className="w-full table-fixed min-w-[1100px]">
             <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 sticky top-0 z-[100]">
               <tr>
-                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500">
+                <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500 w-24 whitespace-normal break-words">
                   Sr. No.
                 </th>
                 {dynamicKeys.map((key, index) => (
                   <th
                     key={index}
-                    className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500"
+                    className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500 whitespace-normal break-words"
                   >
                     {key.replace(/_/g, ' ')}
                   </th>
                 ))}
-                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500">
+                <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500 w-64 whitespace-normal break-words">
                   Select Error
                 </th>
-                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500">
+                <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500 w-52 whitespace-normal break-words">
                   Selected Errors
                 </th>
                 {afdData?.categories.map((cat) => (
                   <th
                     key={cat.qc_afd_id}
-                    className="px-4 py-4 text-center text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500"
+                    className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500 w-24 whitespace-normal break-words"
                   >
                     {cat.name}
                   </th>
@@ -1062,26 +1085,32 @@ const QCFormPage = () => {
                 const recordScore = calculateRecordScore(row, afdData);
                 const actualRowIndex = formRows.findIndex(r => r.id === row.id);
                 const displayRowNum = startIndex + rowIndex + 1;
+                const rowQcCode = extractQcCode(row.originalData);
                 
                 return (
                   <tr key={row.id} className="hover:bg-blue-50 transition-colors">
                     {/* Sr. No. */}
-                    <td className="px-4 py-4 text-sm font-semibold text-slate-700 border-r border-slate-200">
+                    <td className="px-3 py-3 text-sm font-semibold text-slate-700 border-r border-slate-200 align-top">
                       {displayRowNum}
+                      {rowQcCode ? (
+                        <div className="text-xs font-bold text-blue-700 mt-1 break-all leading-snug">
+                          QC {rowQcCode}
+                        </div>
+                      ) : null}
                     </td>
 
                     {/* Dynamic Columns */}
                     {dynamicKeys.map((key, colIndex) => (
                       <td
                         key={colIndex}
-                        className="px-4 py-4 text-sm text-slate-600 border-r border-slate-200"
+                        className="px-3 py-3 text-sm text-slate-600 border-r border-slate-200 align-top break-all whitespace-normal leading-snug"
                       >
                         {row.originalData[key]}
                       </td>
                     ))}
 
                     {/* Error Selection Dropdown */}
-                    <td className="px-4 py-4 border-r border-slate-200 relative">
+                    <td className="px-3 py-3 border-r border-slate-200 relative align-top min-w-[16rem]">
                       <div className="flex flex-col gap-3">        
                         <SearchableSelect
                           value={pendingSelections[row.id]?.category || ''}
@@ -1145,8 +1174,8 @@ const QCFormPage = () => {
                     </td>
 
                     {/* Selected Errors */}
-                    <td className="px-4 py-4 border-r border-slate-200">
-                      <div className="flex flex-col gap-1 max-w-xs">
+                    <td className="px-3 py-3 border-r border-slate-200 align-top">
+                      <div className="flex flex-col gap-1">
                         {row.errors.length > 0 ? (
                           row.errors.map((error, errorIndex) => {
                             const category = afdData?.categories.find(cat => cat.qc_afd_id === error.categoryId);
@@ -1157,7 +1186,7 @@ const QCFormPage = () => {
                                 key={errorIndex}
                                 className="flex items-center justify-between gap-1 bg-red-50 border border-red-300 px-2 py-1 rounded text-xs"
                               >
-                                <span className="font-semibold text-red-800 truncate">
+                                <span className="font-semibold text-red-800 break-words leading-snug">
                                   {subcategory?.name} (-{subcategory?.points})
                                 </span>
                                 <button
@@ -1218,7 +1247,6 @@ const QCFormPage = () => {
               })}
             </tbody>
           </table>
-          </div>
         </div>
 
         {/* Enhanced Pagination Controls */}
@@ -1420,7 +1448,7 @@ const QCFormPage = () => {
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {errorMetrics.errorList.map((error, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <span className="text-sm font-medium text-slate-700">{error.name}</span>
+                  <span className="text-sm font-medium text-slate-700 break-all leading-snug pr-2">{error.name}</span>
                   <span className="px-3 py-1 bg-red-100 text-red-700 text-sm font-bold rounded-full">
                     {error.count} {error.count === 1 ? 'error' : 'errors'}
                   </span>

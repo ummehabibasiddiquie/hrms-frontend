@@ -35,6 +35,7 @@ import PaginatedSlice from '../common/PaginatedSlice';
 import SubTabsBar from '../common/SubTabsBar';
 import { DateRangePicker } from '../common/CustomCalendar';
 import { formatISTDateTimeParts } from "../../utils/dateTimeIST";
+import { getErrorIdentity } from "../../utils/qcErrorIdentity";
 
 
 const QA_AUDIT_SUBTABS = ['audit_form', 'audit_report'];
@@ -1587,7 +1588,7 @@ const QAAgentAudit = ({
                 <div className="space-y-3">
                   {selectedErrorList.map((error, index) => {
                     const errorLabel = getErrorLabel(error);
-                    const rowNumber = typeof error === 'object' ? error.row : null;
+                    const identity = getErrorIdentity(error);
                     const points = typeof error === 'object' ? error.points : null;
                     
                     return (
@@ -1595,16 +1596,18 @@ const QAAgentAudit = ({
                         key={index}
                         className="flex items-start gap-4 p-4 bg-red-50 border-2 border-red-200 rounded-xl hover:bg-red-100 hover:border-red-300 transition-all group"
                       >
-                        <div className="flex items-center justify-center w-8 h-8 bg-red-200 rounded-lg shrink-0 mt-0.5 group-hover:bg-red-300 transition-all">
-                          <span className="text-red-700 font-bold text-sm">#{index + 1}</span>
+                        <div className="flex flex-col items-center gap-1 shrink-0 mt-0.5">
+                          <div className="flex items-center justify-center w-8 h-8 bg-red-200 rounded-lg group-hover:bg-red-300 transition-all">
+                            <span className="text-red-700 font-bold text-sm">#{index + 1}</span>
+                          </div>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start gap-3">
                             <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
                             <div>
-                              {rowNumber != null && rowNumber !== '' && (
+                              {identity && (
                                 <p className="text-xs font-bold uppercase tracking-wide text-red-700 mb-1">
-                                  Row {rowNumber}
+                                  {identity}
                                 </p>
                               )}
                               <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">

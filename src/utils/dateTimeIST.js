@@ -77,6 +77,12 @@ export function getISTParts(value) {
   const flaskParts = parseFlaskHttpDateAsIST(raw);
   if (flaskParts) return flaskParts;
 
+  if (hasExplicitZone(raw)) {
+    const zoned = new Date(raw);
+    if (Number.isNaN(zoned.getTime())) return null;
+    return partsFromDateInIST(zoned);
+  }
+
   const m = raw.match(NAIVE_RE);
   if (m) {
     return {
@@ -89,10 +95,20 @@ export function getISTParts(value) {
     };
   }
 
-  if (hasExplicitZone(raw)) {
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return null;
-    return partsFromDateInIST(d);
+  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i);
+  if (dmy) {
+    let hours = Number(dmy[4] ?? 0);
+    const ampm = (dmy[7] || "").toUpperCase();
+    if (ampm === "PM" && hours < 12) hours += 12;
+    if (ampm === "AM" && hours === 12) hours = 0;
+    return {
+      year: Number(dmy[3]),
+      month: Number(dmy[2]),
+      day: Number(dmy[1]),
+      hours,
+      minutes: Number(dmy[5] ?? 0),
+      seconds: Number(dmy[6] ?? 0),
+    };
   }
 
   const d = new Date(raw);

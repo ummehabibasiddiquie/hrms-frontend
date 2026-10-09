@@ -24,6 +24,7 @@ import {
 import { useClientPagination } from '../../hooks/useClientPagination';
 import TablePaginationBar from '../common/TablePaginationBar';
 import { formatISTDateMedium } from '../../utils/dateTimeIST';
+import { getErrorIdentity } from '../../utils/qcErrorIdentity';
 
 // Dummy data
 const dummyPendingReviews = [
@@ -614,9 +615,11 @@ const QAAgentReworkCorrectionReview = () => {
                       {idx + 1}
                     </span>
                     <div className="flex-1">
+                      {getErrorIdentity(err) && (
                       <span className="inline-block px-2 py-0.5 bg-red-600 text-white text-xs font-semibold rounded mb-1">
-                        Row {err.row}
+                        {getErrorIdentity(err)}
                       </span>
+                      )}
                       <p className="text-sm text-red-800">{err.error}</p>
                     </div>
                   </div>

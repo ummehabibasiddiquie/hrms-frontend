@@ -25,7 +25,36 @@ import api from '../services/api';
 import nodeApi from '../services/nodeApi';
 import { DateRangePicker } from '../components/common/CustomCalendar';
 import { formatISTDateTimeParts } from "../utils/dateTimeIST";
+import { getErrorIdentity, enrichErrorListFromFile } from "../utils/qcErrorIdentity";
 
+const fileUploadedAt = (fileUrl) => {
+  const raw = String(fileUrl || "");
+  const version = raw.match(/\/v(\d{9,11})\//);
+  if (version) {
+    const uploaded = new Date(Number(version[1]) * 1000);
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  const millis = raw.match(/_(\d{13})(?:\D|$)/);
+  if (millis) {
+    const uploaded = new Date(Number(millis[1]));
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  return null;
+};
+
+const cycleQcDate = (item) => {
+  if (!item) return null;
+  if (item.type === "correction") {
+    const done =
+      String(item.correction_file_qc_status || "").toLowerCase() === "completed" ||
+      (item.correction_qc_score != null && item.correction_qc_score !== "");
+    return done ? item.updated_at : null;
+  }
+  const done =
+    String(item.rework_file_qc_status || "").toLowerCase() === "completed" ||
+    (item.score != null && item.score !== "");
+  return done ? item.updated_at : null;
+};
 
 const AgentQCReportPage = () => {
   const { user } = useAuth();
@@ -139,6 +168,11 @@ const AgentQCReportPage = () => {
     return 'text-red-600 font-bold';
   };
 
+  const latestCycleCount = (rows, key) =>
+    (rows || []).reduce((max, row) => Math.max(max, Number(row?.[key]) || 0), 0);
+
+  const withCycleNumber = (label, count) => (count ? `${label} #${count}` : label);
+
   const getQCStatusBadge = (qcStatus) => {
     if (qcStatus === 'completed') {
       return (
@@ -168,24 +202,24 @@ const AgentQCReportPage = () => {
     return <span className="text-xs text-slate-500">{qcStatus || '—'}</span>;
   };
 
-  const getTypeBadge = (type) => {
+  const getTypeBadge = (type, count) => {
     if (type === 'rework') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-700">
-          <XCircle className="w-3 h-3" /> Rework
+          <XCircle className="w-3 h-3" /> {withCycleNumber('Rework', count)}
         </span>
       );
     } else if (type === 'correction') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700">
-          <AlertCircle className="w-3 h-3" /> Correction
+          <AlertCircle className="w-3 h-3" /> {withCycleNumber('Correction', count)}
         </span>
       );
     }
     return <span className="text-xs text-slate-500">—</span>;
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, count) => {
     if (status === 'regular' || status === 'completed') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-green-100 text-green-700">
@@ -195,21 +229,25 @@ const AgentQCReportPage = () => {
     } else if (status === 'correction') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-700">
-          <AlertCircle className="w-3 h-3" /> Correction
+          <AlertCircle className="w-3 h-3" /> {withCycleNumber('Correction', count)}
         </span>
       );
     } else if (status === 'rework') {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-red-100 text-red-700">
-          <XCircle className="w-3 h-3" /> Rework
+          <XCircle className="w-3 h-3" /> {withCycleNumber('Rework', count)}
         </span>
       );
     }
     return <span className="text-xs text-slate-500">—</span>;
   };
 
-  const openErrorModal = (errors, projectTask) => {
-    setErrorModal({ open: true, errors: parseErrors(errors), title: `${projectTask} - Errors` });
+  const openErrorModal = (errors, projectTask, fileUrls) => {
+    const parsed = parseErrors(errors);
+    setErrorModal({ open: true, errors: parsed, title: `${projectTask} - Errors` });
+    enrichErrorListFromFile(parsed, fileUrls).then((enriched) => {
+      setErrorModal((prev) => (prev.open ? { ...prev, errors: enriched } : prev));
+    });
   };
 
   const openUploadModal = (record, type, historyItem = null) => {
@@ -404,7 +442,8 @@ const AgentQCReportPage = () => {
           <table className="w-full text-sm">
             <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold">Submission Date & Time</th>
+                <th className="px-4 py-3 text-left font-semibold">QC Date</th>
+                <th className="px-4 py-3 text-left font-semibold">File Submission</th>
                 <th className="px-4 py-3 text-left font-semibold">Project / Task</th>
                 <th className="px-4 py-3 text-center font-semibold">Score</th>
                 <th className="px-4 py-3 text-center font-semibold">Status</th>
@@ -424,6 +463,17 @@ const AgentQCReportPage = () => {
                     <tr className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-600">
                         {(() => {
+                          const dt = formatDateTime(record.created_at);
+                          return (
+                            <div>
+                              <p className="font-medium">{dt.date}</p>
+                              {dt.time && <p className="text-xs text-slate-500">{dt.time}</p>}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {(() => {
                           const dt = formatDateTime(record.date_of_file_submission);
                           return (
                             <div>
@@ -440,12 +490,21 @@ const AgentQCReportPage = () => {
                       <td className={`px-4 py-3 text-center ${getScoreClass(record.qc_score)}`}>
                         {record.qc_score !== null && record.qc_score !== undefined ? `${record.qc_score}%` : '—'}
                       </td>
-                      <td className="px-4 py-3 text-center">{getStatusBadge(record.status)}</td>
+                      <td className="px-4 py-3 text-center">
+                        {getStatusBadge(
+                          record.status,
+                          record.status === 'rework'
+                            ? latestCycleCount(record.qc_rework, 'rework_count')
+                            : record.status === 'correction'
+                              ? latestCycleCount(record.qc_correction, 'correction_count')
+                              : 0
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-center">{getQCStatusBadge(record.qc_status)}</td>
                       <td className="px-4 py-3 text-center">
                         {errors.length > 0 ? (
                           <button
-                            onClick={() => openErrorModal(record.error_list, `${record.project_name} - ${record.task_name}`)}
+                            onClick={() => openErrorModal(record.error_list, `${record.project_name} - ${record.task_name}`, [record.qc_file_path, record.whole_file_path, record.tracker_file])}
                             className="relative inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors"
                           >
                             View
@@ -476,7 +535,7 @@ const AgentQCReportPage = () => {
                     {/* Expanded Row - History + Message */}
                     {isExpanded && (
                       <tr>
-                        <td colSpan="7" className="p-0">
+                        <td colSpan="8" className="p-0">
                           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-t-2 border-blue-200">
                             {/* History */}
                             <div className="p-4">
@@ -535,8 +594,8 @@ const AgentQCReportPage = () => {
                                       <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
                                         <tr>
                                           <th className="px-3 py-2 text-left font-semibold">Type</th>
-                                          <th className="px-3 py-2 text-left font-semibold">Date & Time</th>
-                                          <th className="px-3 py-2 text-center font-semibold">Attempt</th>
+                                          <th className="px-3 py-2 text-left font-semibold">QC Date</th>
+                                          <th className="px-3 py-2 text-left font-semibold">File Submission</th>
                                           <th className="px-3 py-2 text-center font-semibold">Status</th>
                                           <th className="px-3 py-2 text-center font-semibold">Score</th>
                                           <th className="px-3 py-2 text-center font-semibold">Errors</th>
@@ -553,10 +612,21 @@ const AgentQCReportPage = () => {
                                           
                                           return (
                                             <tr key={idx} className="hover:bg-slate-50">
-                                              <td className="px-3 py-2">{getTypeBadge(item.type)}</td>
+                                              <td className="px-3 py-2">{getTypeBadge(item.type, item.attempt)}</td>
                                               <td className="px-3 py-2 text-slate-600">
                                                 {(() => {
-                                                  const dt = formatDateTime(item.updated_at);
+                                                  const dt = formatDateTime(cycleQcDate(item));
+                                                  return (
+                                                    <div>
+                                                      <p className="font-medium">{dt.date}</p>
+                                                      {dt.time && <p className="text-xs text-slate-500">{dt.time}</p>}
+                                                    </div>
+                                                  );
+                                                })()}
+                                              </td>
+                                              <td className="px-3 py-2 text-slate-600">
+                                                {(() => {
+                                                  const dt = formatDateTime(fileUploadedAt(item.file_path));
                                                   return (
                                                     <div>
                                                       <p className="font-medium">{dt.date}</p>
@@ -566,12 +636,7 @@ const AgentQCReportPage = () => {
                                                 })()}
                                               </td>
                                               <td className="px-3 py-2 text-center">
-                                                <span className="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-700">
-                                                  #{item.attempt}
-                                                </span>
-                                              </td>
-                                              <td className="px-3 py-2 text-center">
-                                                {item.type === 'rework' ? getStatusBadge(item.status) : getStatusBadge(item.status)}
+                                                {getStatusBadge(item.status)}
                                               </td>
                                               <td className={`px-3 py-2 text-center ${getScoreClass(item.score)}`}>
                                                 {item.type === 'rework' && item.score !== null && item.score !== undefined ? `${item.score}%` : '—'}
@@ -579,7 +644,7 @@ const AgentQCReportPage = () => {
                                               <td className="px-3 py-2 text-center">
                                                 {item.type === 'rework' && itemErrors.length > 0 ? (
                                                   <button
-                                                    onClick={() => openErrorModal(item.errors, `${item.type === 'rework' ? 'Rework' : 'Correction'} #${item.attempt} - Errors`)}
+                                                    onClick={() => openErrorModal(item.errors, `${item.type === 'rework' ? 'Rework' : 'Correction'} #${item.attempt} - Errors`, [item.file_path, record.qc_file_path])}
                                                     className="relative inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold transition-colors"
                                                   >
                                                     View
@@ -684,7 +749,7 @@ const AgentQCReportPage = () => {
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="px-2 py-0.5 bg-rose-400 text-white text-xs font-semibold rounded">Row {err.row}</span>
+                        {getErrorIdentity(err) && <span className="px-2 py-0.5 bg-rose-400 text-white text-xs font-semibold rounded">{getErrorIdentity(err)}</span>}
                         {err.points && <span className="px-2 py-0.5 bg-slate-500 text-white text-xs font-semibold rounded">-{err.points} pts</span>}
                       </div>
                       <p className="text-sm text-rose-700 font-medium">{err.error}</p>

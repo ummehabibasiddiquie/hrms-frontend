@@ -184,13 +184,13 @@ const QCConfirmationModal = ({
               Comments <span className="text-red-600">*</span>
             </h3>
             <p className="text-sm text-slate-600 mb-3">
-              Please provide detailed comments about the QC evaluation
+              Please provide detailed comments about the QC evaluation. Refer to QC Code (not Excel row numbers) so the agent can find the image.
             </p>
             <div className="bg-white rounded-lg border-2 border-purple-200 overflow-hidden">
               <textarea
                 value={comments}
                 onChange={(e) => setComments(e.target.value)}
-                placeholder="Enter your comments here..."
+                placeholder="Example: QC Code 6417 — Formatting - Junk Character"
                 rows={10}
                 className="w-full p-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none"
               />
