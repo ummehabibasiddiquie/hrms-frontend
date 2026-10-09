@@ -11,6 +11,7 @@ import { useAuth } from "../../context/AuthContext";
 import { getQCRecordsList } from "../../services/qcService";
 import { exportToCSV } from '../../utils/csvExport';
 import { toast } from 'react-hot-toast';
+import { getErrorIdentity } from '../../utils/qcErrorIdentity';
 
 const QCFormReportView = () => {
   const { user } = useAuth();
@@ -299,6 +300,7 @@ const QCFormReportView = () => {
                   const errorLabel = typeof error === 'object' 
                     ? (error.error || error.name || error.message || JSON.stringify(error)) 
                     : String(error);
+                  const identity = getErrorIdentity(error);
                   
                   return (
                     <div
@@ -311,9 +313,16 @@ const QCFormReportView = () => {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-3">
                           <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
-                          <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">
-                            {errorLabel}
-                          </p>
+                          <div>
+                            {identity && (
+                              <p className="text-xs font-bold uppercase tracking-wide text-red-700 mb-1">
+                                {identity}
+                              </p>
+                            )}
+                            <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">
+                              {errorLabel}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>

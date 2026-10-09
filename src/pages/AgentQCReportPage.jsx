@@ -25,6 +25,7 @@ import api from '../services/api';
 import nodeApi from '../services/nodeApi';
 import { DateRangePicker } from '../components/common/CustomCalendar';
 import { formatISTDateTimeParts } from "../utils/dateTimeIST";
+import { getErrorIdentity } from "../utils/qcErrorIdentity";
 
 
 const AgentQCReportPage = () => {
@@ -684,7 +685,7 @@ const AgentQCReportPage = () => {
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="px-2 py-0.5 bg-rose-400 text-white text-xs font-semibold rounded">Row {err.row}</span>
+                        {getErrorIdentity(err) && <span className="px-2 py-0.5 bg-rose-400 text-white text-xs font-semibold rounded">{getErrorIdentity(err)}</span>}
                         {err.points && <span className="px-2 py-0.5 bg-slate-500 text-white text-xs font-semibold rounded">-{err.points} pts</span>}
                       </div>
                       <p className="text-sm text-rose-700 font-medium">{err.error}</p>

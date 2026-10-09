@@ -1587,7 +1587,11 @@ const QAAgentAudit = ({
                 <div className="space-y-3">
                   {selectedErrorList.map((error, index) => {
                     const errorLabel = getErrorLabel(error);
-                    const rowNumber = typeof error === 'object' ? error.row : null;
+                    const identity = typeof error === 'object'
+                      ? (error.qc_code || error.qcCode
+                        ? `QC Code ${error.qc_code || error.qcCode}`
+                        : (error.row != null && error.row !== '' ? `Row ${error.row}` : null))
+                      : null;
                     const points = typeof error === 'object' ? error.points : null;
                     
                     return (
@@ -1609,9 +1613,9 @@ const QAAgentAudit = ({
                           <div className="flex items-start gap-3">
                             <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
                             <div>
-                              {rowNumber != null && rowNumber !== '' && (
+                              {identity && (
                                 <p className="text-xs font-bold uppercase tracking-wide text-red-700 mb-1">
-                                  Row {rowNumber}
+                                  {identity}
                                 </p>
                               )}
                               <p className="text-sm text-slate-800 font-medium leading-relaxed break-words">

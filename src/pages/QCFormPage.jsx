@@ -35,6 +35,7 @@ import MultiSelectWithCheckbox from '../components/common/MultiSelectWithCheckbo
 import SearchableSelect from '../components/common/SearchableSelect';
 import QCConfirmationModal from '../components/common/QCConfirmationModal';
 import { formatISTDateTime, getISTParts } from "../utils/dateTimeIST";
+import { extractQcCode, getQcFormDisplayKeys } from "../utils/qcErrorIdentity";
 import {
   Pagination,
   PaginationContent,
@@ -547,8 +548,10 @@ const QCFormPage = () => {
           const subcategory = category?.subcategories.find((sub) => sub.qc_afd_id === error.subcategoryId);
 
           if (category && subcategory) {
+            const qcCode = extractQcCode(row.originalData);
             const entry = {
-              row: rowIndex + 1,
+              row: rowIndex + 2,
+              ...(qcCode ? { qc_code: qcCode } : {}),
               category: category.name,
               subcategory: subcategory.name,
               error: `${category.name} - ${subcategory.name}`,
@@ -867,8 +870,8 @@ const QCFormPage = () => {
     );
   }
 
-  // Get the first three keys from the first data object for dynamic columns
-  const dynamicKeys = formData.length > 0 ? Object.keys(formData[0]).filter(key => key !== 'id').slice(0, 3) : [];
+  // Prefer QC Code among the first visible sample columns
+  const dynamicKeys = formData.length > 0 ? getQcFormDisplayKeys(formData[0], 3) : [];
 
   // Generate page numbers for pagination display
   const getPageNumbers = () => {
@@ -1077,12 +1080,18 @@ const QCFormPage = () => {
                 const recordScore = calculateRecordScore(row, afdData);
                 const actualRowIndex = formRows.findIndex(r => r.id === row.id);
                 const displayRowNum = startIndex + rowIndex + 1;
+                const rowQcCode = extractQcCode(row.originalData);
                 
                 return (
                   <tr key={row.id} className="hover:bg-blue-50 transition-colors">
                     {/* Sr. No. */}
                     <td className="px-4 py-4 text-sm font-semibold text-slate-700 border-r border-slate-200">
                       {displayRowNum}
+                      {rowQcCode ? (
+                        <div className="text-xs font-bold text-blue-700 mt-1">
+                          QC {rowQcCode}
+                        </div>
+                      ) : null}
                     </td>
 
                     {/* Dynamic Columns */}
