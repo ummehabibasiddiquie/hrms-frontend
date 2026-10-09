@@ -746,7 +746,7 @@ const RosterManagement = () => {
     }
     setConfirmAction({
       title: "Submit roster edits for approval",
-      message: `Submit ${draftPendingCount} saved change(s) for ${formatMonthYearLabel(monthYear)}? Each week you edited will go for approval. After approve, only those weeks are mailed.`,
+      message: `Submit ${draftPendingCount} saved change(s) for ${formatMonthYearLabel(monthYear)}? Each week you edited will go for approval. Roster email is not sent on approve — use Send email on that week tab.`,
       onConfirm: () =>
         runAction("submit-edits", async () => {
           const res = await submitRosterBatch({
@@ -797,35 +797,21 @@ const RosterManagement = () => {
     setEditorDay(day);
   };
 
-  const handleEmailApprovedWeeks = (locks = weekLocks) => {
-    const weeks = (locks || []).filter((l) => l?.week_number != null);
-    if (!weeks.length) {
-      toast.error(
-        "No approved week to email. Approve roster requests first; only that week is mailed."
-      );
-      return;
-    }
-    const labels = weeks.map((w) => `Week ${w.week_number}`).join(", ");
+  const handleEmailWeek = (weekNumber) => {
+    const wn = Number(weekNumber);
+    if (!Number.isFinite(wn) || wn <= 0) return;
     setConfirmAction({
-      title: "Email approved week roster",
-      message: `Send the roster mail only for ${labels} of ${formatMonthYearLabel(monthYear)}? Other weeks will not be emailed.`,
+      title: `Send Week ${wn} roster email`,
+      message: `Send the roster mail only for Week ${wn} of ${formatMonthYearLabel(monthYear)}? Other weeks will not be emailed.`,
       onConfirm: () =>
-        runAction("email-weeks", async () => {
-          let sent = 0;
-          let lastError = "";
-          for (const w of weeks) {
-            try {
-              const res = await emailRosterWeek({
-                month_year: monthYear,
-                week_number: w.week_number,
-              });
-              if ((res.data?.weekly_roster_emails || []).some((e) => e.sent)) sent += 1;
-            } catch (err) {
-              lastError = err?.response?.data?.message || err.message || lastError;
-            }
-          }
-          if (sent) toast.success(`Emailed approved ${labels}`);
-          else toast.error(lastError || "Weekly roster email was not sent");
+        runAction(`email-week-${wn}`, async () => {
+          const res = await emailRosterWeek({
+            month_year: monthYear,
+            week_number: wn,
+          });
+          const sent = (res.data?.weekly_roster_emails || []).some((e) => e.sent);
+          if (sent) toast.success(`Week ${wn} roster email sent`);
+          else toast.error(res.message || "Weekly roster email was not sent");
         }),
     });
   };
@@ -1108,7 +1094,7 @@ const RosterManagement = () => {
           {weekLocks.length > 0 && !monthCalendarLocked && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 space-y-1">
               <p className="text-xs font-semibold text-amber-900">
-                Locked weeks — open a week tab below to email or unlock it
+                Locked weeks — open a week tab below to send that week's email or unlock it
               </p>
               {weekLocks.map((lock) => (
                 <p key={lock.week_number} className="text-xs text-amber-800">
@@ -1157,13 +1143,8 @@ const RosterManagement = () => {
               }
               onUnlockWeek={(weekNumber) => handleUnlockWeek(weekNumber)}
               onLockWeek={(weekNumber) => handleLockWeek(weekNumber)}
-              emailingWeek={actionLoading === "email-weeks"}
-              onEmailWeek={(weekNumber) => {
-                const lock = weekLocks.find(
-                  (l) => Number(l.week_number) === Number(weekNumber)
-                );
-                if (lock) handleEmailApprovedWeeks([lock]);
-              }}
+              emailingWeek={String(actionLoading).startsWith("email-week-")}
+              onEmailWeek={(weekNumber) => handleEmailWeek(weekNumber)}
             />
           )}
         </div>

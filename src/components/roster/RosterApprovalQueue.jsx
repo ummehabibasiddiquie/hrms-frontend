@@ -38,21 +38,6 @@ import { useRosterRoles } from "../../hooks/useRosterRoles";
 const PAGE_SIZE = 8;
 const BULK_APPROVE_CHUNK = 10;
 
-function notifyWeeklyRosterEmail(mailRows) {
-  const rows = mailRows || [];
-  const mailed = rows.filter((e) => e.sent).length;
-  if (mailed) {
-    toast.success(`Weekly roster emailed for ${mailed} week(s)`);
-    return;
-  }
-  if (rows.some((e) => e.deferred)) {
-    toast("Weekly roster email waits until pending requests for that week are reviewed");
-    return;
-  }
-  const reason = rows.find((e) => e.reason)?.reason;
-  if (reason) toast.error(reason);
-}
-
 const STATUS_TABS = [
   { id: "Pending", label: "Pending" },
   { id: "Approved", label: "Approved" },
@@ -223,19 +208,17 @@ const RosterApprovalQueue = ({
       if (type === "approve" || type === "reject") {
         setActionId(request.request_id);
         if (type === "approve") {
-          const res = await approveChangeRequest({
+          await approveChangeRequest({
             request_id: request.request_id,
             ...(comment.trim() ? { reviewer_comment: comment.trim() } : {}),
           });
           toast.success("Request approved");
-          notifyWeeklyRosterEmail(res?.data?.weekly_roster_emails);
         } else {
-          const res = await rejectChangeRequest({
+          await rejectChangeRequest({
             request_id: request.request_id,
             reviewer_comment: comment.trim(),
           });
           toast.success("Request rejected");
-          notifyWeeklyRosterEmail(res?.data?.weekly_roster_emails);
         }
       } else if (type === "approve_selected") {
         setBulkLoading(true);
@@ -245,8 +228,6 @@ const RosterApprovalQueue = ({
 
         let approved = 0;
         let failed = [];
-        let mailedWeeks = 0;
-        let deferredMail = false;
         for (let i = 0; i < ids.length; i += BULK_APPROVE_CHUNK) {
           const chunk = ids.slice(i, i + BULK_APPROVE_CHUNK);
           const res = await approveChangeRequestsBulk({
@@ -255,9 +236,6 @@ const RosterApprovalQueue = ({
           });
           approved += res.data?.approved ?? 0;
           failed = failed.concat(res.data?.failed || []);
-          const mailRows = res.data?.weekly_roster_emails || [];
-          mailedWeeks += mailRows.filter((e) => e.sent).length;
-          if (mailRows.some((e) => e.deferred)) deferredMail = true;
           setBulkProgress({
             done: Math.min(i + chunk.length, total),
             total,
@@ -272,12 +250,6 @@ const RosterApprovalQueue = ({
         } else {
           toast.success(`Approved ${approved} request(s)`);
         }
-        if (approved > 0) {
-          if (mailedWeeks) toast.success(`Weekly roster emailed for ${mailedWeeks} week(s)`);
-          else if (deferredMail) {
-            toast("Weekly roster email waits until pending requests for that week are reviewed");
-          }
-        }
         setSelectedIds(new Set());
       } else if (type === "reject_selected") {
         setBulkLoading(true);
@@ -287,14 +259,12 @@ const RosterApprovalQueue = ({
 
         let ok = 0;
         let fail = 0;
-        let lastMailRows = [];
         for (let i = 0; i < ids.length; i += 1) {
           try {
-            const res = await rejectChangeRequest({
+            await rejectChangeRequest({
               request_id: ids[i],
               reviewer_comment: comment.trim(),
             });
-            lastMailRows = res?.data?.weekly_roster_emails || lastMailRows;
             ok += 1;
           } catch {
             fail += 1;
@@ -303,7 +273,6 @@ const RosterApprovalQueue = ({
         }
         if (fail) toast.error(`Rejected ${ok}; ${fail} failed`);
         else toast.success(`Rejected ${ok} request(s)`);
-        notifyWeeklyRosterEmail(lastMailRows);
         setSelectedIds(new Set());
       }
 
