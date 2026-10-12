@@ -3,7 +3,7 @@
 import Tracker from '../components/AgentDashboard/Tracker';
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Settings, Lock, File, CalendarDays } from 'lucide-react';
+import { Settings, Lock, File, CalendarDays, BookOpen } from 'lucide-react';
 import { MONTHLY_GOAL, SHIFT_START_HOUR, SHIFT_HOURS_COUNT } from '../utils/constants';
 import { isWithinRange, getComparisonRange } from '../utils/dateHelpers';
 import FilterBar from '../components/dashboard/FilterBar';
@@ -35,6 +35,7 @@ import { getFriendlyErrorMessage, showApiError } from '../utils/errorMessages';
 import ErrorMessage from '../components/common/ErrorMessage';
 import AgentTabsNavigation from '../components/AgentDashboard/AgentTabsNavigation';
 import RosterManagement from '../components/roster/RosterManagement';
+import SopLibrary from '../components/sop/SopLibrary';
 import ReportEmails from '../components/dashboard/manage/ReportEmails';
 import MyRoster from '../components/roster/MyRoster';
 import QAHoursTracker from '../components/QAAgentDashboard/QAHoursTracker';
@@ -144,6 +145,7 @@ const DashboardPage = ({
       ...(isAssistantManager || canManageProjects ? ['projects', 'afd'] : []),
       ...(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager ? ['category', 'permissions'] : []),
       ...(canAccessRoster ? ['roster'] : []),
+      'sops',
     ];
     if (!visibleTabs.includes(adminActiveTab) && visibleTabs.length > 0) {
       setManageSubTab(visibleTabs[0]);
@@ -468,6 +470,11 @@ const DashboardPage = ({
               onChange={setManageSubTab}
               tabs={[
                 {
+                  id: 'sops',
+                  label: 'SOPs',
+                  icon: BookOpen,
+                },
+                {
                   id: 'users',
                   label: 'User Management',
                   hidden: !(canManageUsers || isSuperAdmin || isAdmin || isProjectManager),
@@ -591,6 +598,10 @@ const DashboardPage = ({
             {adminActiveTab === 'roster' && canAccessRoster && (
               <RosterManagement />
             )}
+
+            {adminActiveTab === 'sops' && (
+              <SopLibrary />
+            )}
           </div>
         </div>
       )}
@@ -599,6 +610,12 @@ const DashboardPage = ({
       {activeTab === 'report_emails' && canManageReportEmails && (
         <div className="max-w-7xl mx-auto mt-2">
           <ReportEmails />
+        </div>
+      )}
+
+      {activeTab === 'sops' && (
+        <div className="max-w-7xl mx-auto mt-2">
+          <SopLibrary />
         </div>
       )}
 

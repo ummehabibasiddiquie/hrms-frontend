@@ -142,6 +142,14 @@ export default defineConfig(({ mode }) => {
 
           secure: false,
         },
+
+        "/sop": {
+          target: apiBaseURL,
+
+          changeOrigin: true,
+
+          secure: false,
+        },
       },
       middlewareMode: false,
 
