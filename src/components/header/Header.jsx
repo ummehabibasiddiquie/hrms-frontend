@@ -139,6 +139,11 @@ const Header = ({
       setIsMobileMenuOpen(false);
       return;
     }
+    if (view === 'SOPS') {
+      navigate(dashboardTabUrl('sops'));
+      setIsMobileMenuOpen(false);
+      return;
+    }
     if (view === 'MY_REPORT') {
       navigate(dashboardTabUrl('my_hours'));
       setIsMobileMenuOpen(false);
@@ -302,7 +307,14 @@ const Header = ({
     return [];
   };
 
-  const navItems = getNavItems();
+  const navItems = (() => {
+    const items = getNavItems();
+    if (!items.length) return items;
+    const roleId = Number(currentUser?.role_id);
+    // Admin and Super Admin open SOPs from Manage, so it does not stretch this menu.
+    if (roleId === 1 || roleId === 2) return items;
+    return [...items, { view: "SOPS", label: "SOPs", icon: BookOpen }];
+  })();
   // DEBUG: Log navItems and currentUser for troubleshooting tab visibility
 
   // Helper function to check if a tab is active
@@ -341,6 +353,10 @@ const Header = ({
 
     if (view === 'MY_ROSTER') {
       return currentPath === '/dashboard' && currentTab === 'my_roster';
+    }
+
+    if (view === 'SOPS') {
+      return currentPath === '/dashboard' && (currentTab === 'sops' || (currentTab === 'manage' && searchParams.get('adminTab') === 'sops'));
     }
 
     if (view === 'MY_REPORT') {
