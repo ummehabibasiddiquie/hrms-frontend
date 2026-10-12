@@ -49,6 +49,7 @@ export default defineConfig(({ mode }) => {
           "/qa_tracker",
           "/kra",
           "/holiday",
+          "/sop",
           "/api_log_list",
           "/user_monthly_report",
           "/health",
