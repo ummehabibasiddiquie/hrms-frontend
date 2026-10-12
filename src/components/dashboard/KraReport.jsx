@@ -10,7 +10,7 @@ import {
   Funnel,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { MonthYearPicker, getCurrentYyyyMm, yyyyMmToMonthYear } from "../common/CustomCalendar";
+import { MonthYearPicker, getCurrentYyyyMm, monthYearToYyyyMm, yyyyMmToMonthYear } from "../common/CustomCalendar";
 import SearchableSelect from "../common/SearchableSelect";
 import { exportKraReport, fetchKraReport, fetchKraUsers, saveKraNotes } from "../../services/kraService";
 
@@ -20,6 +20,8 @@ const KRA_GO_LIVE_MONTH = "SEP2026";
 const STATUS_STYLE = {
   PRESENT: "bg-green-50 text-green-700 border border-green-200",
   "HALF DAY": "bg-amber-50 text-amber-700 border border-amber-200",
+  "HALF DAY (ROSTER)": "bg-yellow-50 text-yellow-800 border border-yellow-200",
+  "HALF DAY (UNROSTERED)": "bg-amber-50 text-amber-800 border border-amber-200",
   ABSENT: "bg-red-50 text-red-700 border border-red-200",
   LEAVE: "bg-yellow-50 text-yellow-800 border border-yellow-200",
   "LEAVE (ROSTER)": "bg-yellow-50 text-yellow-800 border border-yellow-200",
@@ -38,6 +40,8 @@ const STATUS_ROW_TINT = {
   "LEAVE (UNROSTERED)": "bg-amber-50/50",
   ABSENT: "bg-red-50/40",
   "HALF DAY": "bg-amber-50/40",
+  "HALF DAY (ROSTER)": "bg-yellow-50/60",
+  "HALF DAY (UNROSTERED)": "bg-amber-50/50",
 };
 
 function flagClass(value) {
@@ -55,9 +59,15 @@ function notesFromReport(report) {
   return Object.fromEntries((report?.days || []).map((day) => [day.work_date, day.note || ""]));
 }
 
+function isBeforeGoLive(monthYear) {
+  const value = monthYearToYyyyMm(monthYear);
+  const goLive = monthYearToYyyyMm(KRA_GO_LIVE_MONTH);
+  return Boolean(value && goLive && value < goLive);
+}
+
 function defaultKraMonth() {
   const current = yyyyMmToMonthYear(getCurrentYyyyMm());
-  return current < KRA_GO_LIVE_MONTH ? KRA_GO_LIVE_MONTH : current;
+  return isBeforeGoLive(current) ? KRA_GO_LIVE_MONTH : current;
 }
 
 export default function KraReport() {
@@ -90,7 +100,7 @@ export default function KraReport() {
 
   const loadReport = useCallback(async () => {
     if (!userId || !monthYear || monthYear === "all") return;
-    if (monthYear < KRA_GO_LIVE_MONTH) {
+    if (isBeforeGoLive(monthYear)) {
       setMonthYear(KRA_GO_LIVE_MONTH);
       return;
     }
@@ -218,7 +228,7 @@ export default function KraReport() {
               minMonthYear={KRA_GO_LIVE_MONTH}
               onMonthYearChange={(next) => {
                 if (!next || next === "all") return;
-                setMonthYear(next < KRA_GO_LIVE_MONTH ? KRA_GO_LIVE_MONTH : next);
+                setMonthYear(isBeforeGoLive(next) ? KRA_GO_LIVE_MONTH : next);
               }}
             />
           </div>
@@ -336,7 +346,7 @@ export default function KraReport() {
               weight="10%"
               value={scores.schedule}
               hint={`${counts.present_days || 0} present / ${counts.schedule_working_days ?? counts.working_days ?? 0} working`}
-              hintTooltip={`${counts.present_days || 0} present, half day, or WFH days out of ${counts.schedule_working_days ?? counts.working_days ?? 0} schedule working days (Leave Roster excluded; Leave Unrostered still counts). Formula: (Present / Working days) × 10%`}
+              hintTooltip={`${counts.present_days || 0} present days out of ${counts.schedule_working_days ?? counts.working_days ?? 0} working days. This total drops roster leave only (full day or half day). Unrostered leave is not taken off. Productivity and Quality working days drop every leave.`}
               icon={CalendarDays}
             />
             <ScoreCard
@@ -407,7 +417,7 @@ export default function KraReport() {
                       <td
                         title={
                           day.tracker_count != null
-                            ? day.attendance === "HALF DAY"
+                            ? ["HALF DAY", "HALF DAY (ROSTER)", "HALF DAY (UNROSTERED)"].includes(day.attendance)
                               ? `Target: ≥ 4 trackers (${day.tracker_count < 4 ? "Non-compliant (<4)" : "Compliant"})`
                               : `Target: ≥ 7 trackers (${day.tracker_count < 7 ? "Non-compliant (<7)" : "Compliant"})`
                             : undefined
