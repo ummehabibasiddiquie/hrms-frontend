@@ -29,6 +29,22 @@ import { getErrorIdentity, enrichErrorListFromFile } from "../../utils/qcErrorId
 // Helper to get today's date in YYYY-MM-DD format (IST)
 const getTodayDate = () => todayISTISO() || new Date().toISOString().split('T')[0];
 
+/** Agent upload time stored in the Cloudinary file URL. */
+const fileUploadedAt = (fileUrl) => {
+  const raw = String(fileUrl || "");
+  const version = raw.match(/\/v(\d{9,11})\//);
+  if (version) {
+    const uploaded = new Date(Number(version[1]) * 1000);
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  const millis = raw.match(/_(\d{13})(?:\D|$)/);
+  if (millis) {
+    const uploaded = new Date(Number(millis[1]));
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  return null;
+};
+
 /** Compare a datetime to YYYY-MM-DD range using IST calendar day. */
 const isDateInRange = (dateValue, startDate, endDate) => {
   if (!startDate || !endDate) return true;
@@ -98,7 +114,7 @@ const mapPendingQcRecord = (record) => {
     project_category_id: record.project_category_id,
     qc_percentage: record.sampling_percentage || record.qc_percentage || 50,
     work_date: record.work_date || record.date_time || null,
-    rework_at: updatedAt,
+    rework_at: fileUploadedAt(filePath) || updatedAt,
     date_of_file_submission: record.work_date || record.date_time || updatedAt,
   };
 };
@@ -323,7 +339,7 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
               <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Agent</th>
               <th className="px-3 py-3 text-left font-semibold min-w-[220px]">Project / Task</th>
               <th className="px-3 py-3 text-left font-semibold w-[7.5rem]">Work Date</th>
-              <th className="px-3 py-3 text-left font-semibold w-[7.5rem]">Rework / Correction<br />Date & Time</th>
+              <th className="px-3 py-3 text-left font-semibold w-[7.5rem]">File Submitted</th>
               <th className="px-4 py-3 text-center font-semibold">Attempt</th>
               <th className="px-4 py-3 text-center font-semibold">Previous Score</th>
               <th className="px-4 py-3 text-center font-semibold">Previous Errors</th>
@@ -997,16 +1013,13 @@ const QAAgentList = () => {
       console.log('Payload:', payload);
       console.groupEnd();
 
-      // Determine which endpoint to call based on the tracker type and status
-      let endpoint = '/qc-records/save'; // default fallback
-      
-      // Check if this is a correction tracker (has correction history)
-      if (tracker.correction_cycle_count > 0 && tracker.correction_cycle_count !== null) {
+      // Pending rows carry type, not correction_cycle_count. Use type so
+      // Completed/Correction is saved on the correction record.
+      let endpoint = '/qc-regular/save';
+      if (tracker.type === 'correction' || Number(tracker.correction_cycle_count) > 0) {
         endpoint = '/qc-correction/save';
-      } else if (tracker.rework_cycle_count > 0 && tracker.rework_cycle_count !== null) {
+      } else if (tracker.type === 'rework' || Number(tracker.rework_cycle_count) > 0) {
         endpoint = '/qc-rework/save';
-      } else {
-        endpoint = '/qc-regular/save';
       }
 
       console.log(`[QAAgentList] Using endpoint: ${endpoint}`);

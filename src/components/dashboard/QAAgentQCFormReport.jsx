@@ -31,6 +31,36 @@ import { exportToCSV } from '../../utils/csvExport';
 import { formatISTDateTimeLong } from "../../utils/dateTimeIST";
 import { getErrorIdentity, enrichErrorListFromFile } from "../../utils/qcErrorIdentity";
 
+/** Agent upload time stored in the Cloudinary file URL (`/v<unix>/` or a 13-digit suffix). */
+const fileUploadedAt = (fileUrl) => {
+  const raw = String(fileUrl || "");
+  const version = raw.match(/\/v(\d{9,11})\//);
+  if (version) {
+    const uploaded = new Date(Number(version[1]) * 1000);
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  const millis = raw.match(/_(\d{13})(?:\D|$)/);
+  if (millis) {
+    const uploaded = new Date(Number(millis[1]));
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  return null;
+};
+
+const cycleQcDoneAt = (status, fileQcStatus, updatedAt) => {
+  const done =
+    String(fileQcStatus || "").toLowerCase() === "completed" ||
+    String(status || "").toLowerCase() === "completed";
+  return done ? updatedAt || null : null;
+};
+
+/** yyyy-mm-dd from an API datetime, using the calendar day stored in the value. */
+const calendarDay = (value) => {
+  if (!value) return '';
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+};
+
 /** All QC dropdown: active, or deactivated within the last 3 months. */
 const isQcVisibleInDropdown = (record) => {
   if (record.qc_is_active === undefined && record.qc_deactivated_at === undefined) return true;
@@ -80,6 +110,7 @@ const QAAgentQCFormReport = () => {
           status: record.status,
           qc_status: record.qc_status,
           created_at: record.created_at,
+          updated_at: record.updated_at,
           date_of_file_submission: record.date_of_file_submission,
           qc_file_path: record.qc_file_path,
           whole_file_path: record.whole_file_path,
@@ -88,6 +119,8 @@ const QAAgentQCFormReport = () => {
           // Keep raw rework data
           qc_rework: record.qc_rework || []
         }));
+
+        mappedRecords.sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
 
         setQcRecords(mappedRecords);
         setFilteredRecords(mappedRecords);
@@ -153,18 +186,10 @@ const QAAgentQCFormReport = () => {
     // Date range filter
     if (dateRange.start || dateRange.end) {
       filtered = filtered.filter(record => {
-        const submissionDate = record.date_of_file_submission ? new Date(record.date_of_file_submission) : null;
-        if (!submissionDate) return false;
-
-        const startDate = dateRange.start ? new Date(dateRange.start) : null;
-        const endDate = dateRange.end ? new Date(dateRange.end) : null;
-
-        if (startDate && submissionDate < startDate) return false;
-        if (endDate) {
-          const endDateTime = new Date(endDate);
-          endDateTime.setHours(23, 59, 59, 999);
-          if (submissionDate > endDateTime) return false;
-        }
+        const workDay = calendarDay(record.date_of_file_submission);
+        if (!workDay) return false;
+        if (dateRange.start && workDay < dateRange.start) return false;
+        if (dateRange.end && workDay > dateRange.end) return false;
         return true;
       });
     }
@@ -316,8 +341,8 @@ const QAAgentQCFormReport = () => {
               'Score': rework.rework_qc_score ? `${rework.rework_qc_score}%` : '-',
               'No. of Errors': count,
               'Error Type': types.length > 0 ? types.join(', ') : '-',
-              'Created At': formatDateTime(rework.created_at),
-              'Updated At': formatDateTime(rework.updated_at)
+              'File Submitted': formatDateTime(rework.file_submitted_at || fileUploadedAt(rework.rework_file_path)),
+              'QC Done': formatDateTime(cycleQcDoneAt(rework.rework_status, rework.rework_file_qc_status, rework.updated_at))
             });
           });
         }
@@ -333,11 +358,13 @@ const QAAgentQCFormReport = () => {
               'QC Name': record.qc_name || 'N/A',
               'Count': correction.correction_count || '-',
               'Status': correction.correction_status || '-',
-              'Score': '-',
+              'Score': (correction.correction_qc_score ?? record.qc_score)
+                ? `${correction.correction_qc_score ?? record.qc_score}%`
+                : '-',
               'No. of Errors': '-',
               'Error Type': '-',
-              'Created At': formatDateTime(correction.created_at),
-              'Updated At': formatDateTime(correction.updated_at)
+              'File Submitted': formatDateTime(correction.file_submitted_at || fileUploadedAt(correction.correction_file_path)),
+              'QC Done': formatDateTime(cycleQcDoneAt(correction.correction_status, correction.correction_file_qc_status, correction.updated_at))
             });
           });
         }
@@ -496,7 +523,9 @@ const QAAgentQCFormReport = () => {
         status: r.rework_status,
         score: r.rework_qc_score,
         errors: r.rework_error_list,
-        file_path: r.rework_file_path
+        file_path: r.rework_file_path,
+        file_submitted_at: r.file_submitted_at || fileUploadedAt(r.rework_file_path),
+        qc_done_at: cycleQcDoneAt(r.rework_status, r.rework_file_qc_status, r.updated_at)
       });
     });
 
@@ -508,9 +537,12 @@ const QAAgentQCFormReport = () => {
         count: c.correction_count,
         created_at: c.created_at,
         status: c.correction_status,
-        score: null, // API doesn't have correction_qc_score
+        // Correction cycles have no score column. The first QC score is qc_records.qc_score.
+        score: c.correction_qc_score ?? record.qc_score ?? null,
         errors: c.correction_error_list,
-        file_path: c.correction_file_path
+        file_path: c.correction_file_path,
+        file_submitted_at: c.file_submitted_at || fileUploadedAt(c.correction_file_path),
+        qc_done_at: cycleQcDoneAt(c.correction_status, c.correction_file_qc_status, c.updated_at)
       });
     });
 
@@ -756,7 +788,8 @@ const QAAgentQCFormReport = () => {
                                   <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
                                     <tr>
                                       <th className="px-3 py-2 text-left font-semibold">Type</th>
-                                      <th className="px-3 py-2 text-left font-semibold">Date & Time</th>
+                                      <th className="px-3 py-2 text-left font-semibold">File Submitted</th>
+                                      <th className="px-3 py-2 text-left font-semibold">QC Done</th>
                                       <th className="px-3 py-2 text-center font-semibold">Status</th>
                                       <th className="px-3 py-2 text-center font-semibold">Score</th>
                                       <th className="px-3 py-2 text-center font-semibold">Errors</th>
@@ -779,7 +812,8 @@ const QAAgentQCFormReport = () => {
                                               </span>
                                             )}
                                           </td>
-                                          <td className="px-3 py-2 text-slate-600">{formatDateTime(item.created_at)}</td>
+                                          <td className="px-3 py-2 text-slate-600">{formatDateTime(item.file_submitted_at)}</td>
+                                          <td className="px-3 py-2 text-slate-600">{formatDateTime(item.qc_done_at)}</td>
                                           <td className="px-3 py-2 text-center">{getStatusBadge(item.status)}</td>
                                           <td className={`px-3 py-2 text-center ${getScoreClass(item.score)}`}>
                                             {item.score !== null && item.score !== undefined ? `${item.score}%` : '—'}
