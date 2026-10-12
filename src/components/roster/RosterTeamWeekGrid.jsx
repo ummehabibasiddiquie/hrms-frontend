@@ -134,14 +134,15 @@ const RosterTeamWeekGrid = ({
           {week?.label}
           {activeWeekLocked ? " · Locked" : ""}
         </span>
-        {canUnlockWeeks && activeWeekLocked && typeof onEmailWeek === "function" && (
+        {canUnlockWeeks && typeof onEmailWeek === "function" && (
           <button
             type="button"
             disabled={emailingWeek || Boolean(unlockingWeek)}
             onClick={() => onEmailWeek(activeWeek)}
-            className="self-center px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            title={`Send roster email for Week ${activeWeek} only`}
+            className="self-center px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-blue-300 bg-white text-blue-800 hover:bg-blue-50 disabled:opacity-50"
           >
-            {emailingWeek ? "Emailing…" : `Email Week ${activeWeek}`}
+            {emailingWeek ? "Sending…" : `Send email · Week ${activeWeek}`}
           </button>
         )}
         {canUnlockWeeks && activeWeekLocked && typeof onUnlockWeek === "function" && (

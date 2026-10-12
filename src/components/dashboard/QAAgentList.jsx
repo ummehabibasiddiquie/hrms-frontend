@@ -29,6 +29,22 @@ import { getErrorIdentity, enrichErrorListFromFile } from "../../utils/qcErrorId
 // Helper to get today's date in YYYY-MM-DD format (IST)
 const getTodayDate = () => todayISTISO() || new Date().toISOString().split('T')[0];
 
+/** Agent upload time stored in the Cloudinary file URL. */
+const fileUploadedAt = (fileUrl) => {
+  const raw = String(fileUrl || "");
+  const version = raw.match(/\/v(\d{9,11})\//);
+  if (version) {
+    const uploaded = new Date(Number(version[1]) * 1000);
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  const millis = raw.match(/_(\d{13})(?:\D|$)/);
+  if (millis) {
+    const uploaded = new Date(Number(millis[1]));
+    if (!Number.isNaN(uploaded.getTime())) return uploaded.toISOString();
+  }
+  return null;
+};
+
 /** Compare a datetime to YYYY-MM-DD range using IST calendar day. */
 const isDateInRange = (dateValue, startDate, endDate) => {
   if (!startDate || !endDate) return true;
@@ -98,7 +114,7 @@ const mapPendingQcRecord = (record) => {
     project_category_id: record.project_category_id,
     qc_percentage: record.sampling_percentage || record.qc_percentage || 50,
     work_date: record.work_date || record.date_time || null,
-    rework_at: updatedAt,
+    rework_at: fileUploadedAt(filePath) || updatedAt,
     date_of_file_submission: record.work_date || record.date_time || updatedAt,
   };
 };
@@ -323,7 +339,7 @@ const PendingQCFilesTable = ({ trackers, handleQCForm, qcFormLoading, handleSave
               <th className="px-3 py-3 text-left font-semibold whitespace-nowrap">Agent</th>
               <th className="px-3 py-3 text-left font-semibold min-w-[220px]">Project / Task</th>
               <th className="px-3 py-3 text-left font-semibold w-[7.5rem]">Work Date</th>
-              <th className="px-3 py-3 text-left font-semibold w-[7.5rem]">Rework / Correction<br />Date & Time</th>
+              <th className="px-3 py-3 text-left font-semibold w-[7.5rem]">File Submitted</th>
               <th className="px-4 py-3 text-center font-semibold">Attempt</th>
               <th className="px-4 py-3 text-center font-semibold">Previous Score</th>
               <th className="px-4 py-3 text-center font-semibold">Previous Errors</th>
@@ -552,6 +568,8 @@ const QAAgentList = () => {
   const [allPendingTrackers, setAllPendingTrackers] = useState([]);
   const [showAllUrgent, setShowAllUrgent] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [urgentSearch, setUrgentSearch] = useState("");
+  const groupBeforeSearchRef = useRef(null);
   
   // Tab state - synced to ?subtab= (e.g. /dashboard?tab=agent_file_report&subtab=rework_review)
   const [activeTab, setActiveTab] = useRoutedSubTab('agent_files', {
@@ -817,19 +835,23 @@ const QAAgentList = () => {
     }
   }, [fileGroups, selectedGroupKey, activeTab]);
 
+  const fileMatchesSearch = (file, query) => {
+    if (!query) return true;
+    return (
+      String(file.user_name || file.agent_name || "").toLowerCase().includes(query) ||
+      String(file.project_name || "").toLowerCase().includes(query) ||
+      String(file.task_name || "").toLowerCase().includes(query)
+    );
+  };
+
   const filteredTaskGroups = useMemo(() => {
     if (!searchQuery.trim()) return taskGroups;
     const query = searchQuery.toLowerCase();
     return taskGroups.filter((group) => {
       const files = fileGroups[group.id] || [];
-      const agentHit = files.some((f) =>
-        String(f.user_name || f.agent_name || "").toLowerCase().includes(query)
-      );
-      return (
+      return files.some((file) => fileMatchesSearch(file, query)) ||
         String(group.project_name || "").toLowerCase().includes(query) ||
-        String(group.task_name || "").toLowerCase().includes(query) ||
-        agentHit
-      );
+        String(group.task_name || "").toLowerCase().includes(query);
     });
   }, [taskGroups, searchQuery, fileGroups]);
 
@@ -871,15 +893,29 @@ const QAAgentList = () => {
     return rows;
   }, [allPendingTrackers]);
 
+  const filteredUrgentFiles = useMemo(() => {
+    const query = urgentSearch.trim().toLowerCase();
+    if (!query) return urgentPendingFiles;
+    return urgentPendingFiles.filter((tracker) => {
+      const agent = String(tracker.user_name || tracker.agent_name || "").toLowerCase();
+      const project = String(projectNameMap[String(tracker.project_id)] || tracker.project_name || "").toLowerCase();
+      const task = String(taskNameMap[String(tracker.task_id)] || tracker.task_name || "").toLowerCase();
+      return agent.includes(query) || project.includes(query) || task.includes(query);
+    });
+  }, [urgentPendingFiles, urgentSearch, projectNameMap, taskNameMap]);
+
   const visibleUrgentFiles = useMemo(
-    () => (showAllUrgent ? urgentPendingFiles : urgentPendingFiles.slice(0, 15)),
-    [urgentPendingFiles, showAllUrgent]
+    () => (showAllUrgent ? filteredUrgentFiles : filteredUrgentFiles.slice(0, 15)),
+    [filteredUrgentFiles, showAllUrgent]
   );
 
   const selectedTaskFiles = useMemo(() => {
     if (!selectedGroupKey) return [];
-    return fileGroups[selectedGroupKey] || [];
-  }, [selectedGroupKey, fileGroups]);
+    const files = fileGroups[selectedGroupKey] || [];
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return files;
+    return files.filter((file) => fileMatchesSearch(file, query));
+  }, [selectedGroupKey, fileGroups, searchQuery]);
 
   const selectedTaskGroup = useMemo(
     () => taskGroups.find((g) => g.id === selectedGroupKey) || null,
@@ -887,12 +923,26 @@ const QAAgentList = () => {
   );
 
   const trackerPagination = useClientPagination(selectedTaskFiles, {
-    resetKeys: [selectedGroupKey, globalDateFilter.startDate, globalDateFilter.endDate],
+    resetKeys: [selectedGroupKey, searchQuery, globalDateFilter.startDate, globalDateFilter.endDate],
   });
 
-  // Clear search
+  // Remember the open task before a search jumps to a match, and put it back when the box is cleared.
+  const handleSearchChange = (value) => {
+    const wasEmpty = !searchQuery.trim();
+    const nextEmpty = !String(value || "").trim();
+    if (wasEmpty && !nextEmpty) {
+      groupBeforeSearchRef.current = selectedGroupKey;
+    }
+    if (!wasEmpty && nextEmpty) {
+      const restore = groupBeforeSearchRef.current;
+      groupBeforeSearchRef.current = null;
+      if (restore) setSelectedGroupKey(restore);
+    }
+    setSearchQuery(value);
+  };
+
   const handleClearSearch = () => {
-    setSearchQuery("");
+    handleSearchChange("");
   };
 
   // Handle global date changes — counts reload via useEffect for ALL agents
@@ -963,16 +1013,13 @@ const QAAgentList = () => {
       console.log('Payload:', payload);
       console.groupEnd();
 
-      // Determine which endpoint to call based on the tracker type and status
-      let endpoint = '/qc-records/save'; // default fallback
-      
-      // Check if this is a correction tracker (has correction history)
-      if (tracker.correction_cycle_count > 0 && tracker.correction_cycle_count !== null) {
+      // Pending rows carry type, not correction_cycle_count. Use type so
+      // Completed/Correction is saved on the correction record.
+      let endpoint = '/qc-regular/save';
+      if (tracker.type === 'correction' || Number(tracker.correction_cycle_count) > 0) {
         endpoint = '/qc-correction/save';
-      } else if (tracker.rework_cycle_count > 0 && tracker.rework_cycle_count !== null) {
+      } else if (tracker.type === 'rework' || Number(tracker.rework_cycle_count) > 0) {
         endpoint = '/qc-rework/save';
-      } else {
-        endpoint = '/qc-regular/save';
       }
 
       console.log(`[QAAgentList] Using endpoint: ${endpoint}`);
@@ -1220,18 +1267,44 @@ const QAAgentList = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={urgentSearch}
+                    onChange={(e) => {
+                      setUrgentSearch(e.target.value);
+                      setShowAllUrgent(false);
+                    }}
+                    placeholder="Search agent, project, or task..."
+                    className="w-full pl-9 pr-8 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
+                  />
+                  {urgentSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setUrgentSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
                 <span className="text-xs font-bold text-red-700 bg-red-100 px-2.5 py-1 rounded-full">
-                  {urgentPendingFiles.filter((t) => t._overdue).length} overdue
+                  {filteredUrgentFiles.filter((t) => t._overdue).length} overdue
                 </span>
                 <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
-                  {urgentPendingFiles.length} urgent
+                  {filteredUrgentFiles.length} urgent
                 </span>
               </div>
             </div>
             {urgentPendingFiles.length === 0 ? (
               <div className="px-5 py-6 text-sm font-medium text-slate-500">
                 No urgent pending files right now. Files appear here when they are overdue or have ≤4 working hours left on the QC SLA. Night files added after midnight get 48 working hours; others get 24.
+              </div>
+            ) : filteredUrgentFiles.length === 0 ? (
+              <div className="px-5 py-6 text-sm font-medium text-slate-500">
+                No urgent files match "{urgentSearch}".
               </div>
             ) : (
               <>
@@ -1337,7 +1410,7 @@ const QAAgentList = () => {
                 </tbody>
               </table>
             </div>
-            {urgentPendingFiles.length > 15 ? (
+            {filteredUrgentFiles.length > 15 ? (
               <div className="border-t border-slate-100 px-5 py-2.5 text-center">
                 <button
                   type="button"
@@ -1346,7 +1419,7 @@ const QAAgentList = () => {
                 >
                   {showAllUrgent
                     ? "Show top 15 only"
-                    : `View all ${urgentPendingFiles.length} urgent files`}
+                    : `View all ${filteredUrgentFiles.length} urgent files`}
                 </button>
               </div>
             ) : null}
@@ -1380,7 +1453,7 @@ const QAAgentList = () => {
               </h3>
               <p className="text-slate-600 text-sm max-w-md mb-6 text-center">
                 {searchQuery 
-                  ? `We couldn't find any project or task matching "${searchQuery}". Try adjusting your search.`
+                  ? `We couldn't find any agent, project, or task matching "${searchQuery}". Try adjusting your search.`
                   : 'No pending tracker files for the selected date range.'
                 }
               </p>
@@ -1418,8 +1491,8 @@ const QAAgentList = () => {
                     <input
                       type="text"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search project or task..."
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      placeholder="Search agent, project, or task..."
                       className="w-full pl-10 pr-9 py-2.5 text-sm font-medium border-2 border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-all placeholder:text-slate-400"
                     />
                     {searchQuery && (
@@ -1444,7 +1517,8 @@ const QAAgentList = () => {
                 {/* Project / Task list */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
                   {filteredTaskGroups.map((group) => {
-                    const trackers = fileGroups[group.id] || [];
+                    const query = searchQuery.trim().toLowerCase();
+                    const trackers = (fileGroups[group.id] || []).filter((file) => fileMatchesSearch(file, query));
                     const isSelected = selectedGroupKey === group.id;
                     
                     return (
@@ -1680,7 +1754,7 @@ const QAAgentList = () => {
               </h3>
               <p className="text-slate-600 text-sm max-w-md mb-6 text-center">
                 {searchQuery 
-                  ? `We couldn't find any project or task matching "${searchQuery}". Try adjusting your search.`
+                  ? `We couldn't find any agent, project, or task matching "${searchQuery}". Try adjusting your search.`
                   : 'No pending rework or correction files for the selected date range.'
                 }
               </p>
@@ -1718,8 +1792,8 @@ const QAAgentList = () => {
                     <input
                       type="text"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search project or task..."
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      placeholder="Search agent, project, or task..."
                       className="w-full pl-10 pr-9 py-2.5 text-sm font-medium border-2 border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50 hover:bg-white transition-all placeholder:text-slate-400"
                     />
                     {searchQuery && (
@@ -1744,7 +1818,8 @@ const QAAgentList = () => {
                 {/* Project / Task list */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2">
                   {filteredTaskGroups.map((group) => {
-                    const trackers = fileGroups[group.id] || [];
+                    const query = searchQuery.trim().toLowerCase();
+                    const trackers = (fileGroups[group.id] || []).filter((file) => fileMatchesSearch(file, query));
                     const isSelected = selectedGroupKey === group.id;
                     
                     return (
