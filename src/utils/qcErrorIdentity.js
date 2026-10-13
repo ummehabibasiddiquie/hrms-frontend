@@ -39,7 +39,7 @@ export function extractQcCode(record) {
 
 export function getQcFormDisplayKeys(record, maxCols = 3) {
   if (!record || typeof record !== "object") return [];
-  const keys = Object.keys(record).filter((key) => key !== "id");
+  const keys = Object.keys(record).filter((key) => key !== "id" && !String(key).startsWith("_"));
   const qcKey = keys.find(isQcCodeHeader);
   const rest = keys.filter((key) => key !== qcKey);
   return (qcKey ? [qcKey, ...rest] : rest).slice(0, maxCols);

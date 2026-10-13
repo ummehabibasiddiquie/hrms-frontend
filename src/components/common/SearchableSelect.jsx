@@ -25,7 +25,8 @@ const SearchableSelect = ({
   disabled = false,
   isClearable = true,
   error = false,
-  errorMessage = ""
+  errorMessage = "",
+  truncate = true
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -88,7 +89,8 @@ const SearchableSelect = ({
   const filteredOptions = options.filter(opt => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
-    return opt.label?.toLowerCase().includes(searchLower) || 
+    return opt.label?.toLowerCase().includes(searchLower) ||
+           opt.subtitle?.toLowerCase().includes(searchLower) ||
            opt.value?.toString().toLowerCase().includes(searchLower);
   });
 
@@ -109,7 +111,7 @@ const SearchableSelect = ({
   // Truncate display text to first 7 characters
   const getTruncatedText = (text) => {
     if (!text) return placeholder;
-    if (text.length <= 7) return text;
+    if (!truncate || text.length <= 7) return text;
     return text.substring(0, 7) + '...';
   };
 
@@ -139,10 +141,17 @@ const SearchableSelect = ({
         `}
       >
         {Icon && <Icon className="w-4 h-4 text-blue-600 mr-2.5 shrink-0" />}
-        <span className={`text-sm font-medium flex-1 text-left ${
+        <span className={`text-sm font-medium flex-1 text-left min-w-0 ${
           selectedOption?.label ? 'text-slate-800' : 'text-slate-400'
         }`}>
-          {getTruncatedText(selectedOption?.label)}
+          <span className={`block ${truncate ? '' : 'break-all whitespace-normal'}`}>
+            {getTruncatedText(selectedOption?.label)}
+          </span>
+          {!truncate && selectedOption?.subtitle ? (
+            <span className="block text-xs font-normal text-slate-500 break-all whitespace-normal">
+              {selectedOption.subtitle}
+            </span>
+          ) : null}
         </span>
         {isClearable && value && !disabled && (
           <span
@@ -199,7 +208,7 @@ const SearchableSelect = ({
             zIndex: 99999,
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
-            width: `${dropdownPosition.width}px`
+            width: `${Math.max(dropdownPosition.width, 420)}px`
           }}
         >
           {/* Search Input */}
@@ -244,7 +253,14 @@ const SearchableSelect = ({
                       ${String(value ?? "") === String(option.value ?? "") ? 'bg-blue-50 text-blue-700 font-semibold border-l-4 border-blue-600' : 'text-slate-700 font-medium'}
                     `}
                   >
-                    <span>{option.label}</span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block break-all whitespace-normal">{option.label}</span>
+                      {option.subtitle ? (
+                        <span className="block text-xs font-normal text-slate-500 break-all whitespace-normal">
+                          {option.subtitle}
+                        </span>
+                      ) : null}
+                    </span>
                     {String(value ?? "") === String(option.value ?? "") && (
                       <Check className="w-4 h-4 text-blue-600" />
                     )}

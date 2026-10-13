@@ -124,6 +124,29 @@ export const generateQCSample = async (
 };
 
 /**
+ * Load one extra file row that was not in the percentage sample.
+ * Uses the same file as generate-sample (latest rework upload when one is pending).
+ */
+export const lookupQCRow = async (tracker_id, logged_in_user_id, query) => {
+  try {
+    const response = await nodeApi.post(
+      "/qc-records/lookup-row",
+      {
+        tracker_id,
+        logged_in_user_id,
+        excel_row: query?.excel_row,
+        qc_code: query?.qc_code,
+      },
+      { timeout: 180000 },
+    );
+    return response.data;
+  } catch (error) {
+    logError("[QC Service] Error looking up QC row:", error);
+    throw error;
+  }
+};
+
+/**
  * Save QC Record - Routes to appropriate endpoint based on status
  * @param {Object} payload - QC form data
  * @param {number} payload.logged_in_user_id - Logged in user ID

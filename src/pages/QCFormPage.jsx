@@ -24,18 +24,20 @@ import {
   XCircle,
   Award,
   ClipboardCheck,
-  Send
+  Send,
+  Plus
 } from 'lucide-react';
 import api from '../services/api';
 import config from '../config/environment';
 import { generateQCSample, saveQCRecord } from '../services/qcService';
+import { cellDisplayValue } from '../utils/qcErrorIdentity';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
 import MultiSelectWithCheckbox from '../components/common/MultiSelectWithCheckbox';
 import SearchableSelect from '../components/common/SearchableSelect';
 import QCConfirmationModal from '../components/common/QCConfirmationModal';
 import { formatISTDateTimeParts, getISTParts } from "../utils/dateTimeIST";
-import { extractQcCode, getQcFormDisplayKeys } from "../utils/qcErrorIdentity";
+import { extractQcCode, getQcFormDisplayKeys, isQcCodeHeader } from "../utils/qcErrorIdentity";
 import {
   Pagination,
   PaginationContent,
@@ -104,6 +106,8 @@ const QCFormPage = () => {
   // Modal state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [submissionType, setSubmissionType] = useState(''); // 'regular', 'rework', 'correction'
+  const [availableRecords, setAvailableRecords] = useState([]);
+  const [selectedAddRow, setSelectedAddRow] = useState('');
 
   // Calculate error metrics
   const errorMetrics = useMemo(() => {
@@ -242,6 +246,7 @@ const QCFormPage = () => {
           
           if (sampleResponse.success && sampleResponse.data) {
             sampleData = sampleResponse.data.sample_data || [];
+            setAvailableRecords(sampleResponse.data.remaining_data || []);
             
             // Extract total_records, sample_size, and file_path from API response
             const apiTotalRecords = sampleResponse.data.total_records || 0;
@@ -550,7 +555,7 @@ const QCFormPage = () => {
           if (category && subcategory) {
             const qcCode = extractQcCode(row.originalData);
             const entry = {
-              row: rowIndex + 2,
+              row: Number(row.originalData?._excel_row) || rowIndex + 2,
               ...(qcCode ? { qc_code: qcCode } : {}),
               category: category.name,
               subcategory: subcategory.name,
@@ -680,7 +685,7 @@ const QCFormPage = () => {
         qc_score: parseFloat(qcScore.toFixed(2)),
         status: status,
         file_record_count: totalRecords || errorMetrics.recordCount,
-        qc_generated_count: sampleSize || errorMetrics.sampleCount,
+        qc_generated_count: formRows.length,
         object_count: objectCount,
         qc_object_count: qcObjectCount,
         qc_file_records: enrichedRecords,
@@ -920,6 +925,54 @@ const QCFormPage = () => {
     setCurrentPage(1); // Reset to first page
   };
 
+  const leftoverOption = (record) => {
+    const code = extractQcCode(record);
+    const extras = getQcFormDisplayKeys(record, 4)
+      .filter((key) => !isQcCodeHeader(key))
+      .map((key) => cellDisplayValue(record[key]))
+      .filter(Boolean)
+      .slice(0, 2);
+    const rowText = [`Row ${record._excel_row}`, ...extras].filter(Boolean).join(' — ');
+    return {
+      value: String(record._excel_row),
+      label: code ? `QC code: ${code}` : rowText,
+      subtitle: code ? rowText : '',
+    };
+  };
+
+  const rowsOnForm = new Set(
+    formRows.map((row) => Number(row.originalData?._excel_row)).filter((rowNo) => rowNo > 0)
+  );
+  const leftoverOptions = availableRecords
+    .filter((record) => !rowsOnForm.has(Number(record._excel_row)))
+    .map(leftoverOption);
+
+  const handleAddRecord = () => {
+    const excelRow = Number(selectedAddRow);
+    const record = availableRecords.find((item) => Number(item._excel_row) === excelRow);
+    if (!record) {
+      toast.error('Select a record that is not already on the form');
+      return;
+    }
+    const code = extractQcCode(record);
+    const newRow = {
+      id: `added-${excelRow}`,
+      originalData: { ...record, _excel_row: excelRow },
+      errors: [],
+      added: true,
+    };
+    const next = [...formRows, newRow];
+    setFormRows(next);
+    setFormData((prev) => [...prev, record]);
+    calculateQCScore(next, afdData);
+    setCurrentPage(Math.max(1, Math.ceil(next.length / itemsPerPage)));
+    setDisplayedRows((shown) => Math.max(shown, next.length));
+    setSelectedAddRow('');
+    toast.success(code ? `Added QC ${code} (Excel row ${excelRow})` : `Added Excel row ${excelRow}`);
+  };
+
+  const addedCount = formRows.filter((row) => row.added).length;
+
   return (
     <>
       <div className="max-w-[1600px] mx-auto px-4 py-6 space-y-6 min-w-0">
@@ -1044,6 +1097,37 @@ const QCFormPage = () => {
         </div>
       </div>
 
+      {/* Add a record that the percentage sample missed */}
+      <div className="bg-white rounded-xl shadow-lg border-2 border-slate-200 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-slate-800">Add a record from the file</p>
+            <p className="text-xs text-slate-500 mt-1">
+              These are the file rows that are not on this form. Adding one includes it in the score.
+            </p>
+            <div className="mt-2">
+              <SearchableSelect
+                value={selectedAddRow}
+                onChange={setSelectedAddRow}
+                options={leftoverOptions}
+                placeholder={leftoverOptions.length ? 'Select a record that is not on this form' : 'Every file record is already on the form'}
+                disabled={!leftoverOptions.length}
+                truncate={false}
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleAddRecord}
+            disabled={!selectedAddRow}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <Plus className="h-4 w-4" />
+            Add record
+          </button>
+        </div>
+      </div>
+
       {/* QC Form Table */}
       <div className="bg-white rounded-xl shadow-lg border-2 border-slate-200">
         <div className="overflow-x-auto min-w-0">
@@ -1058,7 +1142,7 @@ const QCFormPage = () => {
                     key={index}
                     className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500 whitespace-normal break-words"
                   >
-                    {key.replace(/_/g, ' ')}
+                    {cellDisplayValue(key).replace(/_/g, ' ')}
                   </th>
                 ))}
                 <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-blue-500 w-64 whitespace-normal break-words">
@@ -1092,6 +1176,16 @@ const QCFormPage = () => {
                     {/* Sr. No. */}
                     <td className="px-3 py-3 text-sm font-semibold text-slate-700 border-r border-slate-200 align-top">
                       {displayRowNum}
+                      {row.originalData?._excel_row ? (
+                        <div className="text-[11px] font-medium text-slate-500 mt-1">
+                          File row {row.originalData._excel_row}
+                        </div>
+                      ) : null}
+                      {row.added ? (
+                        <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800">
+                          Added
+                        </span>
+                      ) : null}
                       {rowQcCode ? (
                         <div className="text-xs font-bold text-blue-700 mt-1 break-all leading-snug">
                           QC {rowQcCode}
@@ -1105,7 +1199,7 @@ const QCFormPage = () => {
                         key={colIndex}
                         className="px-3 py-3 text-sm text-slate-600 border-r border-slate-200 align-top break-all whitespace-normal leading-snug"
                       >
-                        {row.originalData[key]}
+                        {cellDisplayValue(row.originalData[key])}
                       </td>
                     ))}
 
@@ -1416,8 +1510,13 @@ const QCFormPage = () => {
               <div>
                 <p className="text-sm text-slate-600 font-medium">Data Generated for QC</p>
                 <p className="text-2xl font-bold text-slate-800">
-                  {sampleSize || errorMetrics.sampleCount}
+                  {formRows.length || sampleSize || errorMetrics.sampleCount}
                 </p>
+                {addedCount > 0 ? (
+                  <p className="text-xs text-amber-700 font-medium">
+                    Includes {addedCount} added
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
