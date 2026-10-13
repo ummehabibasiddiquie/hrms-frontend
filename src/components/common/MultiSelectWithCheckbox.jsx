@@ -48,20 +48,10 @@ const MultiSelectWithCheckbox = ({
       }
     };
     
-    const handleResize = () => {
-      if (isOpen) {
-        setIsOpen(false);
-        setSearchTerm('');
-      }
-    };
-    
     document.addEventListener('mousedown', handleClickOutside);
-
-    window.addEventListener('resize', handleResize);
     
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('resize', handleResize);
     };
   }, [isOpen]);
 
@@ -72,19 +62,34 @@ const MultiSelectWithCheckbox = ({
     }
   }, [isOpen]);
 
-  // Calculate dropdown position when opening
+  // Keep the menu attached to the field while the page or a parent panel scrolls.
   useEffect(() => {
-    if (isOpen && buttonRef.current) {
+    if (!isOpen) return undefined;
+
+    const updatePosition = () => {
+      if (!buttonRef.current) return;
       const rect = buttonRef.current.getBoundingClientRect();
-      // Use viewport coordinates directly since dropdown is fixed positioned
-      
-      
       setDropdownPosition({
         top: rect.bottom + 8,
         left: rect.left,
         width: rect.width
       });
-    }
+    };
+
+    const handleScroll = (event) => {
+      if (dropdownRef.current && event.target instanceof Node && dropdownRef.current.contains(event.target)) {
+        return;
+      }
+      updatePosition();
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', updatePosition);
+    };
   }, [isOpen]);
 
   // Filter options based on search term
