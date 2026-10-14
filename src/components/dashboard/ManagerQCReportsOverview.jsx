@@ -748,8 +748,8 @@ const ManagerQCReportsOverview = () => {
     return "";
   };
 
-  // Same file list as the consolidated export, with one row per error in that file
-  // and the count of that error. A file with no errors stays as a single row.
+  // One row per error in each file that has errors, with the count of that error.
+  // Files with no errors are left out.
   const handleExportErrorReport = () => {
     try {
       if (filteredRecords.length === 0) {
@@ -777,16 +777,7 @@ const ManagerQCReportsOverview = () => {
           "QC Score": `${record.qc_score || 0}%`,
         };
 
-        if (!errors.length) {
-          detailRows.push({
-            ...fileRow,
-            "Error Category": "-",
-            Error: "-",
-            "Times in this File": 0,
-            "Records with this Error": 0,
-          });
-          return;
-        }
+        if (!errors.length) return;
 
         const grouped = new Map();
         errors.forEach((err) => {
@@ -858,6 +849,11 @@ const ManagerQCReportsOverview = () => {
           "Times in this File": stats.count,
           "Records with this Error": stats.records,
         }));
+
+      if (detailRows.length === 0) {
+        toast.error("No errors in the selected QC records");
+        return;
+      }
 
       const fileRowCount = detailRows.length;
       if (summaryRows.length > 0) {
