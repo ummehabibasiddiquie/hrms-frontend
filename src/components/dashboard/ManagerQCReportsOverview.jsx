@@ -13,7 +13,7 @@ import {
   AlertCircle,
   User,
   Calendar,
-  Search,
+  UserCheck,
   Download,
   BarChart3,
   RefreshCw,
@@ -21,16 +21,36 @@ import {
   ChevronUp,
   Clock,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Briefcase,
+  ListTodo
 } from 'lucide-react';
 import api from '../../services/api';
 import { toast } from 'react-hot-toast';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 import { DateRangePicker } from '../common/CustomCalendar';
+import SearchableSelect from '../common/SearchableSelect';
 import { exportToCSV } from '../../utils/csvExport';
 import { formatISTDateISO, formatISTDateMedium, formatISTDateTimeParts, formatISTTime, getISTParts, todayISTISO } from "../../utils/dateTimeIST";
 import { getErrorIdentity, enrichErrorListFromFile } from "../../utils/qcErrorIdentity";
+
+const recordAgentKey = (record) => String(record?.agent_id || record?.user_id || record?.agent_name || "");
+const recordQcKey = (record) => String(record?.qa_user_id || record?.qa_agent_name || record?.qc_name || "");
+const recordProjectKey = (record) => String(record?.project_id || record?.project_name || "");
+const recordTaskKey = (record) => String(record?.task_id || record?.task_name || "");
+
+const uniqueOptions = (records, keyFn, labelFn) => {
+  const map = new Map();
+  records.forEach((record) => {
+    const value = keyFn(record);
+    if (!value) return;
+    if (!map.has(value)) map.set(value, labelFn(record) || "Unknown");
+  });
+  return [...map.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+};
 
 const toDayISO = (value) => {
   if (value == null || value === "") return "";
@@ -216,13 +236,51 @@ const ManagerQCReportsOverview = () => {
   
   // Filters — default to current month (1st through today)
   const defaultDateRange = getDefaultDateRange();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState('');
+  const [selectedQc, setSelectedQc] = useState('');
+  const [selectedProject, setSelectedProject] = useState('');
+  const [selectedTask, setSelectedTask] = useState('');
   const [startDate, setStartDate] = useState(defaultDateRange.startDate);
   const [endDate, setEndDate] = useState(defaultDateRange.endDate);
 
   const qcPagination = useClientPagination(filteredRecords, {
-    resetKeys: [searchTerm, startDate, endDate],
+    resetKeys: [selectedAgent, selectedQc, selectedProject, selectedTask, startDate, endDate],
   });
+
+  const matchesPeople = (record) => {
+    if (selectedAgent && recordAgentKey(record) !== selectedAgent) return false;
+    if (selectedQc && recordQcKey(record) !== selectedQc) return false;
+    return true;
+  };
+
+  const agentOptions = useMemo(
+    () => uniqueOptions(qcRecords, recordAgentKey, (record) => record.agent_name),
+    [qcRecords]
+  );
+  const qcOptions = useMemo(
+    () => uniqueOptions(qcRecords, recordQcKey, (record) => record.qa_agent_name || record.qc_name),
+    [qcRecords]
+  );
+  const projectOptions = useMemo(
+    () => uniqueOptions(
+      qcRecords.filter(matchesPeople),
+      recordProjectKey,
+      (record) => record.project_name
+    ),
+    [qcRecords, selectedAgent, selectedQc]
+  );
+  const taskOptions = useMemo(
+    () => uniqueOptions(
+      qcRecords.filter((record) => {
+        if (!matchesPeople(record)) return false;
+        if (selectedProject && recordProjectKey(record) !== selectedProject) return false;
+        return true;
+      }),
+      recordTaskKey,
+      (record) => record.task_name
+    ),
+    [qcRecords, selectedAgent, selectedQc, selectedProject]
+  );
 
 
   // Fetch QC history data
@@ -267,31 +325,22 @@ const ManagerQCReportsOverview = () => {
   // Apply filters
   useEffect(() => {
     applyFilters();
-  }, [searchTerm, startDate, endDate, qcRecords]);
+  }, [selectedAgent, selectedQc, selectedProject, selectedTask, startDate, endDate, qcRecords]);
 
   const applyFilters = () => {
     let filtered = [...qcRecords];
 
-    // Search filter - searches across all table fields
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(record => {
-        const { types: errorTypes } = getErrorTypes(record.error_list);
-        const errorTypesString = errorTypes.join(' ').toLowerCase();
-        return (
-          record.agent_name?.toLowerCase().includes(searchLower) ||
-          record.assistant_manager_name?.toLowerCase().includes(searchLower) ||
-          record.team_name?.toLowerCase().includes(searchLower) ||
-          record.project_name?.toLowerCase().includes(searchLower) ||
-          record.task_name?.toLowerCase().includes(searchLower) ||
-          record.qa_agent_name?.toLowerCase().includes(searchLower) ||
-          record.file_record_count?.toString().includes(searchLower) ||
-          record.qc_generated_count?.toString().includes(searchLower) ||
-          getErrorCount(record.error_list).toString().includes(searchLower) ||
-          record.qc_score?.toString().includes(searchLower) ||
-          errorTypesString.includes(searchLower)
-        );
-      });
+    if (selectedAgent) {
+      filtered = filtered.filter((record) => recordAgentKey(record) === selectedAgent);
+    }
+    if (selectedQc) {
+      filtered = filtered.filter((record) => recordQcKey(record) === selectedQc);
+    }
+    if (selectedProject) {
+      filtered = filtered.filter((record) => recordProjectKey(record) === selectedProject);
+    }
+    if (selectedTask) {
+      filtered = filtered.filter((record) => recordTaskKey(record) === selectedTask);
     }
 
     if (startDate || endDate) {
@@ -404,7 +453,10 @@ const ManagerQCReportsOverview = () => {
 
   const handleReset = () => {
     const range = getDefaultDateRange();
-    setSearchTerm('');
+    setSelectedAgent('');
+    setSelectedQc('');
+    setSelectedProject('');
+    setSelectedTask('');
     setStartDate(range.startDate);
     setEndDate(range.endDate);
     setSelectedRecord(null);
@@ -587,7 +639,18 @@ const ManagerQCReportsOverview = () => {
       const response = await api.post('qc_history_user/consolidated_qc_report', payload);
 
       if (response.data?.status === 200 && response.data?.data?.records) {
-        const records = response.data.data.records;
+        let records = response.data.data.records;
+        const agentLabel = agentOptions.find((option) => option.value === selectedAgent)?.label;
+        const qcLabel = qcOptions.find((option) => option.value === selectedQc)?.label;
+        const projectLabel = projectOptions.find((option) => option.value === selectedProject)?.label;
+        const taskLabel = taskOptions.find((option) => option.value === selectedTask)?.label;
+        records = records.filter((record) => {
+          if (agentLabel && record.agent_name !== agentLabel) return false;
+          if (qcLabel && (record.qa_name || record.qa_agent_name) !== qcLabel) return false;
+          if (projectLabel && record.project_name !== projectLabel) return false;
+          if (taskLabel && record.task_name !== taskLabel) return false;
+          return true;
+        });
         
         if (records.length === 0) {
           toast.dismiss(loadingToast);
@@ -660,7 +723,7 @@ const ManagerQCReportsOverview = () => {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="w-full px-3 py-3">
         <LoadingSpinner />
       </div>
     );
@@ -668,7 +731,7 @@ const ManagerQCReportsOverview = () => {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="w-full px-3 py-3">
         <ErrorMessage message={error} />
       </div>
     );
@@ -677,16 +740,16 @@ const ManagerQCReportsOverview = () => {
 
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <div className="w-full px-3 py-3 space-y-3">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-              <BarChart3 className="w-8 h-8" />
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold text-white flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 shrink-0" />
               QC Reports Overview
             </h1>
-            <p className="text-blue-100 mt-2">Complete view of all QC activities across the organization</p>
+            <p className="text-blue-100 text-sm mt-0.5">Complete view of all QC activities across the organization</p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -722,18 +785,31 @@ const ManagerQCReportsOverview = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-md p-4 border-2 border-slate-200">
+      <div className="bg-white rounded-xl shadow-md px-3 py-2.5 border border-slate-200">
         <style>{`
           .filter-dropdown-wrapper > div > button {
-            height: 46px !important;
-            min-height: 46px !important;
-            max-height: 46px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            max-height: 36px !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+          }
+          .filter-dropdown-wrapper > div > button span {
+            white-space: nowrap !important;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .date-range-compact > div {
+            gap: 0.5rem !important;
           }
           .date-range-compact > div > div {
             margin-bottom: 0 !important;
+            min-width: 0;
+            flex: 1 1 0 !important;
+            width: auto !important;
           }
-          .date-range-compact label {
-            margin-bottom: 6px !important;
+          .date-range-compact > label {
+            margin-bottom: 4px !important;
             font-size: 0.75rem !important;
             font-weight: 700 !important;
             text-transform: uppercase !important;
@@ -742,29 +818,95 @@ const ManagerQCReportsOverview = () => {
             align-items: center !important;
             gap: 0.375rem !important;
           }
+          .date-range-compact > div label {
+            display: none !important;
+          }
+          .date-range-compact > div button {
+            height: 36px !important;
+            min-height: 36px !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+          }
         `}</style>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-          {/* Search - searches all fields */}
-          <div>
-            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
-              <Search className="w-3 h-3 text-blue-600" />
-              Search All Fields
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-2.5 items-end">
+          <div className="filter-dropdown-wrapper">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1">
+              <User className="w-3 h-3 text-blue-600" />
+              Agent
             </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
-              <input
-                type="text"
-                placeholder="Search by agent, team lead, project, task, QA, errors, scores..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border-2 border-slate-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none h-[46px]"
-              />
-            </div>
+            <SearchableSelect
+              icon={User}
+              value={selectedAgent}
+              onChange={(value) => {
+                setSelectedAgent(value || '');
+                setSelectedProject('');
+                setSelectedTask('');
+              }}
+              options={agentOptions}
+              placeholder="All agents"
+              isClearable={true}
+              truncate={false}
+            />
+          </div>
+
+          <div className="filter-dropdown-wrapper">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1">
+              <UserCheck className="w-3 h-3 text-blue-600" />
+              QC
+            </label>
+            <SearchableSelect
+              icon={UserCheck}
+              value={selectedQc}
+              onChange={(value) => {
+                setSelectedQc(value || '');
+                setSelectedProject('');
+                setSelectedTask('');
+              }}
+              options={qcOptions}
+              placeholder="All QC"
+              isClearable={true}
+              truncate={false}
+            />
+          </div>
+
+          <div className="filter-dropdown-wrapper">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1">
+              <Briefcase className="w-3 h-3 text-blue-600" />
+              Project
+            </label>
+            <SearchableSelect
+              icon={Briefcase}
+              value={selectedProject}
+              onChange={(value) => {
+                setSelectedProject(value || '');
+                setSelectedTask('');
+              }}
+              options={projectOptions}
+              placeholder="All projects"
+              isClearable={true}
+              truncate={false}
+            />
+          </div>
+
+          <div className="filter-dropdown-wrapper">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1">
+              <ListTodo className="w-3 h-3 text-blue-600" />
+              Task
+            </label>
+            <SearchableSelect
+              icon={ListTodo}
+              value={selectedTask}
+              onChange={(value) => setSelectedTask(value || '')}
+              options={taskOptions}
+              placeholder={selectedProject ? 'All tasks in this project' : 'All tasks'}
+              isClearable={true}
+              truncate={false}
+            />
           </div>
 
           {/* Date Range Filter */}
-          <div className="date-range-compact">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1.5">
+          <div className="date-range-compact min-w-0">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 uppercase mb-1">
               <Calendar className="w-3 h-3 text-blue-600" />
               Work Date
             </label>
@@ -788,7 +930,6 @@ const ManagerQCReportsOverview = () => {
               showClearButton={false}
               noWrapper={true}
               compact={true}
-              fieldWidth="148px"
             />
           </div>
         </div>
@@ -803,22 +944,22 @@ const ManagerQCReportsOverview = () => {
           </h3>
         </div>
         <div className="overflow-x-auto">
-          <div className="min-w-max">
-            <table className="w-full">
+          <div>
+            <table className="w-full table-fixed">
               <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 sticky top-0 z-10">
                 <tr>
-                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap">Eval Date</th>
-                  <th className="px-2 py-3 text-left text-xs font-bold text-white uppercase tracking-wider whitespace-nowrap">Work Date</th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">QA Name</th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Agent Name</th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Project Name</th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider max-w-[200px] w-[200px]">Task Name</th>
-                  <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">Records</th>
-                  <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">QC Records</th>
-                  <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">No. of Errors</th>
-                  <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">Final QC Score</th>
-                  <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider max-w-[160px] w-[160px]">Error Type</th>
-                  <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">Action</th>
+                  <th className="w-[8%] px-2 py-2 text-left text-xs font-bold text-white uppercase tracking-wider">Eval Date</th>
+                  <th className="w-[8%] px-2 py-2 text-left text-xs font-bold text-white uppercase tracking-wider">Work Date</th>
+                  <th className="w-[10%] px-2 py-2 text-left text-xs font-bold text-white uppercase tracking-wider">QA</th>
+                  <th className="w-[11%] px-2 py-2 text-left text-xs font-bold text-white uppercase tracking-wider">Agent</th>
+                  <th className="w-[11%] px-2 py-2 text-left text-xs font-bold text-white uppercase tracking-wider">Project</th>
+                  <th className="w-[13%] px-2 py-2 text-left text-xs font-bold text-white uppercase tracking-wider">Task</th>
+                  <th className="w-[6%] px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wider">Records</th>
+                  <th className="w-[6%] px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wider">QC</th>
+                  <th className="w-[6%] px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wider">Errors</th>
+                  <th className="w-[7%] px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wider">Score</th>
+                  <th className="w-[9%] px-2 py-2 text-left text-xs font-bold text-white uppercase tracking-wider">Error Type</th>
+                  <th className="sticky right-0 z-20 w-[64px] px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wider bg-indigo-600">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -838,7 +979,7 @@ const ManagerQCReportsOverview = () => {
                     const isOpen = selectedRecord?.id === record.id;
                     return (
                     <React.Fragment key={record.id || index}>
-                    <tr className="hover:bg-slate-50 transition-colors">
+                    <tr className="group hover:bg-slate-50 transition-colors">
                       {/* Evaluation Date - original QC */}
                       <td className="px-2 py-3 whitespace-nowrap">
                         <CompactDateCell value={qcEvalDate(record)} showTime />
@@ -850,28 +991,28 @@ const ManagerQCReportsOverview = () => {
                       </td>
                       
                       {/* QA Name - qa_agent_name */}
-                      <td className="px-3 py-3">
-                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-semibold bg-purple-100 text-purple-700">
-                          <User className="w-3 h-3" />
-                          {record.qa_agent_name || 'N/A'}
+                      <td className="px-2 py-2">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-xs font-semibold bg-purple-100 text-purple-700 break-words">
+                          <User className="w-3 h-3 shrink-0" />
+                          <span className="break-words">{record.qa_agent_name || 'N/A'}</span>
                         </span>
                       </td>
                       
                       {/* Agent Name - agent_name */}
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5 text-blue-600" />
-                          <span className="font-semibold text-slate-800 text-sm">{record.agent_name || 'N/A'}</span>
+                      <td className="px-2 py-2">
+                        <div className="flex items-start gap-1">
+                          <User className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                          <span className="font-semibold text-slate-800 text-sm break-words">{record.agent_name || 'N/A'}</span>
                         </div>
                       </td>
                       
                       {/* Project Name - project_name */}
-                      <td className="px-3 py-3 text-sm font-medium text-slate-800">
+                      <td className="px-2 py-2 text-sm font-medium text-slate-800 break-words">
                         {record.project_name || 'N/A'}
                       </td>
                       
                       {/* Task Name - task_name */}
-                      <td className="px-3 py-3 max-w-[200px] w-[200px] align-top">
+                      <td className="px-2 py-2 align-top">
                         <div className="text-sm text-slate-600 whitespace-normal break-words leading-snug">
                           {record.task_name || 'N/A'}
                         </div>
@@ -916,7 +1057,7 @@ const ManagerQCReportsOverview = () => {
                       </td>
                       
                       {/* Error Type - from error_list */}
-                      <td className="px-3 py-3 max-w-[160px] w-[160px] align-top">
+                      <td className="px-2 py-2 align-top">
                         {(() => {
                           const { types, count } = getErrorTypes(record.error_list);
                           if (count === 0) {
@@ -941,7 +1082,7 @@ const ManagerQCReportsOverview = () => {
                         })()}
                       </td>
                       
-                      <td className="px-3 py-3 text-center">
+                      <td className="sticky right-0 z-10 w-[64px] px-1 py-2 text-center bg-white group-hover:bg-slate-50">
                         {hasHistory && (
                           <button
                             onClick={() => setSelectedRecord(isOpen ? null : record)}
