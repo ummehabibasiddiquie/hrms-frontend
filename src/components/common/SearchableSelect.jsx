@@ -31,7 +31,7 @@ const SearchableSelect = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showTooltip, setShowTooltip] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0, maxHeight: 320, openUp: false });
   const dropdownRef = useRef(null);
   const searchInputRef = useRef(null);
   const buttonRef = useRef(null);
@@ -57,7 +57,7 @@ const SearchableSelect = ({
   // Focus search input when dropdown opens
   useEffect(() => {
     if (isOpen && searchInputRef.current) {
-      searchInputRef.current.focus();
+      searchInputRef.current.focus({ preventScroll: true });
     }
   }, [isOpen]);
 
@@ -68,10 +68,20 @@ const SearchableSelect = ({
     const updatePosition = () => {
       if (!buttonRef.current) return;
       const rect = buttonRef.current.getBoundingClientRect();
+      const gap = 8;
+      const spaceBelow = window.innerHeight - rect.bottom - gap;
+      const spaceAbove = rect.top - gap;
+      const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(140, Math.min(320, openUp ? spaceAbove : spaceBelow));
+      const width = Math.max(rect.width, 250);
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
       setDropdownPosition({
-        top: rect.bottom + 8,
-        left: rect.left,
-        width: rect.width
+        top: openUp ? undefined : rect.bottom + gap,
+        bottom: openUp ? window.innerHeight - rect.top + gap : undefined,
+        left,
+        width: rect.width,
+        maxHeight,
+        openUp
       });
     };
 
@@ -209,12 +219,14 @@ const SearchableSelect = ({
       {isOpen && !disabled && createPortal(
         <div 
           ref={dropdownRef}
-          className="fixed bg-white rounded-lg shadow-2xl border-2 border-blue-400 py-1 max-h-80 overflow-hidden flex flex-col min-w-[250px]"
+          className="fixed bg-white rounded-lg shadow-2xl border-2 border-blue-400 py-1 overflow-y-auto flex flex-col min-w-[250px]"
           style={{
             zIndex: 99999,
-            top: `${dropdownPosition.top}px`,
+            top: dropdownPosition.openUp ? 'auto' : `${dropdownPosition.top}px`,
+            bottom: dropdownPosition.openUp ? `${dropdownPosition.bottom}px` : 'auto',
             left: `${dropdownPosition.left}px`,
-            width: `${Math.max(dropdownPosition.width, 420)}px`
+            width: `${Math.max(dropdownPosition.width, truncate ? dropdownPosition.width : 280)}px`,
+            maxHeight: `${dropdownPosition.maxHeight}px`
           }}
         >
           {/* Search Input */}
@@ -235,7 +247,7 @@ const SearchableSelect = ({
 
           {/* Options List */}
           <div 
-            className="overflow-y-auto max-h-60"
+            className="overflow-y-auto flex-1 min-h-0"
             onWheel={(e) => e.stopPropagation()}
             onTouchMove={(e) => e.stopPropagation()}
           >
