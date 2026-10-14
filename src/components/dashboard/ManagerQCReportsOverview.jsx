@@ -721,6 +721,159 @@ const ManagerQCReportsOverview = () => {
     }
   };
 
+  const errorNameParts = (err) => {
+    const category = String(err?.category || "").trim();
+    const subcategory = String(err?.subcategory || "").trim();
+    if (category || subcategory) {
+      return {
+        category: category || "-",
+        name: subcategory || category || "Unknown error",
+      };
+    }
+    const text = String(err?.error || err?.name || "Unknown error").trim() || "Unknown error";
+    const splitAt = text.indexOf(" - ");
+    if (splitAt > 0) {
+      return {
+        category: text.slice(0, splitAt).trim() || "-",
+        name: text.slice(splitAt + 3).trim() || text,
+      };
+    }
+    return { category: "-", name: text };
+  };
+
+  const errorRecordId = (err) => {
+    const code = String(err?.qc_code || err?.qcCode || "").trim();
+    if (code) return code;
+    if (err?.row != null && String(err.row).trim() !== "") return `Row ${err.row}`;
+    return "";
+  };
+
+  // Same file list as the consolidated export, with one row per error in that file
+  // and the count of that error. A file with no errors stays as a single row.
+  const handleExportErrorReport = () => {
+    try {
+      if (filteredRecords.length === 0) {
+        toast.error("No data to export");
+        return;
+      }
+
+      const detailRows = [];
+      const summaryMap = new Map();
+
+      filteredRecords.forEach((record) => {
+        const errors = parseErrors(record.error_list);
+        const evalDate = formatDate(qcEvalDate(record));
+        const workDate = formatDate(qcWorkDate(record));
+        const fileRow = {
+          "Evaluation Date": evalDate.date,
+          "Work Date": workDate.date,
+          "QA Name": record.qa_agent_name || "N/A",
+          "Agent Name": record.agent_name || "N/A",
+          "Project Name": record.project_name || "N/A",
+          "Task Name": record.task_name || "N/A",
+          Records: Number(record.file_record_count) || 0,
+          "QC Records": Number(record.qc_generated_count) || 0,
+          "No. of Errors": errors.length,
+          "QC Score": `${record.qc_score || 0}%`,
+        };
+
+        if (!errors.length) {
+          detailRows.push({
+            ...fileRow,
+            "Error Category": "-",
+            Error: "-",
+            "Times in this File": 0,
+            "Records with this Error": 0,
+          });
+          return;
+        }
+
+        const grouped = new Map();
+        errors.forEach((err) => {
+          const { category, name } = errorNameParts(err);
+          const key = `${category}||${name}`;
+          if (!grouped.has(key)) {
+            grouped.set(key, { category, name, count: 0, identities: [] });
+          }
+          const bucket = grouped.get(key);
+          bucket.count += 1;
+          const identity = errorRecordId(err);
+          if (identity && !bucket.identities.includes(identity)) bucket.identities.push(identity);
+        });
+
+        [...grouped.values()]
+          .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+          .forEach((bucket) => {
+            const recordsWithError = bucket.identities.length || bucket.count;
+            detailRows.push({
+              ...fileRow,
+              "Error Category": bucket.category,
+              Error: bucket.name,
+              "Times in this File": bucket.count,
+              "Records with this Error": recordsWithError,
+            });
+
+            const summaryKey = `${bucket.category}||${bucket.name}`;
+            if (!summaryMap.has(summaryKey)) {
+              summaryMap.set(summaryKey, {
+                category: bucket.category,
+                name: bucket.name,
+                count: 0,
+                records: 0,
+                files: 0,
+              });
+            }
+            const summary = summaryMap.get(summaryKey);
+            summary.count += bucket.count;
+            summary.records += recordsWithError;
+            summary.files += 1;
+          });
+      });
+
+      const blank = {
+        "Evaluation Date": "",
+        "Work Date": "",
+        "QA Name": "",
+        "Agent Name": "",
+        "Project Name": "",
+        "Task Name": "",
+        Records: "",
+        "QC Records": "",
+        "No. of Errors": "",
+        "QC Score": "",
+        "Error Category": "",
+        Error: "",
+        "Times in this File": "",
+        "Records with this Error": "",
+      };
+
+      const summaryRows = [...summaryMap.values()]
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+        .map((stats) => ({
+          ...blank,
+          "Evaluation Date": "ERROR SUMMARY",
+          "Project Name": `${stats.files} file${stats.files === 1 ? "" : "s"}`,
+          "Error Category": stats.category,
+          Error: stats.name,
+          "Times in this File": stats.count,
+          "Records with this Error": stats.records,
+        }));
+
+      const fileRowCount = detailRows.length;
+      if (summaryRows.length > 0) {
+        detailRows.push({ ...blank }, ...summaryRows);
+      }
+
+      const dateRangeStr = startDate && endDate ? `_${startDate}_to_${endDate}` : "";
+      const filename = `QC_Error_Report${dateRangeStr}_${new Date().toISOString().split("T")[0]}.csv`;
+      exportToCSV(detailRows, filename);
+      toast.success(`Exported ${fileRowCount} rows. Each error shows how many times it appears in that file.`);
+    } catch (err) {
+      console.error("Error report export error:", err);
+      toast.error("Failed to export the error report");
+    }
+  };
+
   if (loading) {
     return (
       <div className="w-full px-3 py-3">
@@ -743,7 +896,7 @@ const ManagerQCReportsOverview = () => {
     <div className="w-full px-3 py-3 space-y-3">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-lg font-bold text-white flex items-center gap-2">
               <BarChart3 className="w-5 h-5 shrink-0" />
@@ -751,7 +904,7 @@ const ManagerQCReportsOverview = () => {
             </h1>
             <p className="text-blue-100 text-sm mt-0.5">Complete view of all QC activities across the organization</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               onClick={handleExportExcel}
               className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md"
@@ -772,6 +925,14 @@ const ManagerQCReportsOverview = () => {
             >
               <Download className="w-4 h-4" />
               Consolidated Export
+            </button>
+            <button
+              onClick={handleExportErrorReport}
+              title="How many times each error appears in each file"
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md"
+            >
+              <Download className="w-4 h-4" />
+              Error Report
             </button>
             <button
               onClick={handleReset}
