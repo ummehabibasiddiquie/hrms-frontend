@@ -959,7 +959,7 @@ const ManagerQCReportsOverview = () => {
                   <th className="w-[6%] px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wider">Errors</th>
                   <th className="w-[7%] px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wider">Score</th>
                   <th className="w-[9%] px-2 py-2 text-left text-xs font-bold text-white uppercase tracking-wider">Error Type</th>
-                  <th className="sticky right-0 z-20 w-[64px] px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wider bg-indigo-600">Action</th>
+                  <th className="sticky right-0 z-20 w-[88px] px-1 py-2 text-center text-xs font-bold text-white uppercase tracking-wider bg-indigo-600">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -1082,16 +1082,29 @@ const ManagerQCReportsOverview = () => {
                         })()}
                       </td>
                       
-                      <td className="sticky right-0 z-10 w-[64px] px-1 py-2 text-center bg-white group-hover:bg-slate-50">
-                        {hasHistory && (
-                          <button
-                            onClick={() => setSelectedRecord(isOpen ? null : record)}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 transition-colors"
-                            title="View rework and correction history"
-                          >
-                            {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
-                        )}
+                      <td className="sticky right-0 z-10 w-[88px] px-1 py-2 text-center bg-white group-hover:bg-slate-50">
+                        <div className="inline-flex items-center justify-center gap-1">
+                          {record.qc_file_path ? (
+                            <a
+                              href={record.qc_file_path}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-colors"
+                              title="Download the file QC checked. Added rows are included. Error rows are highlighted and the error is in the last column."
+                            >
+                              <Download className="w-4 h-4" />
+                            </a>
+                          ) : null}
+                          {hasHistory && (
+                            <button
+                              onClick={() => setSelectedRecord(isOpen ? null : record)}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 transition-colors"
+                              title="View rework and correction history"
+                            >
+                              {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {isOpen && hasHistory && (
@@ -1120,6 +1133,7 @@ const ManagerQCReportsOverview = () => {
                                     <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">Score</th>
                                     <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Error Type</th>
                                     <th className="px-3 py-2 text-left text-xs font-bold text-slate-600 uppercase">Status</th>
+                                    <th className="px-3 py-2 text-center text-xs font-bold text-slate-600 uppercase">QC File</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1184,6 +1198,19 @@ const ManagerQCReportsOverview = () => {
                                             awaitingAgentLabel="Awaiting rework file"
                                           />
                                         </td>
+                                        <td className="px-3 py-2 text-center">
+                                          {(rework.rework_sample_file || rework.qc_file_path) ? (
+                                            <a
+                                              href={rework.rework_sample_file || rework.qc_file_path}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex p-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700"
+                                              title="QC file for this rework"
+                                            >
+                                              <Download className="w-3.5 h-3.5" />
+                                            </a>
+                                          ) : <Dash />}
+                                        </td>
                                       </tr>
                                     );
                                   })}
@@ -1247,6 +1274,19 @@ const ManagerQCReportsOverview = () => {
                                             doneLabel={correction.correction_status || correction.review_status || "completed"}
                                             awaitingAgentLabel="Awaiting correction file"
                                           />
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                          {correction.qc_file_path ? (
+                                            <a
+                                              href={correction.qc_file_path}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex p-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700"
+                                              title="QC file for this correction"
+                                            >
+                                              <Download className="w-3.5 h-3.5" />
+                                            </a>
+                                          ) : <Dash />}
                                         </td>
                                       </tr>
                                     );

@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { activeQaTargetMode, applyExclusiveQaTarget } from "./qaTargetFields";
 
 /**
  * Three QC hour criteria (set only one style per task):
@@ -15,17 +16,36 @@ const QaTargetFieldsEditor = ({
 }) => {
   const update = (patch) => setFormData((prev) => ({ ...prev, ...patch }));
 
+  // A task can keep only one type. Typing in a second type clears the first.
+  // Older tasks that already have more than one keep ranges, then per file, then per record.
+  useEffect(() => {
+    setFormData((prev) => {
+      const next = applyExclusiveQaTarget(prev);
+      return next === prev ? prev : next;
+    });
+  }, [
+    formData.qaMinutesPerRecord,
+    formData.qaMinutesPerFile,
+    formData.qaCountColumn,
+    formData.qaTargetRanges,
+    setFormData,
+  ]);
+
+  const clearMinutes = { qaMinutesPerFile: "", qaMinutesPerRecord: "" };
+  const clearRange = { qaCountColumn: "", qaTargetRanges: [] };
+
   const updateRange = (idx, field, value) => {
     setFormData((prev) => {
       const next = [...(prev.qaTargetRanges || [])];
       next[idx] = { ...next[idx], [field]: value };
-      return { ...prev, qaTargetRanges: next };
+      return { ...prev, ...clearMinutes, qaTargetRanges: next };
     });
   };
 
   const addRange = () => {
     setFormData((prev) => ({
       ...prev,
+      ...clearMinutes,
       qaTargetRanges: [
         ...(prev.qaTargetRanges || []),
         { min: "", max: "", minutes: "" },
@@ -40,6 +60,7 @@ const QaTargetFieldsEditor = ({
     }));
   };
 
+  const mode = activeQaTargetMode(formData);
   const columnOptions = Array.from(
     new Set(
       [
@@ -54,15 +75,20 @@ const QaTargetFieldsEditor = ({
       <div>
         <h4 className="text-xs font-bold text-slate-700 text-left">QA hour criteria</h4>
         <p className="text-[11px] text-slate-500 text-left mt-0.5">
-          Use one mode per task. Object ranges use the agent file column sum (all image rows).
-          Record / file minutes use QC data. Leave blank if this task has no QC hour target.
+          Set only one type. Entering minutes per record, minutes per file, or a range clears the other two.
+          Leave all of them blank if this task has no QC hour target.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1 text-left">
+          <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1 text-left">
             1. Minutes per QC record
+            {mode === "record" ? (
+              <span className="text-[10px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                In use
+              </span>
+            ) : null}
           </label>
           <input
             type="number"
@@ -71,7 +97,14 @@ const QaTargetFieldsEditor = ({
             className="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="e.g. 2"
             value={formData.qaMinutesPerRecord || ""}
-            onChange={(e) => update({ qaMinutesPerRecord: e.target.value })}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (String(value).trim()) {
+                update({ qaMinutesPerRecord: value, qaMinutesPerFile: "", ...clearRange });
+              } else {
+                update({ qaMinutesPerRecord: value });
+              }
+            }}
             disabled={disabled}
           />
           <p className="text-[10px] text-slate-400 mt-1 text-left">
@@ -79,8 +112,13 @@ const QaTargetFieldsEditor = ({
           </p>
         </div>
         <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1 text-left">
+          <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-1 text-left">
             2. Minutes per file
+            {mode === "file" ? (
+              <span className="text-[10px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                In use
+              </span>
+            ) : null}
           </label>
           <input
             type="number"
@@ -89,7 +127,14 @@ const QaTargetFieldsEditor = ({
             className="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="e.g. 10"
             value={formData.qaMinutesPerFile || ""}
-            onChange={(e) => update({ qaMinutesPerFile: e.target.value })}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (String(value).trim()) {
+                update({ qaMinutesPerFile: value, qaMinutesPerRecord: "", ...clearRange });
+              } else {
+                update({ qaMinutesPerFile: value });
+              }
+            }}
             disabled={disabled}
           />
           <p className="text-[10px] text-slate-400 mt-1 text-left">
@@ -99,8 +144,13 @@ const QaTargetFieldsEditor = ({
       </div>
 
       <div className="border-t border-slate-100 pt-3 space-y-3">
-        <p className="text-xs font-semibold text-slate-600 text-left">
+        <p className="flex items-center gap-2 text-xs font-semibold text-slate-600 text-left">
           3. Object count ranges (agent file)
+          {mode === "range" ? (
+            <span className="text-[10px] font-bold uppercase tracking-wide text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+              In use
+            </span>
+          ) : null}
         </p>
         <div>
           <label className="block text-xs font-semibold text-slate-500 mb-1 text-left">
@@ -110,7 +160,14 @@ const QaTargetFieldsEditor = ({
             <select
               className="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               value={formData.qaCountColumn || ""}
-              onChange={(e) => update({ qaCountColumn: e.target.value })}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (String(value).trim()) {
+                  update({ qaCountColumn: value, ...clearMinutes });
+                } else {
+                  update({ qaCountColumn: value });
+                }
+              }}
               disabled={disabled}
             >
               <option value="">— None —</option>
@@ -125,7 +182,14 @@ const QaTargetFieldsEditor = ({
               className="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
               placeholder='e.g. New add object'
               value={formData.qaCountColumn || ""}
-              onChange={(e) => update({ qaCountColumn: e.target.value })}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (String(value).trim()) {
+                  update({ qaCountColumn: value, ...clearMinutes });
+                } else {
+                  update({ qaCountColumn: value });
+                }
+              }}
               disabled={disabled}
             />
           )}

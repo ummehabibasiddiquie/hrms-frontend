@@ -45,8 +45,72 @@ export const parseQaTargetFieldsFromTask = (task) => {
   };
 };
 
+const filledText = (value) => String(value ?? "").trim() !== "";
+
+/** Range mode counts as started once a column is chosen or a band row exists. */
+export const qaTargetRangeIsStarted = (formData) => {
+  if (filledText(formData?.qaCountColumn)) return true;
+  return (formData?.qaTargetRanges || []).length > 0;
+};
+
+const rangeBandIsValid = (row) => {
+  const min = Number(row?.min);
+  const max = Number(row?.max);
+  const minutes = Number(row?.minutes != null ? row.minutes : row?.target);
+  return Number.isFinite(min) && Number.isFinite(max) && Number.isFinite(minutes) && minutes > 0;
+};
+
+/** True when a saved band would actually be used for QC hours. */
+export const qaTargetHasValidRanges = (formData) =>
+  (formData?.qaTargetRanges || []).some(rangeBandIsValid);
+
+/**
+ * One QC target type per task.
+ * If older data has more than one, keep the type hours already use:
+ * valid object ranges, then minutes per file, then minutes per record.
+ * A column or an unfinished band still counts as range once the minute fields are empty.
+ */
+export const activeQaTargetMode = (formData) => {
+  if (qaTargetHasValidRanges(formData)) return "range";
+  if (filledText(formData?.qaMinutesPerFile)) return "file";
+  if (filledText(formData?.qaMinutesPerRecord)) return "record";
+  if (qaTargetRangeIsStarted(formData)) return "range";
+  return "";
+};
+
+export const applyExclusiveQaTarget = (formData) => {
+  const mode = activeQaTargetMode(formData);
+  const file = filledText(formData?.qaMinutesPerFile);
+  const record = filledText(formData?.qaMinutesPerRecord);
+  const range = qaTargetRangeIsStarted(formData);
+  if (mode === "range") {
+    if (!file && !record) return formData;
+    return { ...formData, qaMinutesPerFile: "", qaMinutesPerRecord: "" };
+  }
+  if (mode === "file") {
+    if (!record && !range) return formData;
+    return {
+      ...formData,
+      qaMinutesPerRecord: "",
+      qaCountColumn: "",
+      qaTargetRanges: [],
+    };
+  }
+  if (mode === "record") {
+    if (!file && !range) return formData;
+    return {
+      ...formData,
+      qaMinutesPerFile: "",
+      qaCountColumn: "",
+      qaTargetRanges: [],
+    };
+  }
+  return formData;
+};
+
 export const serializeQaTargetPayload = (formData) => {
-  const ranges = (formData.qaTargetRanges || [])
+  const exclusive = applyExclusiveQaTarget(formData);
+  const ranges = (exclusive.qaTargetRanges || [])
     .map((r) => ({
       min: Number(r.min),
       max: Number(r.max),
@@ -59,10 +123,10 @@ export const serializeQaTargetPayload = (formData) => {
         Number.isFinite(r.minutes) &&
         r.minutes > 0
     );
-  const fileMin = String(formData.qaMinutesPerFile || "").trim();
-  const recMin = String(formData.qaMinutesPerRecord || "").trim();
+  const fileMin = String(exclusive.qaMinutesPerFile || "").trim();
+  const recMin = String(exclusive.qaMinutesPerRecord || "").trim();
   return {
-    qaCountColumn: (formData.qaCountColumn || "").trim(),
+    qaCountColumn: (exclusive.qaCountColumn || "").trim(),
     qaTargetRanges: ranges,
     qaMinutesPerFile: fileMin === "" ? "" : fileMin,
     qaMinutesPerRecord: recMin === "" ? "" : recMin,
