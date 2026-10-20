@@ -222,7 +222,8 @@ const RosterApprovalQueue = ({
         }
       } else if (type === "approve_selected") {
         setBulkLoading(true);
-        const ids = Array.from(selectedIds);
+        // Oldest first across all chunks, so the latest change for a day is applied last.
+        const ids = Array.from(selectedIds).sort((a, b) => Number(a) - Number(b));
         const total = ids.length;
         setBulkProgress({ done: 0, total, action: "approve" });
 
