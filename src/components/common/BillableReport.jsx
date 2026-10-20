@@ -20,6 +20,11 @@ import {
   getCurrentYyyyMm,
 } from "./CustomCalendar";
 
+const formatTenure = (value) => {
+  const text = value === null || value === undefined ? "" : String(value).trim();
+  return text === "" ? "-" : text;
+};
+
 const BillableReport = ({ userId, title = "Billable Report" }) => {
   // Device info (declare once at top)
   const { device_id, device_type } = useDeviceInfo();
@@ -46,6 +51,9 @@ const BillableReport = ({ userId, title = "Billable Report" }) => {
   const isSuperAdmin = normalizedRole.includes('super');
   const isProjectManager = user?.role_id === 3 || normalizedRole.includes('project manager');
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
+  // QA and Team Leader also use this report; only managers and admins get the Tenure column.
+  const isAssistantManagerRole = user?.role_id === 4 || normalizedRole === 'assistant manager';
+  const showTenure = isAdmin || isSuperAdmin || isProjectManager || isAssistantManagerRole;
 
   // Export all users' daily data (filtered by search query if set)
   function handleExportAllUsers() {
@@ -118,6 +126,7 @@ const BillableReport = ({ userId, title = "Billable Report" }) => {
           'User Name': row.user_name || '-'
         };
         
+        if (showTenure) rowData['Tenure'] = formatTenure(row.user_tenure);
         rowData['Date'] = dateDisplay;
         rowData['Day Status'] = row.roster_status || row.day_status || '—';
         rowData['Assign Hours'] = formatNumber(row.assigned_hours);
@@ -145,6 +154,7 @@ const BillableReport = ({ userId, title = "Billable Report" }) => {
           'User Name': 'TOTAL'
         };
         
+        if (showTenure) totalRow['Tenure'] = '';
         totalRow['Date'] = '';
         totalRow['Day Status'] = '';
         totalRow['Assign Hours'] = totalAssigned.toFixed(2);
@@ -181,6 +191,7 @@ const BillableReport = ({ userId, title = "Billable Report" }) => {
           rowData['Team'] = user.team_name || '-';
         }
         
+        if (showTenure) rowData['Tenure'] = formatTenure(user.user_tenure);
         rowData['Billable Hour Delivered'] = user.total_billable_hours ? Number(user.total_billable_hours).toFixed(2) : '-';
         rowData['Monthly Goal'] = user.monthly_total_target ?? '-';
         rowData['Pending Target'] = user.pending_target ? Number(user.pending_target).toFixed(2) : '-';
@@ -207,6 +218,7 @@ const BillableReport = ({ userId, title = "Billable Report" }) => {
           totalRow['Team'] = '';
         }
         
+        if (showTenure) totalRow['Tenure'] = '';
         totalRow['Billable Hour Delivered'] = totalBillable.toFixed(2);
         totalRow['Monthly Goal'] = totalGoal.toFixed(2);
         totalRow['Pending Target'] = totalPending.toFixed(2);
@@ -668,6 +680,7 @@ const BillableReport = ({ userId, title = "Billable Report" }) => {
         
         return {
           'Date-Time': row.date_time ?? row.date ?? '-',
+          ...(showTenure ? { 'Tenure': formatTenure(user.user_tenure ?? row.user_tenure) } : {}),
           'Day Status': row.roster_status || row.day_status || '—',
           'Assigned Hour': formatNum(row.assigned_hours ?? row.assign_hours),
           'Worked Hours': formatNum(row.total_billable_hours_day ?? row.billable_hours),
@@ -691,6 +704,7 @@ const BillableReport = ({ userId, title = "Billable Report" }) => {
         
         exportData.push({
           'Date-Time': 'TOTAL',
+          ...(showTenure ? { 'Tenure': '' } : {}),
           'Day Status': '',
           'Assigned Hour': totalAssigned.toFixed(2),
           'Worked Hours': totalWorked.toFixed(2),
