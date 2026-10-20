@@ -739,17 +739,21 @@ const Tracker = ({ embedded = false }) => {
     return task?.task_name || task?.label || "-";
   };
 
-  // Check if tracker entry is from today (using UTC to match formatDateTime)
-  const isToday = (dateTime) => {
-    if (!dateTime) return false;
-    const trackerParts = getISTParts(dateTime);
+  const sameISTDay = (a, b) =>
+    a.year === b.year && a.month === b.month && a.day === b.day;
+
+  // Agents can delete a tracker on the day it was added. Night trackers added
+  // 00:00–09:00 are stored on the previous date, so they also count yesterday.
+  const canDeleteTracker = (tracker) => {
+    const trackerParts = getISTParts(tracker?.date_time);
     const todayParts = getISTParts(new Date());
     if (!trackerParts || !todayParts) return false;
-    return (
-      trackerParts.year === todayParts.year &&
-      trackerParts.month === todayParts.month &&
-      trackerParts.day === todayParts.day
-    );
+    if (sameISTDay(trackerParts, todayParts)) return true;
+
+    const isNight = String(tracker?.shift || "").trim().toUpperCase() === "NIGHT";
+    if (!isNight || trackerParts.hours >= 9) return false;
+    const yesterdayParts = getISTParts(new Date(Date.now() - 24 * 60 * 60 * 1000));
+    return Boolean(yesterdayParts) && sameISTDay(trackerParts, yesterdayParts);
   };
 
   // Fetch tracker data with filters
@@ -830,17 +834,21 @@ const Tracker = ({ embedded = false }) => {
       setError("");
       
       log('[Tracker] Deleting tracker:', deleteConfirm);
-      await api.post("/tracker/delete", { tracker_id: deleteConfirm });
+      await api.post("/tracker/delete", {
+        tracker_id: deleteConfirm,
+        logged_in_user_id: user?.user_id,
+      });
       
       setTrackers(trackers.filter(t => t.tracker_id !== deleteConfirm));
       setDeleteConfirm(null);
       toast.success("Tracker deleted successfully!");
       log('[Tracker] Tracker deleted successfully');
     } catch (err) {
-      const errorMsg = "Delete failed. Please try again.";
+      const serverMsg = err?.response?.data?.message;
+      const errorMsg = serverMsg || "Delete failed. Please try again.";
       logError('[Tracker] Delete error:', err);
       setError(errorMsg);
-      toast.error("Failed to delete tracker.");
+      toast.error(serverMsg || "Failed to delete tracker.");
     } finally {
       setDeletingId(null);
     }
@@ -1310,7 +1318,7 @@ const Tracker = ({ embedded = false }) => {
                         )}
                       </td>
                       <td className="px-5 py-4 align-middle text-center">
-                        {isToday(tracker.date_time) ? (
+                        {canDeleteTracker(tracker) ? (
                           <button
                             onClick={() => handleDelete(tracker.tracker_id)}
                             disabled={deletingId === tracker.tracker_id}
