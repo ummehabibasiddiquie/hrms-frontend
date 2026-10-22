@@ -3,6 +3,7 @@ import { Briefcase, X, Upload, XCircle, User, Users } from "lucide-react";
 import { log, logError } from "../../../../config/environment";
 import SearchableSelect from "../../../common/SearchableSelect";
 import MultiSelectWithCheckbox from "../../../common/MultiSelectWithCheckbox";
+import ProjectSopLinksEditor from "./ProjectSopLinksEditor";
 
 const EditProjectModal = ({
 	project,
@@ -163,6 +164,9 @@ const EditProjectModal = ({
 				description: project.description || project.project_description || "",
 			requires_ai_evaluation: project.requires_ai_evaluation ?? false,
 			requires_duplicate_check: project.requires_duplicate_check ?? false,
+			sopLinks: Array.isArray(project.sopLinks)
+				? project.sopLinks
+				: Array.isArray(project.sop_links) ? project.sop_links : [],
 		};
 
 		console.log('[EditProjectModal][DEBUG] newProject state to set:', newProject);
@@ -583,6 +587,12 @@ const EditProjectModal = ({
 							</div>
 						)}
 					</div>
+
+					<ProjectSopLinksEditor
+						value={editProject.sopLinks || []}
+						onChange={(links) => setEditProject(prev => ({ ...prev, sopLinks: links }))}
+						disabled={isSubmitting}
+					/>
 				</div>
 			</div>
 			<div className="p-4 border-t border-slate-200 bg-white flex justify-end gap-3">

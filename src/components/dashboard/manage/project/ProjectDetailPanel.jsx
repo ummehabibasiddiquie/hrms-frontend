@@ -25,6 +25,7 @@ const ProjectDetailPanel = ({
   const [taskTableRefresh, setTaskTableRefresh] = useState(Date.now());
   const [showFilesDropdown, setShowFilesDropdown] = useState(false);
   const [projectFiles, setProjectFiles] = useState([]);
+  const [sopLinks, setSopLinks] = useState([]);
   const [togglingStatus, setTogglingStatus] = useState(false);
   const filesDropdownRef = useRef(null);
   const filesButtonRef = useRef(null);
@@ -75,9 +76,11 @@ const ProjectDetailPanel = ({
             ? current.project_files
             : []
         );
+        setSopLinks(Array.isArray(current?.sop_links) ? current.sop_links : []);
       } catch {
         toast.error("Failed to load project files");
         setProjectFiles([]);
+        setSopLinks([]);
       }
     }
     setShowFilesDropdown(!showFilesDropdown);
@@ -117,8 +120,27 @@ const ProjectDetailPanel = ({
                 ref={filesDropdownRef}
                 className="absolute top-full left-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto"
               >
+                {sopLinks.length > 0 && (
+                  <div className="border-b border-slate-200">
+                    <p className="px-4 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">SOP links</p>
+                    {sopLinks.map((link, index) => (
+                      <a
+                        key={`${link.url}-${index}`}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 truncate"
+                        title={link.url}
+                      >
+                        {link.title || link.url}
+                      </a>
+                    ))}
+                  </div>
+                )}
                 {projectFiles.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-slate-500 text-center">No files uploaded</p>
+                  sopLinks.length === 0 ? (
+                    <p className="px-4 py-6 text-sm text-slate-500 text-center">No files uploaded</p>
+                  ) : null
                 ) : (
                   projectFiles.map((fileUrl, index) => {
                     const fileName = fileUrl.split("/").pop() || `File ${index + 1}`;

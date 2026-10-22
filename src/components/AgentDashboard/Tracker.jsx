@@ -27,6 +27,7 @@ import { fileToBase64 } from "../../utils/fileToBase64";
 import { useAuth } from "../../context/AuthContext";
 import { log, logError } from "../../config/environment";
 import SearchableSelect from "../common/SearchableSelect";
+import ProjectSopLinks from "../common/ProjectSopLinks";
 import { DateRangePicker } from "../common/CustomCalendar";
 import { Briefcase, ListChecks } from "lucide-react";
 import { formatISTDateTimeParts, getISTParts, formatISTDateMedium, todayISTISO } from "../../utils/dateTimeIST";
@@ -1440,6 +1441,7 @@ const Tracker = ({ embedded = false }) => {
                         {errors.selectedProject}
                       </p>
                     )}
+                    <ProjectSopLinks projectId={selectedProject} className="mt-1" />
                   </div>
 
                   {/* Task Selection */}

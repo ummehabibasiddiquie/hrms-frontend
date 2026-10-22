@@ -193,6 +193,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
           projectCategoryId: '',
           requires_ai_evaluation: false,
           requires_duplicate_check: false,
+          sopLinks: [],
      });
 
      const [projectFiles, setProjectFiles] = useState([]);
@@ -257,6 +258,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                // Append validation requirement fields
                formData.append('requires_ai_evaluation', newProject.requires_ai_evaluation ? 'true' : 'false');
                formData.append('requires_duplicate_check', newProject.requires_duplicate_check ? 'true' : 'false');
+               formData.append('sop_links', JSON.stringify(newProject.sopLinks || []));
                
                // Append all files
                if (projectFiles && projectFiles.length > 0) {
@@ -329,6 +331,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                               project_category_name: fullProject.project_category_name,
                               project_category_id: fullProject.project_category_id,
                               project_files: fullProject.project_files,
+                              sop_links: fullProject.sop_links,
                               requires_ai_evaluation: fullProject.requires_ai_evaluation,
                               requires_duplicate_check: fullProject.requires_duplicate_check
                          };
@@ -357,6 +360,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                projectCategoryId: String(project.projectCategoryId || project.project_category_id || ''),
                requires_ai_evaluation: project.requires_ai_evaluation ?? false,
                requires_duplicate_check: project.requires_duplicate_check ?? false,
+               sopLinks: Array.isArray(project.sop_links) ? project.sop_links : [],
           });
           
           // Set projectFiles from project.project_files array (URLs)
@@ -454,6 +458,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                // Append validation requirement fields
                formData.append('requires_ai_evaluation', projectData.requires_ai_evaluation ? 'true' : 'false');
                formData.append('requires_duplicate_check', projectData.requires_duplicate_check ? 'true' : 'false');
+               formData.append('sop_links', JSON.stringify(projectData.sopLinks || []));
                
                // Process ALL files - both existing (to keep) and new (to upload)
                const existingFileUrls = [];
@@ -845,6 +850,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                projectCategoryId: '',
                requires_ai_evaluation: false,
                requires_duplicate_check: false,
+               sopLinks: [],
           });
           setProjectFiles([]);
           setFormErrors({});

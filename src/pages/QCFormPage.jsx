@@ -31,6 +31,7 @@ import api from '../services/api';
 import config from '../config/environment';
 import { generateQCSample, saveQCRecord } from '../services/qcService';
 import { cellDisplayValue } from '../utils/qcErrorIdentity';
+import ProjectSopLinks from '../components/common/ProjectSopLinks';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorMessage from '../components/common/ErrorMessage';
 import MultiSelectWithCheckbox from '../components/common/MultiSelectWithCheckbox';
@@ -1079,6 +1080,7 @@ const QCFormPage = () => {
               <p className="text-lg font-bold text-slate-800 break-all leading-snug">
                 {trackerData.project_name || 'N/A'}
               </p>
+              <ProjectSopLinks projectId={trackerData.project_id} className="mt-1" />
             </div>
           </div>
 
