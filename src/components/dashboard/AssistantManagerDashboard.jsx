@@ -127,6 +127,7 @@ const AssistantManagerDashboard = () => {
 
   // Fetch dashboard data
   useEffect(() => {
+    let cancelled = false;
     const fetchDashboard = async () => {
       setLoading(true);
       try {
@@ -149,6 +150,7 @@ const AssistantManagerDashboard = () => {
           payload.date_to = today;
         }
         const res = await api.post('/dashboard/filter', payload);
+        if (cancelled) return;
         if (res.data && res.data.status === 200) {
           const data = res.data.data || {};
           console.log('[AssistantManagerDashboard] Dashboard API data:', data);
@@ -160,11 +162,9 @@ const AssistantManagerDashboard = () => {
             .map(row => ({
               ...row,
               user_name: row.user_name || '-',
-              project_name: projectNameMap[String(row.project_id)] || row.project_name || String(row.project_id) || '-',
               file_name: row.tracker_file ? row.tracker_file.split('/').pop() : '-',
               qc_score: row.qc_score || '-',
               date: row.date_time ? row.date_time.split(' ')[0] : '-',
-              task_name: taskNameMap[String(row.task_id)] || row.task_name || String(row.task_id) || '-',
             }));
           setStats({
             totalAgents: (data.users || []).length,
@@ -178,13 +178,22 @@ const AssistantManagerDashboard = () => {
           setStats({ totalAgents: 0, qcPending: 0, billableHours: 0, avgQcScore: 0, latestQc: [] });
         }
       } catch (err) {
-        setError(getFriendlyErrorMessage(err));
+        if (!cancelled) setError(getFriendlyErrorMessage(err));
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchDashboard();
-  }, [user, dateRange, device_id, device_type, projectNameMap, taskNameMap]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user, dateRange, device_id, device_type]);
+
+  const latestQcFiles = stats.latestQc.map(row => ({
+    ...row,
+    project_name: projectNameMap[String(row.project_id)] || row.project_name || String(row.project_id) || '-',
+    task_name: taskNameMap[String(row.task_id)] || row.task_name || String(row.task_id) || '-',
+  }));
 
   // const handleDateChange = (field, value) => {
   //   setDateRange((prev) => ({ ...prev, [field]: value }));
@@ -333,7 +342,7 @@ const AssistantManagerDashboard = () => {
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {stats.latestQc.map((file, index) => (
+                  {latestQcFiles.map((file, index) => (
                     <div
                       key={file.tracker_id || index}
                       className="group px-6 py-5 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200"
