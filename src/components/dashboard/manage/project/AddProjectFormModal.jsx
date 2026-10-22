@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { Briefcase, X, Upload, XCircle, User, Users } from "lucide-react";
 import SearchableSelect from "../../../common/SearchableSelect";
 import MultiSelectWithCheckbox from "../../../common/MultiSelectWithCheckbox";
+import ProjectSopLinksEditor from "./ProjectSopLinksEditor";
 
 const AddProjectFormModal = ({
      newProject,
@@ -696,6 +697,12 @@ const AddProjectFormModal = ({
                                         </div>
                                    )}
                               </div>
+
+                              <ProjectSopLinksEditor
+                                   value={newProject.sopLinks || []}
+                                   onChange={(links) => onFieldChange('sopLinks', links)}
+                                   disabled={isSubmitting}
+                              />
 
                          </div>
                     </div>
