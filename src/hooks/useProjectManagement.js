@@ -238,6 +238,7 @@ export const useProjectManagement = (initialProjects, onUpdateProjects, loadProj
                const formData = new FormData();
                
                // Append basic fields
+               if (userId) formData.append('logged_in_user_id', userId);
                formData.append('project_name', newProject.name.trim());
                formData.append('project_code', newProject.code.trim());
                formData.append('project_description', newProject.description?.trim() || '');
