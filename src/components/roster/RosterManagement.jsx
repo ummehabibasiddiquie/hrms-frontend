@@ -1129,6 +1129,7 @@ const RosterManagement = () => {
               monthYear={monthYear}
               rosters={teamWeekRosters}
               employees={filteredEmployees}
+              searchActive={Boolean(employeeSearch.trim())}
               pendingRequests={monthPendingAll}
               monthCalendarLocked={monthCalendarLocked}
               weekLocks={weekLocks}

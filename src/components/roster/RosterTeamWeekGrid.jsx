@@ -30,6 +30,7 @@ const RosterTeamWeekGrid = ({
   onLockWeek,
   onEmailWeek,
   emailingWeek = false,
+  searchActive = false,
 }) => {
   const weeks = useMemo(() => getWeeksInMonth(monthYear), [monthYear]);
   const [activeWeek, setActiveWeek] = useState(1);
@@ -88,13 +89,15 @@ const RosterTeamWeekGrid = ({
         roster: rosterByUser[String(e.user_id)] || null,
       }));
     }
+    // A search that matches nobody must show nobody, not every roster.
+    if (searchActive) return [];
     return (rosters || []).map((r) => ({
       user_id: r.user_id,
       user_name: r.user_name || `User ${r.user_id}`,
       team_name: r.team_name,
       roster: r,
     })).filter((row) => !empIds.size || empIds.has(String(row.user_id)));
-  }, [employees, rosters, rosterByUser]);
+  }, [employees, rosters, rosterByUser, searchActive]);
 
   if (!weeks.length) {
     return (
@@ -202,7 +205,9 @@ const RosterTeamWeekGrid = ({
                   colSpan={(week?.dates?.length || 0) + 1}
                   className="px-4 py-10 text-center text-sm text-slate-500"
                 >
-                  No employees for this filter. Generate rosters or change team.
+                  {searchActive
+                    ? "No employee matches this search."
+                    : "No employees for this filter. Generate rosters or change team."}
                 </td>
               </tr>
             ) : (
