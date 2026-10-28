@@ -31,7 +31,8 @@ import {
   CheckCircle2,
   CalendarDays,
   Mail,
-  Clock
+  Clock,
+  FolderKanban
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import GeminiKeyModal from "../GeminiKeyModal";
@@ -141,6 +142,11 @@ const Header = ({
     }
     if (view === 'SOPS') {
       navigate(dashboardTabUrl('sops'));
+      setIsMobileMenuOpen(false);
+      return;
+    }
+    if (view === 'MY_PROJECTS') {
+      navigate(dashboardTabUrl('my_projects'));
       setIsMobileMenuOpen(false);
       return;
     }
@@ -317,7 +323,10 @@ const Header = ({
     const roleId = Number(currentUser?.role_id);
     // Admin, Super Admin and Project Manager manage SOPs from Manage; everyone else views them here.
     if (roleId === 1 || roleId === 2 || roleId === 3) return items;
-    return [...items, { view: "SOPS", label: "SOPs", icon: BookOpen }];
+    const sops = { view: "SOPS", label: "SOPs", icon: BookOpen };
+    // Agents, QA and Team Leaders get a view-only Projects tab (project details, files, SOP links, tasks)
+    if (roleId === 4) return [...items, sops];
+    return [...items, { view: "MY_PROJECTS", label: "Projects", icon: FolderKanban }, sops];
   })();
   // DEBUG: Log navItems and currentUser for troubleshooting tab visibility
 
@@ -365,6 +374,10 @@ const Header = ({
 
     if (view === 'MY_REPORT') {
       return currentPath === '/dashboard' && currentTab === 'my_hours';
+    }
+
+    if (view === 'MY_PROJECTS') {
+      return currentPath === '/dashboard' && currentTab === 'my_projects';
     }
 
     if (view === 'REPORT_EMAILS') {
