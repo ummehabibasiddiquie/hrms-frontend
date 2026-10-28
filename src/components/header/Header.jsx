@@ -257,7 +257,6 @@ const Header = ({
             { view: "MY_REPORT", label: "My Report", icon: Clock },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
-            { view: "QA_AGENT_AUDIT", label: "Audit Report", icon: UserCheck },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
         }
@@ -285,7 +284,6 @@ const Header = ({
         { view: "MY_REPORT", label: "My Report", icon: Clock },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
-        { view: "QA_AGENT_AUDIT", label: "Audit Report", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
     }
