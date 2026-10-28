@@ -337,13 +337,13 @@ const DashboardPage = ({
   if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || canViewAsAm) && activeTab === 'tracker_report') {
     return <QATrackerReport />;
   }
-  // Team Leaders: no Agent Files & QC Report
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || isAssistantManager) && activeTab === 'agent_file_report') {
+  // Team Leaders do QC like a QA (on agents where they are set as the QA)
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || isAssistantManager || isTeamLeader) && activeTab === 'agent_file_report') {
     return <QAAgentList />;
   }
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4 || roleId === 5) && activeTab === 'qa_agent_audit') {
-    // QA Agent (roleId 5) sees only the Report tab with their own data
-    if (roleId === 5) {
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4 || roleId === 5 || isTeamLeader) && activeTab === 'qa_agent_audit') {
+    // QA and Team Leader see only the Report tab with their own audits
+    if (roleId === 5 || isTeamLeader) {
       const qaAgentName = currentUser?.name || currentUser?.user_name || currentUser?.username || '';
       return <QAAgentAudit defaultTab="audit_report" hideTabNavigation={true} filterByQAAgent={qaAgentName} />;
     }
@@ -392,6 +392,8 @@ const DashboardPage = ({
         if (isAdmin || isSuperAdmin || isProjectManager) {
           return <AdminDashboard initialTab="overview" />;
         } else if (canViewAsAm) {
+          // Team Leader's My Report (QA hours) has its own block below
+          if (isTeamLeader && activeTab === 'my_hours') return null;
           return <AssistantManagerDashboard />;
         } else if (isQA) {
           // my_roster / my_hours have dedicated blocks below (main menu, not Analytics)
@@ -634,7 +636,7 @@ const DashboardPage = ({
         </div>
       )}
 
-      {activeTab === 'my_hours' && isQA && (
+      {activeTab === 'my_hours' && (isQA || isTeamLeader) && (
         <div className="max-w-7xl mx-auto mt-2">
           <QAHoursTracker mode="self" />
         </div>

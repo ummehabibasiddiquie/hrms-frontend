@@ -12,8 +12,9 @@ import api from "./api";
  * @param {number} userId - The logged in user ID.
  * @param {number} projectId - Optional project ID filter.
  * @param {number} teamId - Optional team ID filter.
+ * @param {object} extra - Optional extra fields, e.g. { scope: "qc" } on QC / QA-hours screens.
  */
-export const fetchDropdown = async (dropdownType, userId = null, projectId = null, teamId = null) => {
+export const fetchDropdown = async (dropdownType, userId = null, projectId = null, teamId = null, extra = {}) => {
      try {
           console.log(`[dropdownService] fetchDropdown called with:`, {
                dropdownType,
@@ -32,6 +33,7 @@ export const fetchDropdown = async (dropdownType, userId = null, projectId = nul
           // Add optional filters
           if (projectId) payload.project_id = projectId;
           if (teamId) payload.team_id = teamId;
+          Object.assign(payload, extra);
           
           const response = await api.post("dropdown/get", payload);
           const data = response.data?.data || [];

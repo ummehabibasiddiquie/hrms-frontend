@@ -415,7 +415,8 @@ const QAAgentQCFormReport = () => {
 
       // Prepare API payload
       const payload = {
-        logged_in_user_id: user.user_id
+        logged_in_user_id: user.user_id,
+        scope: 'qc',
       };
 
       // Add date range if filters are applied
