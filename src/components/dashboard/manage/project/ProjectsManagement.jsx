@@ -372,7 +372,7 @@ const ProjectsManagement = ({
 
         {showEditModal && isEditMode && newProject && (
           <EditProjectModal
-            key={`edit-${editingProjectId}-${Date.now()}`}
+            key={`edit-${editingProjectId}`}
             project={newProject}
             onClose={closeEditModal}
             onUpdate={handleUpdateProject}
