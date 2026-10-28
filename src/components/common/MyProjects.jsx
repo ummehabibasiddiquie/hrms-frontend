@@ -8,9 +8,11 @@ import {
   FolderKanban,
   Search,
 } from "lucide-react";
+import { toast } from "react-hot-toast";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
+import { canOpenInBrowser, openDocumentInBrowser } from "../../utils/openDocument";
 
 const fileNameFromUrl = (url, fallback) => {
   try {
@@ -19,6 +21,43 @@ const fileNameFromUrl = (url, fallback) => {
   } catch {
     return fallback;
   }
+};
+
+/** File name that opens in the browser (PDF / Office viewer), plus a separate download icon. */
+const FileActions = ({ url, name, label, icon }) => {
+  const viewable = canOpenInBrowser(url, name);
+  const fileIcon = icon || <FileText className="w-4 h-4 shrink-0" />;
+  return (
+    <span className="inline-flex items-center gap-2 max-w-full">
+      {viewable ? (
+        <button
+          type="button"
+          onClick={() => openDocumentInBrowser(url, name).catch(() => toast.error("Could not open this file"))}
+          className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline break-all text-left"
+          title={`Open ${name}`}
+        >
+          {fileIcon}
+          {label || name}
+          <ExternalLink className="w-3 h-3 shrink-0" />
+        </button>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 text-sm text-slate-700 break-all">
+          {fileIcon}
+          {label || name}
+        </span>
+      )}
+      <a
+        href={url}
+        download
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-slate-500 hover:text-slate-800 shrink-0"
+        title={`Download ${name}`}
+      >
+        <Download className="w-4 h-4" />
+      </a>
+    </span>
+  );
 };
 
 const InfoItem = ({ label, value }) => (
@@ -194,15 +233,7 @@ const MyProjects = () => {
                         <ul className="space-y-1.5">
                           {files.map((url, i) => (
                             <li key={`${url}-${i}`}>
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-sm text-purple-700 hover:underline break-all"
-                              >
-                                <Download className="w-3.5 h-3.5 shrink-0" />
-                                {fileNameFromUrl(url, `File ${i + 1}`)}
-                              </a>
+                              <FileActions url={url} name={fileNameFromUrl(url, `File ${i + 1}`)} />
                             </li>
                           ))}
                         </ul>
@@ -261,15 +292,12 @@ const MyProjects = () => {
                                 )}
                                 <td className="px-3 py-2">
                                   {task.sample_file ? (
-                                    <a
-                                      href={task.sample_file}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1.5 text-green-700 hover:underline whitespace-nowrap"
-                                      title={fileNameFromUrl(task.sample_file, "Sample file")}
-                                    >
-                                      <FileSpreadsheet className="w-4 h-4" /> Download
-                                    </a>
+                                    <FileActions
+                                      url={task.sample_file}
+                                      name={fileNameFromUrl(task.sample_file, "Sample file")}
+                                      label="Sample file"
+                                      icon={<FileSpreadsheet className="w-4 h-4 shrink-0 text-green-700" />}
+                                    />
                                   ) : (
                                     <span className="text-slate-400">-</span>
                                   )}
