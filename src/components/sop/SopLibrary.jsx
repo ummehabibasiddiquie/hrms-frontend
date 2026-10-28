@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { BookOpen, ExternalLink, FileText, Link2, Plus, Trash2, Upload } from "lucide-react";
+import { BookOpen, Download, ExternalLink, FileText, Link2, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api from "../../services/api";
+import { canOpenInBrowser, openDocumentInBrowser } from "../../utils/openDocument";
 import { useAuth } from "../../context/AuthContext";
 import { getFriendlyErrorMessage } from "../../utils/errorMessages";
 
@@ -312,6 +313,21 @@ export default function SopLibrary() {
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
+                          {href && item.item_type === "file" && canOpenInBrowser(href, item.file_name) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                openDocumentInBrowser(href, item.file_name).catch(() => {
+                                  toast.error("Could not open this file");
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                            >
+                              <FileText className="w-4 h-4" />
+                              Open
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
+                          )}
                           {href && item.item_type === "file" && (
                             <button
                               type="button"
@@ -321,9 +337,10 @@ export default function SopLibrary() {
                                 });
                               }}
                               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                              title="Download"
                             >
-                              <FileText className="w-4 h-4" />
-                              Open
+                              <Download className="w-4 h-4" />
+                              Download
                             </button>
                           )}
                           {href && item.item_type !== "file" && (
