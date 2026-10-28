@@ -558,7 +558,8 @@ const QAAgentList = () => {
   const { device_id, device_type } = useDeviceInfo();
   const roleId = Number(user?.role_id ?? user?.user_role_id ?? 0);
   const roleText = String(user?.role_name || user?.role || user?.user_role || '').trim().toLowerCase();
-  const isQA = roleId === 5 || roleText === 'qa' || roleText.includes('qa');
+  // Assistant Team Leaders do QC like a QA, on agents where they are set as the QA.
+  const isQA = roleId === 5 || roleId === 7 || roleText.includes('qa') || roleText.includes('team leader');
   const [listingReady, setListingReady] = useState(false);
   const [listingAgentIds, setListingAgentIds] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -608,7 +609,8 @@ const QAAgentList = () => {
         // 1. Fetch mapping
         const dropdownRes = await api.post("/dropdown/get", {
           dropdown_type: "projects with tasks",
-          logged_in_user_id: user?.user_id
+          logged_in_user_id: user?.user_id,
+          scope: "qc",
         });
         const projectsWithTasks = dropdownRes.data?.data || [];
         const pMap = {};
@@ -628,6 +630,7 @@ const QAAgentList = () => {
           const listingRes = await api.post("/dropdown/get", {
             logged_in_user_id: user?.user_id,
             dropdown_type: "agent",
+            scope: "qc",
           });
           const listingAgents = listingRes.data?.data || [];
           listingAgentIds = new Set(
@@ -642,7 +645,8 @@ const QAAgentList = () => {
           logged_in_user_id: user?.user_id,
           device_id: device_id,
           device_type: device_type,
-          qc_pending: 0  // Fetch only QC pending trackers
+          qc_pending: 0,  // Fetch only QC pending trackers
+          scope: "qc",
         });
         const allTrackerData = allTrackersRes.data?.data || {};
         const allTrackers = allTrackerData.trackers || [];
@@ -705,6 +709,7 @@ const QAAgentList = () => {
         date_from: dateFrom,
         date_to: dateTo,
         qc_pending: 0,
+        scope: "qc",
       });
 
       if (requestId !== fileLoadRequestId.current) return;
@@ -1109,6 +1114,7 @@ const QAAgentList = () => {
         // Fetch user list to get agent's manager information
         api.post('/user/list', {
           user_id: user?.user_id,
+          scope: 'qc',
           device_id: user?.device_id || 'web',
           device_type: user?.device_type || 'Laptop'
         }).catch(err => {

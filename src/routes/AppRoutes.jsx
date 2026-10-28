@@ -74,7 +74,7 @@ const AppRoutes = () => {
       <Route
         path={ROUTES.QC_FORM}
         element={
-          <ProtectedRoute allowedRoles={[1, 2, 3, 4, 5]}>
+          <ProtectedRoute allowedRoles={[1, 2, 3, 4, 5, 7]}>
             <AppLayout>
               <QCFormPage />
             </AppLayout>

@@ -251,10 +251,13 @@ const Header = ({
           ];
         }
         if (roleId === 7) {
-          // Team Leader: no QA/QC report tabs
+          // Team Leader: team view plus QA work (QC on agents where they are set as the QA)
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+            { view: "MY_REPORT", label: "My Report", icon: Clock },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+            { view: "QA_AGENT_AUDIT", label: "Audit Report", icon: UserCheck },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
         }
@@ -276,10 +279,13 @@ const Header = ({
       ];
     }
     if (role.includes('TEAM LEADER') || role.includes('TEAM_LEADER') || roleId === 7) {
-      // Team Leader: no QA/QC report tabs
+      // Team Leader: team view plus QA work (QC on agents where they are set as the QA)
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+        { view: "MY_REPORT", label: "My Report", icon: Clock },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+        { view: "QA_AGENT_AUDIT", label: "Audit Report", icon: UserCheck },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
     }
