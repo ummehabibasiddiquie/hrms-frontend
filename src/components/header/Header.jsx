@@ -311,8 +311,8 @@ const Header = ({
     const items = getNavItems();
     if (!items.length) return items;
     const roleId = Number(currentUser?.role_id);
-    // Admin and Super Admin open SOPs from Manage, so it does not stretch this menu.
-    if (roleId === 1 || roleId === 2) return items;
+    // Admin, Super Admin and Project Manager manage SOPs from Manage; everyone else views them here.
+    if (roleId === 1 || roleId === 2 || roleId === 3) return items;
     return [...items, { view: "SOPS", label: "SOPs", icon: BookOpen }];
   })();
   // DEBUG: Log navItems and currentUser for troubleshooting tab visibility
