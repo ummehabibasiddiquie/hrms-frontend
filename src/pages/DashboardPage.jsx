@@ -111,6 +111,8 @@ const DashboardPage = ({
   const [error, setError] = useState(null);
   const canAccessRoster = isSuperAdmin || isAdmin || isProjectManager || isAssistantManager || isTeamLeader;
   const canManageReportEmails = isSuperAdmin;
+  // SOP editors use Manage > SOPs; everyone else views SOPs from the main menu.
+  const canManageSops = isSuperAdmin || isAdmin || isProjectManager;
   const canAccessManage = canManageUsers || canManageProjects || isSuperAdmin || canAccessRoster;
   const canViewIncentivesTab = isAdmin || userRole === 'FINANCE_HR' || userRole === 'PROJECT_MANAGER' || isSuperAdmin;
   const canViewAdherence = isAdmin || userRole === 'PROJECT_MANAGER' || isQA || isSuperAdmin;
@@ -145,12 +147,18 @@ const DashboardPage = ({
       ...(isAssistantManager || canManageProjects ? ['projects', 'afd'] : []),
       ...(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager ? ['category', 'permissions'] : []),
       ...(canAccessRoster ? ['roster'] : []),
-      'sops',
+      ...(canManageSops ? ['sops'] : []),
     ];
     if (!visibleTabs.includes(adminActiveTab) && visibleTabs.length > 0) {
       setManageSubTab(visibleTabs[0]);
     }
-  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, canManageProjects, canAccessRoster, canManageReportEmails, setManageSubTab]);
+  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, canManageProjects, canAccessRoster, canManageReportEmails, canManageSops, setManageSubTab]);
+
+  useEffect(() => {
+    if (activeTab === 'sops' && canManageSops) {
+      navigate(dashboardTabUrl('manage', { adminTab: 'sops' }), { replace: true });
+    }
+  }, [activeTab, canManageSops, navigate]);
 
   const setDashboardTab = useCallback((tab) => {
     setActiveTab(tab);
@@ -473,6 +481,7 @@ const DashboardPage = ({
                   id: 'sops',
                   label: 'SOPs',
                   icon: BookOpen,
+                  hidden: !canManageSops,
                 },
                 {
                   id: 'users',
@@ -599,7 +608,7 @@ const DashboardPage = ({
               <RosterManagement />
             )}
 
-            {adminActiveTab === 'sops' && (
+            {adminActiveTab === 'sops' && canManageSops && (
               <SopLibrary />
             )}
           </div>
@@ -613,7 +622,7 @@ const DashboardPage = ({
         </div>
       )}
 
-      {activeTab === 'sops' && (
+      {activeTab === 'sops' && !canManageSops && (
         <div className="max-w-7xl mx-auto mt-2">
           <SopLibrary />
         </div>
