@@ -24,6 +24,8 @@ const EditProjectModal = ({
 }) => {
 	const fileInputRef = useRef(null);
 	const [editProject, setEditProject] = useState(null);
+	// Fill the form once per opened project; later parent updates must not wipe unsaved edits.
+	const initializedForRef = useRef(undefined);
 
 	// Debug incoming props at component level
 	console.log('[EditProjectModal] ========== COMPONENT RENDER ==========');
@@ -41,7 +43,12 @@ const EditProjectModal = ({
 		console.log('[EditProjectModal] project.name:', project?.name);
 		console.log('[EditProjectModal] project.project_name:', project?.project_name);
 		
+		const openedProjectId = project?.id ?? project?.project_id ?? null;
+		if (project && Object.keys(project).length > 0 && initializedForRef.current === openedProjectId) {
+			return;
+		}
 		if (project && Object.keys(project).length > 0) {
+			initializedForRef.current = openedProjectId;
 			console.log('[EditProjectModal] ========== INITIALIZING EDIT PROJECT ==========');
 			console.log('[EditProjectModal][DEBUG] Incoming project prop:', project);
 			console.log('[EditProjectModal][DEBUG] Incoming projectManagers prop:', projectManagers);
