@@ -139,9 +139,7 @@ const MyProjects = () => {
                 <div className="flex items-center gap-2 text-xs font-semibold">
                   <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700">{tasks.length} tasks</span>
                   <span className="px-2 py-1 rounded-full bg-purple-50 text-purple-700">{files.length} files</span>
-                  {!isAgent && (
-                    <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">{sopLinks.length} SOPs</span>
-                  )}
+                  <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">{sopLinks.length} SOPs</span>
                 </div>
                 <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
               </button>
@@ -161,8 +159,7 @@ const MyProjects = () => {
                     </div>
                   )}
 
-                  <div className={`grid grid-cols-1 gap-4 ${isAgent ? "" : "lg:grid-cols-2"}`}>
-                    {!isAgent && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className="rounded-xl border border-slate-200 p-4">
                       <p className="flex items-center gap-1.5 text-sm font-bold text-slate-700 mb-2">
                         <FileText className="w-4 h-4 text-emerald-600" /> SOP links
@@ -187,7 +184,6 @@ const MyProjects = () => {
                         </ul>
                       )}
                     </div>
-                    )}
                     <div className="rounded-xl border border-slate-200 p-4">
                       <p className="flex items-center gap-1.5 text-sm font-bold text-slate-700 mb-2">
                         <Download className="w-4 h-4 text-purple-600" /> Project files
@@ -231,9 +227,9 @@ const MyProjects = () => {
                                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">QC target</th>
                                   <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">QC %</th>
                                   <th className="px-3 py-2 text-left font-semibold">Important columns</th>
-                                  <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Sample file</th>
                                 </>
                               )}
+                              <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Sample file</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -261,6 +257,8 @@ const MyProjects = () => {
                                     "-"
                                   )}
                                 </td>
+                                </>
+                                )}
                                 <td className="px-3 py-2">
                                   {task.sample_file ? (
                                     <a
@@ -276,8 +274,6 @@ const MyProjects = () => {
                                     <span className="text-slate-400">-</span>
                                   )}
                                 </td>
-                                </>
-                                )}
                               </tr>
                             ))}
                           </tbody>
