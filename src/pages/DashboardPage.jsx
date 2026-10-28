@@ -40,6 +40,7 @@ import ReportEmails from '../components/dashboard/manage/ReportEmails';
 import MyRoster from '../components/roster/MyRoster';
 import QAHoursTracker from '../components/QAAgentDashboard/QAHoursTracker';
 import QATabsNavigation from '../components/QAAgentDashboard/QATabsNavigation';
+import QAIndividualAuditReport from '../components/QAAgentDashboard/QAIndividualAuditReport';
 import SubTabsBar from '../components/common/SubTabsBar';
 import { dashboardTabUrl, isAnalyticsTab } from '../routes/paths';
 
@@ -342,10 +343,13 @@ const DashboardPage = ({
     return <QAAgentList />;
   }
   if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4 || roleId === 5 || isTeamLeader) && activeTab === 'qa_agent_audit') {
-    // QA and Team Leader see only the Report tab with their own audits
+    // QA and Team Leader see the same Audit Report as the QA Analytics tab (their own audits only)
     if (roleId === 5 || isTeamLeader) {
-      const qaAgentName = currentUser?.name || currentUser?.user_name || currentUser?.username || '';
-      return <QAAgentAudit defaultTab="audit_report" hideTabNavigation={true} filterByQAAgent={qaAgentName} />;
+      return (
+        <div className="max-w-7xl mx-auto mt-2">
+          <QAIndividualAuditReport />
+        </div>
+      );
     }
     // Other roles see both tabs with all data
     return <QAAgentAudit />;
