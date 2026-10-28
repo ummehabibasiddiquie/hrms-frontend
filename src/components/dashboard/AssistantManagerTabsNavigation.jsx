@@ -8,7 +8,8 @@ import {
   Users,
   FolderKanban,
   Clock,
-  ClipboardList
+  ClipboardList,
+  FileCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -23,6 +24,8 @@ const AssistantManagerTabsNavigation = ({ activeTab, setActiveTab, compact = fal
     { id: 'user_monthly_report', label: 'User Monthly Goal', icon: Users },
     { id: 'project_monthly_report', label: 'Project Monthly Report', icon: FolderKanban },
     { id: 'kra_report', label: 'KRA', icon: ClipboardList },
+    // Team Leaders doing QC see audits on their own QC, like the QA Analytics tab
+    ...(isTeamLeader ? [{ id: 'audit_report', label: 'Audit Report', icon: FileCheck }] : []),
   ];
 
   return (

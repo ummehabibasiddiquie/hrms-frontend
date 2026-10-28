@@ -13,6 +13,7 @@ import QATrackerReport from './QATrackerReport';
 import QAAgentList from './QAAgentList';
 import QAAgentAudit from './QAAgentAudit';
 import QAHoursTracker from "../QAAgentDashboard/QAHoursTracker";
+import QAIndividualAuditReport from "../QAAgentDashboard/QAIndividualAuditReport";
 import { DateRangePicker } from '../common/CustomCalendar';
 import { formatISTDateTimeParts } from '../../utils/dateTimeIST';
 import { useRoutedDashboardTab } from '../../hooks/useRoutedDashboardTab';
@@ -445,6 +446,7 @@ const AssistantManagerDashboard = () => {
           <QAAgentAudit />
         </div>
       )}
+      {activeTab === 'audit_report' && isTeamLeader && <QAIndividualAuditReport />}
     </div>
   );
 };
