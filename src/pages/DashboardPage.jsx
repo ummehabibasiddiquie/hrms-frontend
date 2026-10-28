@@ -36,6 +36,7 @@ import ErrorMessage from '../components/common/ErrorMessage';
 import AgentTabsNavigation from '../components/AgentDashboard/AgentTabsNavigation';
 import RosterManagement from '../components/roster/RosterManagement';
 import SopLibrary from '../components/sop/SopLibrary';
+import MyProjects from '../components/common/MyProjects';
 import ReportEmails from '../components/dashboard/manage/ReportEmails';
 import MyRoster from '../components/roster/MyRoster';
 import QAHoursTracker from '../components/QAAgentDashboard/QAHoursTracker';
@@ -627,6 +628,8 @@ const DashboardPage = ({
           <ReportEmails />
         </div>
       )}
+
+      {activeTab === 'my_projects' && (isAgent || isQA || isTeamLeader) && <MyProjects />}
 
       {activeTab === 'sops' && !canManageSops && (
         <div className="max-w-7xl mx-auto mt-2">
