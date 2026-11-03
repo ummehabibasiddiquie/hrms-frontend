@@ -4,7 +4,7 @@
  * Description: QA Tracker Report - Shows tracker entries for assigned agents with filters
  */
 import React, { useEffect, useState, useMemo } from "react";
-import { Download, Filter, FileDown, Users as UsersIcon, Calendar, RotateCcw, RefreshCw, Edit, Trash2, X, ChevronDown, Briefcase, ListTodo, Info, Plus, ListChecks, Clock, TrendingUp, Target, FileText } from "lucide-react";
+import { Download, Filter, FileDown, Users as UsersIcon, Calendar, RotateCcw, RefreshCw, Edit, Trash2, X, ChevronDown, ChevronUp, ChevronsUpDown, Briefcase, ListTodo, Info, Plus, ListChecks, Clock, TrendingUp, Target, FileText } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { downloadCSV, jsonToCSV } from "../../utils/csvExport";
 import api from "../../services/api";
@@ -84,6 +84,8 @@ const QATrackerReport = () => {
     hasPrevious: false,
     hasNext: false,
   });
+  const [sortBy, setSortBy] = useState("date_time");
+  const [sortDir, setSortDir] = useState("desc");
 
   // Filter states
   const [selectedAgents, setSelectedAgents] = useState([]);
@@ -346,6 +348,9 @@ const QATrackerReport = () => {
       }
     }
 
+    payload.sort_by = sortBy;
+    payload.sort_dir = sortDir;
+
     if (includePagination) {
       payload.paginate = true;
       payload.page = page;
@@ -456,7 +461,7 @@ const QATrackerReport = () => {
       fetchData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTasks, currentPage, itemsPerPage]);
+  }, [user?.user_id, device_id, device_type, startDate, endDate, selectedAgents, selectedTeams, selectedProject, selectedTasks, currentPage, itemsPerPage, sortBy, sortDir]);
 
   // Filter tasks based on selected project for cascading dropdown
   const filteredTasksList = useMemo(() => {
@@ -546,6 +551,18 @@ const QATrackerReport = () => {
     setSelectedTasks([]);
     setStartDate(today);
     setEndDate(today);
+    setSortBy("date_time");
+    setSortDir("desc");
+    setCurrentPage(1);
+  };
+
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      setSortDir(column === "date_time" ? "desc" : "asc");
+    }
     setCurrentPage(1);
   };
 
@@ -1661,17 +1678,63 @@ const QATrackerReport = () => {
                 </colgroup>
                 <thead className="bg-gradient-to-r from-blue-600 to-blue-700 sticky top-0 z-10">
                   <tr>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Date/Time</th>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">{canViewTeamFilter ? 'Agent / Team' : 'Agent'}</th>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Project</th>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Task</th>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Per Hour Target</th>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Production</th>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Billable Hours</th>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Notes</th>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">File</th>
-                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Shift</th>
-                    {canMutateTracker && <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">Actions</th>}
+                    {[
+                      { key: "date_time", label: "Date/Time" },
+                      { key: "agent", label: canViewTeamFilter ? "Agent / Team" : "Agent" },
+                      { key: "project", label: "Project" },
+                      { key: "task", label: "Task" },
+                      { key: "tenure_target", label: "Per Hour Target" },
+                      { key: "production", label: "Production" },
+                      { key: "billable_hours", label: "Billable Hours" },
+                      { key: "notes", label: "Notes" },
+                    ].map((column) => {
+                      const active = sortBy === column.key;
+                      return (
+                        <th
+                          key={column.key}
+                          className="px-4 py-4 font-semibold text-white text-sm text-left"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSort(column.key)}
+                            className="inline-flex items-center gap-1.5 text-left leading-snug hover:text-blue-100 transition-colors"
+                            title={`Sort ${column.label} ${active && sortDir === "asc" ? "descending" : "ascending"}`}
+                          >
+                            <span>{column.label}</span>
+                            {active ? (
+                              sortDir === "asc" ? (
+                                <ChevronUp className="w-4 h-4 shrink-0" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4 shrink-0" />
+                              )
+                            ) : (
+                              <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-60" />
+                            )}
+                          </button>
+                        </th>
+                      );
+                    })}
+                    <th className="px-4 py-4 font-semibold text-white text-sm text-center">File</th>
+                    <th className="px-4 py-4 font-semibold text-white text-sm text-left">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("shift")}
+                        className="inline-flex items-center gap-1.5 text-left leading-snug hover:text-blue-100 transition-colors"
+                        title={`Sort Shift ${sortBy === "shift" && sortDir === "asc" ? "descending" : "ascending"}`}
+                      >
+                        <span>Shift</span>
+                        {sortBy === "shift" ? (
+                          sortDir === "asc" ? (
+                            <ChevronUp className="w-4 h-4 shrink-0" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 shrink-0" />
+                          )
+                        ) : (
+                          <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-60" />
+                        )}
+                      </button>
+                    </th>
+                    {canMutateTracker && <th className="px-4 py-4 font-semibold text-white text-sm text-center">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
