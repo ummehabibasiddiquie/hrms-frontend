@@ -59,6 +59,43 @@ function notesFromReport(report) {
   return Object.fromEntries((report?.days || []).map((day) => [day.work_date, day.note || ""]));
 }
 
+function ratioTone(yes, total) {
+  const den = Number(total) || 0;
+  if (!den) return "neutral";
+  const pct = ((Number(yes) || 0) / den) * 100;
+  if (pct >= 90) return "good";
+  if (pct >= 75) return "ok";
+  return "bad";
+}
+
+function percentTone(value) {
+  if (value == null || value === "") return "neutral";
+  const n = Number(value);
+  if (Number.isNaN(n)) return "neutral";
+  if (n >= 90) return "good";
+  if (n >= 75) return "ok";
+  return "bad";
+}
+
+function reportingTone(lowTrackerDays) {
+  const n = Number(lowTrackerDays) || 0;
+  if (n <= 3) return "good";
+  if (n <= 6) return "ok";
+  return "bad";
+}
+
+function yesBadgeClass(tone) {
+  if (tone === "bad") return "bg-red-50 text-red-700 border-red-200";
+  if (tone === "ok") return "bg-orange-50 text-orange-700 border-orange-200";
+  return "bg-green-50 text-green-700 border-green-200";
+}
+
+function yesDotClass(tone) {
+  if (tone === "bad") return "bg-red-500";
+  if (tone === "ok") return "bg-orange-500";
+  return "bg-green-500";
+}
+
 function isBeforeGoLive(monthYear) {
   const value = monthYearToYyyyMm(monthYear);
   const goLive = monthYearToYyyyMm(KRA_GO_LIVE_MONTH);
@@ -190,6 +227,11 @@ export default function KraReport() {
 
   const counts = report?.counts || {};
   const scores = Object.fromEntries((report?.scores || []).map((row) => [row.key, row.earned]));
+  const prodTone = ratioTone(counts.productivity_yes, counts.working_days);
+  const qualTone = ratioTone(counts.quality_yes, counts.working_days);
+  const rosterTone = ratioTone(counts.present_days, counts.schedule_working_days ?? counts.working_days);
+  const reportTone = reportingTone(counts.low_tracker_days);
+  const kraTone = percentTone(report?.totals?.kra_percent);
   const fullTarget = report?.rules?.productivity_hours ?? 9;
   const halfTarget = report?.rules?.productivity_half_day_hours ?? (fullTarget / 2);
   const tenureVal = report?.effective_tenure ?? 1;
@@ -293,16 +335,17 @@ export default function KraReport() {
               title="Productivity"
               weight="33%"
               value={scores.productivity}
+              tone={prodTone}
               hint={`${counts.productivity_yes || 0} of ${counts.working_days || 0} days met target (${targetLabel})`}
-              hintTooltip={`${counts.productivity_yes || 0} of ${counts.working_days || 0} working days achieved target (Full day: ≥ ${fullTarget}h, Half day: ≥ ${halfTarget}h${tenureLabel}). Formula: (YES days / Working days) × 33%`}
+              hintTooltip={`${counts.productivity_yes || 0} of ${counts.working_days || 0} working days achieved target (Full day: ≥ ${fullTarget}h, Half day: ≥ ${halfTarget}h${tenureLabel}). Green ≥ 90% of working days, orange 75–89%, red below 75%. Formula: (YES days / Working days) × 33%`}
               icon={Target}
               badges={
                 <>
                   <span
                     title={`${counts.productivity_yes ?? 0} working days achieved target (≥ ${fullTarget}h / ${halfTarget}h)`}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-green-50 text-green-700 border border-green-200 cursor-help hover:bg-green-100 transition-colors"
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold border cursor-help ${yesBadgeClass(prodTone)}`}
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    <span className={`w-1.5 h-1.5 rounded-full ${yesDotClass(prodTone)}`} />
                     Yes: {counts.productivity_yes ?? 0}
                   </span>
                   <span
@@ -319,16 +362,17 @@ export default function KraReport() {
               title="Quality"
               weight="33%"
               value={scores.quality}
+              tone={qualTone}
               hint={`${counts.quality_yes || 0} of ${counts.working_days || 0} days ≥ 98%`}
-              hintTooltip={`${counts.quality_yes || 0} of ${counts.working_days || 0} working days with QC score ≥ 98%. Formula: (QC YES days / Working days) × 33%`}
+              hintTooltip={`${counts.quality_yes || 0} of ${counts.working_days || 0} working days with QC score ≥ 98%. Green ≥ 90% of working days, orange 75–89%, red below 75%. Formula: (QC YES days / Working days) × 33%`}
               icon={Award}
               badges={
                 <>
                   <span
                     title={`${counts.quality_yes ?? 0} working days with QC score ≥ 98%`}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-green-50 text-green-700 border border-green-200 cursor-help hover:bg-green-100 transition-colors"
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold border cursor-help ${yesBadgeClass(qualTone)}`}
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    <span className={`w-1.5 h-1.5 rounded-full ${yesDotClass(qualTone)}`} />
                     Yes: {counts.quality_yes ?? 0}
                   </span>
                   <span
@@ -345,24 +389,27 @@ export default function KraReport() {
               title="Roster"
               weight="10%"
               value={scores.schedule}
+              tone={rosterTone}
               hint={`${counts.present_days || 0} present / ${counts.schedule_working_days ?? counts.working_days ?? 0} working`}
-              hintTooltip={`${counts.present_days || 0} present days out of ${counts.schedule_working_days ?? counts.working_days ?? 0} working days. This total drops roster leave only (full day or half day). Unrostered leave is not taken off. Productivity and Quality working days drop every leave.`}
+              hintTooltip={`${counts.present_days || 0} present days out of ${counts.schedule_working_days ?? counts.working_days ?? 0} working days. Green ≥ 90%, orange 75–89%, red below 75%. This total drops roster leave only.`}
               icon={CalendarDays}
             />
             <ScoreCard
               title="Reporting"
               weight="14%"
               value={scores.reporting}
+              tone={reportTone}
               hint={`${counts.low_tracker_days || 0} low tracker days (< 7 full / < 4 half)`}
-              hintTooltip={`${counts.low_tracker_days || 0} working days with low trackers (< 7 on full day, < 4 on half day). Tier: 0–3 instances = 14%, 4–6 = 7%, >6 = 0%`}
+              hintTooltip={`${counts.low_tracker_days || 0} working days with low trackers (< 7 on full day, < 4 on half day). 0–3 missed tracker days = 14% (green), 4–6 = 7% (orange), more than 6 = 0% (red). 0 missed days is full score.`}
               icon={FileCheck2}
             />
             <ScoreCard
               title="KRA"
               weight={`${report.totals?.applicable_weight || 100}%`}
               value={report.totals?.kra_percent}
+              tone={kraTone}
               hint={`Earned ${formatScore(report.totals?.earned)} / ${report.totals?.applicable_weight || 100}`}
-              hintTooltip={`Total KRA: Earned ${formatScore(report.totals?.earned)} out of ${report.totals?.applicable_weight || 100}% applicable weight`}
+              hintTooltip={`Total KRA: Earned ${formatScore(report.totals?.earned)} out of ${report.totals?.applicable_weight || 100}%. Green ≥ 90%, orange 75–89%, red below 75%.`}
               icon={Percent}
               accent
             />
@@ -395,7 +442,13 @@ export default function KraReport() {
                           <span className="text-slate-300">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 tabular-nums text-slate-800">
+                      <td className={`px-4 py-2.5 tabular-nums font-semibold ${
+                        day.productivity === "NO"
+                          ? "text-red-600"
+                          : day.productivity === "YES"
+                            ? "text-green-700"
+                            : "text-slate-800"
+                      }`}>
                         {day.billable_hours == null ? "—" : Number(day.billable_hours).toFixed(2)}
                       </td>
                       <td className="px-4 py-2.5">
@@ -406,7 +459,13 @@ export default function KraReport() {
                           {day.productivity || "—"}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 tabular-nums text-slate-800">
+                      <td className={`px-4 py-2.5 tabular-nums font-semibold ${
+                        day.quality === "NO"
+                          ? "text-red-600"
+                          : day.quality === "YES"
+                            ? "text-green-700"
+                            : "text-slate-800"
+                      }`}>
                         {day.qc_score == null ? "—" : Number(day.qc_score).toFixed(2)}
                       </td>
                       <td className="px-4 py-2.5">
@@ -456,14 +515,70 @@ function ScoreCard({
   icon: Icon,
   accent = false,
   badges = null,
+  tone = "neutral",
 }) {
+  const cardClass = accent
+    ? tone === "bad"
+      ? "bg-gradient-to-br from-red-600 via-red-700 to-rose-800 border-red-600 text-white"
+      : tone === "ok"
+        ? "bg-gradient-to-br from-orange-500 via-orange-600 to-amber-700 border-orange-500 text-white"
+        : tone === "good"
+          ? "bg-gradient-to-br from-emerald-600 via-green-700 to-teal-700 border-emerald-600 text-white"
+          : "bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 border-blue-600 text-white"
+    : tone === "bad"
+      ? "bg-white border-red-300 hover:border-red-400"
+      : tone === "ok"
+        ? "bg-white border-orange-300 hover:border-orange-400"
+        : tone === "good"
+          ? "bg-white border-green-300 hover:border-green-400"
+          : "bg-white border-slate-200 hover:border-blue-300";
+  const valueClass = accent
+    ? "text-white"
+    : tone === "bad"
+      ? "text-red-700"
+      : tone === "ok"
+        ? "text-orange-700"
+        : tone === "good"
+          ? "text-green-700"
+          : "text-slate-900";
+  const weightClass = accent
+    ? "text-white/80"
+    : tone === "bad"
+      ? "text-red-600"
+      : tone === "ok"
+        ? "text-orange-600"
+        : tone === "good"
+          ? "text-green-600"
+          : "text-blue-600";
+  const hintClass = accent
+    ? "text-white/80"
+    : tone === "bad"
+      ? "text-red-600"
+      : tone === "ok"
+        ? "text-orange-600"
+        : "text-slate-500";
+  const iconWrap = accent
+    ? "bg-white/15"
+    : tone === "bad"
+      ? "bg-red-100"
+      : tone === "ok"
+        ? "bg-orange-100"
+        : tone === "good"
+          ? "bg-green-100"
+          : "bg-blue-100";
+  const iconClass = accent
+    ? "text-white"
+    : tone === "bad"
+      ? "text-red-600"
+      : tone === "ok"
+        ? "text-orange-600"
+        : tone === "good"
+          ? "text-green-600"
+          : "text-blue-600";
+
   return (
     <div
-      className={`relative overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border-2 flex flex-col justify-between ${
-        accent
-          ? "bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 border-blue-600 text-white"
-          : "bg-white border-slate-200 hover:border-blue-300"
-      }`}
+      className={`relative overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border-2 flex flex-col justify-between ${cardClass}`}
     >
       {!accent && <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full -translate-y-12 translate-x-12" />}
       <div className="relative p-4 flex items-start justify-between gap-2.5 h-full">
@@ -472,13 +587,13 @@ function ScoreCard({
             <div className="flex items-center justify-between gap-1.5 mb-1.5">
               <p
                 title={title}
-                className={`text-xs font-bold uppercase tracking-wide truncate ${accent ? "text-blue-100" : "text-slate-600"}`}
+                className={`text-xs font-bold uppercase tracking-wide truncate ${accent ? "text-white/80" : "text-slate-600"}`}
               >
                 {title}
               </p>
-              <span className={`text-[11px] font-bold flex-shrink-0 ${accent ? "text-blue-100" : "text-blue-600"}`}>{weight}</span>
+              <span className={`text-[11px] font-bold flex-shrink-0 ${weightClass}`}>{weight}</span>
             </div>
-            <h3 className={`text-xl sm:text-2xl font-extrabold tabular-nums ${accent ? "text-white" : "text-slate-900"}`}>
+            <h3 className={`text-xl sm:text-2xl font-extrabold tabular-nums ${valueClass}`}>
               {accent && value != null ? `${formatScore(value)}%` : formatScore(value)}
             </h3>
             {badges && (
@@ -489,15 +604,13 @@ function ScoreCard({
           </div>
           <p
             title={hintTooltip || (typeof hint === "string" ? hint : undefined)}
-            className={`text-xs font-semibold ${badges ? "mt-1.5" : "mt-2"} leading-snug break-words cursor-default ${
-              accent ? "text-blue-100" : "text-slate-500"
-            }`}
+            className={`text-xs font-semibold ${badges ? "mt-1.5" : "mt-2"} leading-snug break-words cursor-default ${hintClass}`}
           >
             {hint}
           </p>
         </div>
-        <div className={`p-2.5 sm:p-3 rounded-xl shadow-sm flex-shrink-0 self-start ${accent ? "bg-white/15" : "bg-blue-100"}`}>
-          <Icon className={`w-5 h-5 ${accent ? "text-white" : "text-blue-600"}`} />
+        <div className={`p-2.5 sm:p-3 rounded-xl shadow-sm flex-shrink-0 self-start ${iconWrap}`}>
+          <Icon className={`w-5 h-5 ${iconClass}`} />
         </div>
       </div>
     </div>
