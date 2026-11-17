@@ -581,9 +581,17 @@ const QCFormPage = () => {
         };
       });
 
-      // Use the user-selected submission type as the status
-      // This allows QA to override the auto-calculated status if needed
-      const status = submissionType || errorMetrics.status;
+      const statusForScore = (score) => {
+        if (score < 98) return 'rework';
+        if (score < 100) return 'correction';
+        return 'regular';
+      };
+      const status = statusForScore(qcScore);
+      if (submissionType && submissionType !== status) {
+        throw new Error(
+          `This file scored ${qcScore.toFixed(2)}% so it must be submitted as ${status}, not ${submissionType}.`
+        );
+      }
 
       // Extract date and time from tracker data and format to YYYY-MM-DD HH:mm:ss
       let formattedDate = '';
@@ -1571,7 +1579,7 @@ const QCFormPage = () => {
         {/* Action Buttons with strict validation */}
         <button
           onClick={handleCorrection}
-          disabled={saving || qcScore >= 100 || qcScore < 98}
+          disabled={saving || formRows.length === 0 || qcScore >= 100 || qcScore < 98}
           className="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
         >
           {saving && submissionType === 'correction' ? (
@@ -1589,7 +1597,7 @@ const QCFormPage = () => {
 
         <button
           onClick={handleRegularSubmit}
-          disabled={saving || qcScore < 100}
+          disabled={saving || formRows.length === 0 || qcScore < 100}
           className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
         >
           {saving && submissionType === 'regular' ? (
@@ -1607,7 +1615,7 @@ const QCFormPage = () => {
 
         <button
           onClick={handleReworkSubmit}
-          disabled={saving || qcScore >= 98}
+          disabled={saving || formRows.length === 0 || qcScore >= 98}
           className="px-8 py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-700 hover:to-orange-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2"
         >
           {saving && submissionType === 'rework' ? (
