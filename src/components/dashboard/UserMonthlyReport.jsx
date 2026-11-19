@@ -3,6 +3,7 @@ import { Edit2, Trash2, Save, X, ChevronUp, ChevronDown, Search, Download, Users
 import { toast } from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { isProjectManagerLike } from '../../utils/roles';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 import { exportToCSV } from '../../utils/csvExport';
@@ -34,8 +35,7 @@ const UserMonthlyReport = () => {
   const normalizedRole = String(role).toLowerCase().trim();
   const isSuperAdmin = roleId === 1 || normalizedRole.includes('super');
   const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === 'admin');
-  const isProjectManager =
-    roleId === 3 || normalizedRole.includes('project manager');
+  const isProjectManager = isProjectManagerLike(roleId, normalizedRole);
   const isTeamLeader =
     roleId === 7 || normalizedRole.includes('team leader');
   const isAssistantManager =

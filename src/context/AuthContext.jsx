@@ -15,6 +15,7 @@
 
 import { createContext, useState, useContext, useMemo, useEffect } from "react";
 import { ROUTES } from "../routes/paths";
+import { isProjectManagerLike } from "../utils/roles";
 
 // Create Auth Context
 const AuthContext = createContext();
@@ -186,9 +187,7 @@ export const AuthProvider = ({ children }) => {
       roleName === 'admin' ||
       roleName === 'super admin';
     
-    const isProjectManager = 
-      roleId === 3 || 
-      roleName.includes('project manager');
+    const isProjectManager = isProjectManagerLike(roleId, roleName);
     
     const isTeamLeader =
       roleId === 7 ||
@@ -216,6 +215,7 @@ export const AuthProvider = ({ children }) => {
         roleId === 1 ||
         roleId === 2 ||
         roleId === 3 ||
+        roleId === 8 ||
         isAdmin ||
         isProjectManager),
 
@@ -226,7 +226,8 @@ export const AuthProvider = ({ children }) => {
         user.project_creation_permission === 1 ||
         user.project_creation_permission === "1" ||
         roleId === 1 ||  // Admin
-        roleId === 3 ||  // Project Manager  
+        roleId === 3 ||  // Project Manager
+        roleId === 8 ||  // Operations
         roleId === 4 ||  // Assistant Manager - EXPLICIT CHECK
         isAdmin ||
         isProjectManager ||
@@ -242,6 +243,7 @@ export const AuthProvider = ({ children }) => {
         String(user.role_name || "").toLowerCase() === "admin" ||
         String(user.role_name || "").toLowerCase() === "super admin" ||
         String(user.role_name || "").toLowerCase() === "project manager" ||
+        String(user.role_name || "").toLowerCase() === "operations" ||
         String(user.user_role || "").toUpperCase() === "FINANCE_HR",
     };
 

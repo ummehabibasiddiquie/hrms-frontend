@@ -209,7 +209,13 @@ export function getDayDisplayInfo(day, options = null) {
   let primaryLabel = effectiveDay.day_type || "";
   let cellClass = "bg-white border-slate-200";
 
+  const affectTargetLeave =
+    Number(effectiveDay.leave_affect_target) === 1 ||
+    effectiveDay.leave_affect_target === true ||
+    Number(effectiveDay.affect_target) === 1 ||
+    effectiveDay.affect_target === true;
   const leaveLabel =
+    !affectTargetLeave &&
     Number(effectiveDay.leave_is_rostered ?? effectiveDay.is_rostered) === 0
       ? "Leave (Unrostered)"
       : "Leave (Roster)";
@@ -237,12 +243,7 @@ export function getDayDisplayInfo(day, options = null) {
     badges.push("Half Day");
     if (isHalfLeave) {
       badges.push(leaveLabel);
-      const affectTarget =
-        Number(effectiveDay.leave_affect_target) === 1 ||
-        effectiveDay.leave_affect_target === true ||
-        Number(effectiveDay.affect_target) === 1 ||
-        effectiveDay.affect_target === true;
-      badges.push(affectTarget ? "Affects target" : "Does not affect target");
+      badges.push(affectTargetLeave ? "Affects target" : "Does not affect target");
     } else if (isHalfWorking) {
       badges.push("Affects target");
     }
@@ -250,6 +251,7 @@ export function getDayDisplayInfo(day, options = null) {
     cellClass = "bg-amber-50 border-amber-200";
     primaryLabel = leaveLabel;
     badges.push("Full Day");
+    badges.push(affectTargetLeave ? "Affects target" : "Does not affect target");
   } else if (effectiveDay.day_type === "Left") {
     cellClass = "bg-rose-50 border-rose-300";
     primaryLabel = "Left";

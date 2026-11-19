@@ -137,6 +137,9 @@ const EditUserFormModal = ({
             joining_date: user.joining_date
               ? String(user.joining_date).slice(0, 10)
               : todayISTISO(),
+            company_joining_date: user.company_joining_date
+              ? String(user.company_joining_date).slice(0, 10)
+              : "",
             address: user.user_address || user.address || "",
           };
           
@@ -199,6 +202,7 @@ const EditUserFormModal = ({
         password: 'user_password',
         tenure: 'user_tenure',
         joining_date: 'joining_date',
+        company_joining_date: 'company_joining_date',
         address: 'user_address',
         role: 'role_id',
         designation: 'designation_id',
@@ -239,7 +243,7 @@ const EditUserFormModal = ({
         const originalStr = String(originalValue || '');
         const hasChanged = currentStr !== originalStr;
         
-        if (frontendKey === 'joining_date') {
+        if (frontendKey === 'joining_date' || frontendKey === 'company_joining_date') {
           const iso = joiningDateToIso(currentValue);
           const originalIso = joiningDateToIso(originalValue);
           if (iso && iso !== originalIso) {

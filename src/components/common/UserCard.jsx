@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { useCurrentUserRole } from "../../hooks/useCurrentUserRole";
 import { useAuth } from "../../context/AuthContext";
+import { isProjectManagerLike } from "../../utils/roles";
 import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
 import { User, Download, ChevronUp, Calendar, X, Edit } from "lucide-react";
@@ -42,10 +43,7 @@ export default function UserCard({
     normalizedRole.includes("SUPER ADMIN");
 
   const isAdmin = !isSuperAdmin && (roleId === 2 || normalizedRole === "ADMIN");
-  const isProjectManager =
-    roleId === 3 ||
-    normalizedRole.includes("PROJECT_MANAGER") ||
-    normalizedRole.includes("PROJECT MANAGER");
+  const isProjectManager = isProjectManagerLike(roleId, normalizedRole);
   const isTeamLeader =
     roleId === 7 ||
     normalizedRole.includes("TEAM LEADER");

@@ -103,7 +103,7 @@ const AddUserFormModal = ({
                };
           }
 
-          if (roleId === 3) {
+          if (roleId === 3 || roleId === 8) {
                return {
                     projectManager: hidden,
                     assistantManager: hidden,
@@ -298,6 +298,18 @@ const AddUserFormModal = ({
           return "";
      };
 
+     const validateCompanyJoiningDate = (value) => {
+          if (!value || !String(value).trim()) {
+               return "Please enter Company Joining Date";
+          }
+          if (!joiningDateToIso(value)) {
+               return "Use a valid date (past or future allowed)";
+          }
+          return "";
+     };
+
+     const companyJoiningRequired = Number(newUser.role) === 5 || Number(newUser.role) === 6;
+
      /**
       * Validate all fields at once
       */
@@ -381,6 +393,11 @@ const AddUserFormModal = ({
           if (visibility.joiningDate && visibility.joiningDate.visible && visibility.joiningDate.required) {
                const joiningError = validateJoiningDate(newUser.joining_date || "");
                if (joiningError) errors.joining_date = joiningError;
+          }
+
+          if (Number(newUser.role) === 5 || Number(newUser.role) === 6) {
+               const companyJoiningError = validateCompanyJoiningDate(newUser.company_joining_date || "");
+               if (companyJoiningError) errors.company_joining_date = companyJoiningError;
           }
 
           return errors;
@@ -855,6 +872,29 @@ const AddUserFormModal = ({
 
 
 
+                              <div className="md:col-span-1">
+                                   <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Company Joining Date {companyJoiningRequired && <span className="text-red-600">*</span>}
+                                   </label>
+                                   <SingleDatePicker
+                                        value={joiningDateToIso(newUser.company_joining_date) || newUser.company_joining_date}
+                                        onChange={(iso) => handleFieldChange(
+                                             "company_joining_date",
+                                             iso,
+                                             companyJoiningRequired ? validateCompanyJoiningDate : undefined
+                                        )}
+                                        placeholder="dd/mm/yyyy"
+                                        hasError={hasError("company_joining_date")}
+                                        allowFuture
+                                   />
+                                   <p className="mt-1 text-xs text-slate-500">
+                                        Company date of joining. Tenure updates use this date, not Tracker Joining Date.
+                                   </p>
+                                   {getErrorMessage("company_joining_date") && (
+                                        <p className="mt-1 text-xs text-red-600">{getErrorMessage("company_joining_date")}</p>
+                                   )}
+                              </div>
+
                               {fieldVisibility.joiningDate && fieldVisibility.joiningDate.visible && (
                                    <div className="md:col-span-1">
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -872,7 +912,7 @@ const AddUserFormModal = ({
                                              allowFuture
                                         />
                                         <p className="mt-1 text-xs text-slate-500">
-                                             System date for roster / tracker (not org DOJ). Defaults to today; past or future is allowed.
+                                             System date for roster / tracker (not company joining date). Defaults to today; past or future is allowed.
                                         </p>
                                         {getErrorMessage("joining_date") && (
                                              <p className="mt-1 text-xs text-red-600">{getErrorMessage("joining_date")}</p>

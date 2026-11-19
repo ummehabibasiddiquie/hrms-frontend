@@ -3,6 +3,7 @@ import { toast } from "react-hot-toast";
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
 import { fetchDropdown } from "../../services/dropdownService";
 import { useAuth } from "../../context/AuthContext";
+import { isProjectManagerLike } from "../../utils/roles";
 import DailyReportAgentPanel from "./DailyReportAgentPanel";
 import MonthlyReportAgentPanel from "./MonthlyReportAgentPanel";
 import SearchableSelect from "./SearchableSelect";
@@ -49,7 +50,7 @@ const BillableReport = ({ userId, title = "Billable Report" }) => {
   const normalizedRole = (user?.role_name || user?.role || user?.user_role || '').toLowerCase();
   const isAdmin = user?.role_id === 1 || user?.role_id === 2 || normalizedRole === 'admin';
   const isSuperAdmin = normalizedRole.includes('super');
-  const isProjectManager = user?.role_id === 3 || normalizedRole.includes('project manager');
+  const isProjectManager = isProjectManagerLike(user?.role_id, normalizedRole);
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;
   // QA and Team Leader also use this report; only managers and admins get the Tenure column.
   const isAssistantManagerRole = user?.role_id === 4 || normalizedRole === 'assistant manager';

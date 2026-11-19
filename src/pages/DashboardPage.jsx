@@ -16,6 +16,7 @@ import QAAgentDashboard from '../components/QAAgentDashboard/QAAgentDashboard';
 import AssistantManagerDashboard from '../components/dashboard/AssistantManagerDashboard';
 import AdminDashboard from '../components/dashboard/AdminDashboard';
 import { useAuth } from '../context/AuthContext'; // Updated to use AuthContext
+import { isProjectManagerLike } from '../utils/roles';
 import { useDeviceInfo } from '../hooks/useDeviceInfo';
 import { useUserDropdowns } from '../hooks/useUserDropdowns';
 import BillableReportCommon from '../components/common/BillableReport';
@@ -101,7 +102,7 @@ const DashboardPage = ({
       roleText === 'assistant manager' ||
       (roleText.includes('assistant') && !roleText.includes('team leader')));
   const canViewAsAm = isAssistantManager || isTeamLeader;
-  const isProjectManager = roleId === 3 || roleText.includes('project manager');
+  const isProjectManager = isProjectManagerLike(roleId, roleText);
   const canViewTrackerReport = isQA || canViewAsAm || isProjectManager;
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
   const [adminRequests, setAdminRequests] = useState([]);
@@ -297,6 +298,7 @@ const DashboardPage = ({
             address: u.user_address || '',
             tenure: u.user_tenure ?? u.tenure ?? '',
             joining_date: u.joining_date ? String(u.joining_date).slice(0, 10) : '',
+            company_joining_date: u.company_joining_date ? String(u.company_joining_date).slice(0, 10) : '',
             profile_picture: u.profile_picture || null,
             is_active: u.is_active ?? 1
           };
@@ -336,14 +338,14 @@ const DashboardPage = ({
   if (error) {
     return <ErrorMessage message={error} />;
   }
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || canViewAsAm) && activeTab === 'tracker_report') {
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8 || isQA || canViewAsAm) && activeTab === 'tracker_report') {
     return <QATrackerReport />;
   }
   // Team Leaders do QC like a QA (on agents where they are set as the QA)
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || isAssistantManager || isTeamLeader) && activeTab === 'agent_file_report') {
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8 || isQA || isAssistantManager || isTeamLeader) && activeTab === 'agent_file_report') {
     return <QAAgentList />;
   }
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4 || roleId === 5 || isTeamLeader) && activeTab === 'qa_agent_audit') {
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8 || roleId === 4 || roleId === 5 || isTeamLeader) && activeTab === 'qa_agent_audit') {
     // QA and Team Leader see the same Audit Report as the QA Analytics tab (their own audits only)
     if (roleId === 5 || isTeamLeader) {
       return (
@@ -355,7 +357,7 @@ const DashboardPage = ({
     // Other roles see both tabs with all data
     return <QAAgentAudit />;
   }
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4) && activeTab === 'qc_report_overview') {
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8 || roleId === 4) && activeTab === 'qc_report_overview') {
     return <ManagerQCReportsOverview />;
   }
 

@@ -7,7 +7,8 @@ const ROLE_MAP = {
   4: "ASSISTANT_MANAGER",
   5: "QA_AGENT",
   6: "AGENT",
-  7: "TEAM_LEADER"
+  7: "TEAM_LEADER",
+  8: "OPERATIONS",
 };
 import { ViewState } from "../../utils/constants";
 import { ROUTES, dashboardTabUrl } from "../../routes/paths";
@@ -237,7 +238,7 @@ const Header = ({
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
           ];
         }
-        if (roleId === 3) {
+        if (roleId === 3 || roleId === 8) {
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
@@ -303,7 +304,7 @@ const Header = ({
       ];
     }
     // Project Manager fallback
-    if (role.includes('PROJECT_MANAGER') || role.replace(/\s+/g, '').toLowerCase() === 'projectmanager' || roleId === 3) {
+    if (role.includes('PROJECT_MANAGER') || role.replace(/\s+/g, '').toLowerCase() === 'projectmanager' || role.includes('OPERATIONS') || roleId === 3 || roleId === 8) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
@@ -322,7 +323,7 @@ const Header = ({
     if (!items.length) return items;
     const roleId = Number(currentUser?.role_id);
     // Admin, Super Admin and Project Manager manage SOPs from Manage; everyone else views them here.
-    if (roleId === 1 || roleId === 2 || roleId === 3) return items;
+    if (roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8) return items;
     const sops = { view: "SOPS", label: "SOPs", icon: BookOpen };
     // Agents, QA and Team Leaders get a view-only Projects tab (project details, files, SOP links, tasks)
     if (roleId === 4) return [...items, sops];

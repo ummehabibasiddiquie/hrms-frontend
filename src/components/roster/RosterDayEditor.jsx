@@ -162,9 +162,10 @@ const RosterDayEditor = ({
       start_date: coveringLeave ? toDateOnlyString(coveringLeave.start_date) : rosterDate,
       end_date: coveringLeave ? toDateOnlyString(coveringLeave.end_date) : rosterDate,
       reason: coveringLeave?.reason || "",
-      affect_target: leaveForm.affect_target ? 1 : 0,
       is_half_day: leaveForm.is_half_day ? 1 : 0,
       is_rostered: dayForm.day_type === LEAVE_UNROSTERED ? 0 : 1,
+      affect_target:
+        dayForm.day_type === LEAVE_UNROSTERED ? 0 : leaveForm.affect_target ? 1 : 0,
     };
     if (coveringLeave?.leave_id) {
       submitChange("LEAVE_UPDATE", { ...payload, leave_id: coveringLeave.leave_id });
@@ -240,6 +241,9 @@ const RosterDayEditor = ({
                       day_type: next,
                       working_hours: next === "Left" ? 0 : dayForm.working_hours,
                     });
+                    if (next === LEAVE_UNROSTERED) {
+                      setLeaveForm((prev) => ({ ...prev, affect_target: false }));
+                    }
                     if (next === "Left") setApplyThroughMonthEnd(true);
                   }}
                   className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
@@ -271,20 +275,27 @@ const RosterDayEditor = ({
                       </span>
                     </span>
                   </label>
-                  <label className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={leaveForm.affect_target}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, affect_target: e.target.checked })}
-                    />
-                    <span className="text-sm text-slate-700">
-                      Affect Target
-                      <span className="block text-xs text-slate-500 font-normal">
-                        Tick to reduce monthly working days and hours. Leave unchecked to keep the full monthly target.
+                  {dayForm.day_type !== LEAVE_UNROSTERED && (
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={leaveForm.affect_target}
+                        onChange={(e) => setLeaveForm({ ...leaveForm, affect_target: e.target.checked })}
+                      />
+                      <span className="text-sm text-slate-700">
+                        Affect Target
+                        <span className="block text-xs text-slate-500 font-normal">
+                          Only for leave told in advance (rostered). Tick to reduce monthly working days and hours.
+                        </span>
                       </span>
-                    </span>
-                  </label>
+                    </label>
+                  )}
+                  {dayForm.day_type === LEAVE_UNROSTERED && (
+                    <p className="text-sm text-slate-600">
+                      Unrostered leave was not told in advance, so it does not affect the monthly target.
+                    </p>
+                  )}
                 </div>
               )}
 
