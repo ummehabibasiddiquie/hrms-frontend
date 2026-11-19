@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
+import { isProjectManagerLike } from "../utils/roles";
 
 export function useRosterRoles() {
   const { user } = useAuth();
@@ -10,7 +11,7 @@ export function useRosterRoles() {
 
     const isSuperAdmin = roleId === 1 || role.includes("super");
     const isAdmin = !isSuperAdmin && (roleId === 2 || role === "admin");
-    const isProjectManager = roleId === 3 || role.includes("project manager");
+    const isProjectManager = isProjectManagerLike(roleId, role);
     const isTeamLeader = roleId === 7 || role.includes("team leader");
     const isAssistantManager =
       !isTeamLeader &&

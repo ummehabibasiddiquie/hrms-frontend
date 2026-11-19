@@ -131,6 +131,7 @@ const UsersManagement = ({
           address: "",
           tenure: "",
           joining_date: todayISTISO(),
+          company_joining_date: "",
           profile_picture: null,
      };
 
@@ -318,6 +319,9 @@ const UsersManagement = ({
           if ((roleId === 5 || roleId === 6) && !newUser.joining_date?.trim()) {
                errors.joining_date = "Tracker Joining Date is required for Agent and QA";
           }
+          if ((roleId === 5 || roleId === 6) && !newUser.company_joining_date?.trim()) {
+               errors.company_joining_date = "Company Joining Date is required for Agent and QA";
+          }
 
           if (!newUser.password?.trim()) {
                errors.password = "Please enter password";
@@ -376,6 +380,12 @@ const UsersManagement = ({
           formData.append('user_tenure', newUser.tenure || '');
           if (newUser.joining_date) {
                formData.append('joining_date', joiningDateToIso(newUser.joining_date) || newUser.joining_date);
+          }
+          if (newUser.company_joining_date) {
+               formData.append(
+                    'company_joining_date',
+                    joiningDateToIso(newUser.company_joining_date) || newUser.company_joining_date
+               );
           }
           formData.append('device_id', deviceInfo.device_id);
           formData.append('device_type', deviceInfo.device_type);
