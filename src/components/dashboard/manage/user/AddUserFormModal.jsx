@@ -292,8 +292,13 @@ const AddUserFormModal = ({
           if (!value || !String(value).trim()) {
                return "Please enter Tracker Joining Date";
           }
-          if (!joiningDateToIso(value)) {
-               return "Use a valid date (past or future allowed)";
+          const iso = joiningDateToIso(value);
+          if (!iso) {
+               return "Use a valid date (today or a past date)";
+          }
+          const today = todayISTISO();
+          if (today && iso > today) {
+               return "Tracker Joining Date cannot be a future date";
           }
           return "";
      };
@@ -909,10 +914,9 @@ const AddUserFormModal = ({
                                              )}
                                              placeholder="dd/mm/yyyy"
                                              hasError={hasError("joining_date")}
-                                             allowFuture
                                         />
                                         <p className="mt-1 text-xs text-slate-500">
-                                             System date for roster / tracker (not company joining date). Defaults to today; past or future is allowed.
+                                             Defaults to today. You can change it to a past date, not a future date.
                                         </p>
                                         {getErrorMessage("joining_date") && (
                                              <p className="mt-1 text-xs text-red-600">{getErrorMessage("joining_date")}</p>
