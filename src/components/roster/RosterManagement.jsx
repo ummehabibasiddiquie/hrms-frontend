@@ -530,7 +530,8 @@ const RosterManagement = () => {
   // Team week is the main manage view — migrate old ?subtab=calendar links
   useEffect(() => {
     if (view === "calendar") setView("team_week");
-  }, [view, setView]);
+    if (view === "submissions" && !canManageRoster) setView("team_week");
+  }, [view, setView, canManageRoster]);
 
   // Soft refresh when window regains focus (once per focus, not on every render)
   useEffect(() => {
@@ -821,7 +822,7 @@ const RosterManagement = () => {
 
   const tabs = [
     { id: "team_week", label: "Roster Calendar" },
-    { id: "submissions", label: "My Submissions" },
+    ...(canManageRoster ? [{ id: "submissions", label: "My Submissions" }] : []),
     ...(canApproveRoster ? [{ id: "approval", label: "Approval Queue" }] : []),
     { id: "holidays", label: "Holiday Master" },
   ];
@@ -854,7 +855,7 @@ const RosterManagement = () => {
           bordered={false}
         />
 
-        {view === "submissions" && (
+        {view === "submissions" && canManageRoster && (
           <div className="p-4">
             <RosterSubmissionTracker
               variant="manager"

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
-import { isProjectManagerLike } from "../utils/roles";
+import { isOperationsRole, isProjectManagerLike } from "../utils/roles";
 
 export function useRosterRoles() {
   const { user } = useAuth();
@@ -11,6 +11,7 @@ export function useRosterRoles() {
 
     const isSuperAdmin = roleId === 1 || role.includes("super");
     const isAdmin = !isSuperAdmin && (roleId === 2 || role === "admin");
+    const isOperations = isOperationsRole(roleId, role);
     const isProjectManager = isProjectManagerLike(roleId, role);
     const isTeamLeader = roleId === 7 || role.includes("team leader");
     const isAssistantManager =
@@ -20,8 +21,9 @@ export function useRosterRoles() {
     const isAgent = roleId === 6 || role === "agent";
 
     const canManageRoster =
-      isSuperAdmin || isAdmin || isProjectManager || isAssistantManager || isTeamLeader;
-    const canViewRoster = canManageRoster;
+      !isOperations &&
+      (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager || isTeamLeader);
+    const canViewRoster = canManageRoster || isOperations;
     // Approvals: Admin and Super Admin only
     const canApproveRoster = isSuperAdmin || isAdmin;
     const canResetRegenerate = isSuperAdmin || isAdmin;
@@ -34,6 +36,7 @@ export function useRosterRoles() {
       isSuperAdmin,
       isAdmin,
       isProjectManager,
+      isOperations,
       isAssistantManager,
       isTeamLeader,
       isQA,

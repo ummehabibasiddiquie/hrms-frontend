@@ -15,7 +15,7 @@
 
 import { createContext, useState, useContext, useMemo, useEffect } from "react";
 import { ROUTES } from "../routes/paths";
-import { isProjectManagerLike } from "../utils/roles";
+import { isOperationsRole, isProjectManagerLike } from "../utils/roles";
 
 // Create Auth Context
 const AuthContext = createContext();
@@ -188,6 +188,7 @@ export const AuthProvider = ({ children }) => {
       roleName === 'super admin';
     
     const isProjectManager = isProjectManagerLike(roleId, roleName);
+    const isOperations = isOperationsRole(roleId, roleName);
     
     const isTeamLeader =
       roleId === 7 ||
@@ -202,9 +203,9 @@ export const AuthProvider = ({ children }) => {
         (roleName.includes('asst') && !roleName.includes('team leader'))
       );
 
-    // Calculate permissions
     const calculatedPermissions = {
       isTeamLeader,
+      isOperations,
       isReadOnly: isTeamLeader,
       canViewAsAssistantManager: isAssistantManager || isTeamLeader,
       // Can create/manage users - based on user_creation_permission flag
@@ -222,12 +223,12 @@ export const AuthProvider = ({ children }) => {
       // Can create/manage projects - based on project_creation_permission flag OR role
       // Accessible to: Admin (1), Project Manager (3), Assistant Manager (4)
       canManageProjects:
-        !isTeamLeader && (
+        !isTeamLeader &&
+        !isOperations && (
         user.project_creation_permission === 1 ||
         user.project_creation_permission === "1" ||
         roleId === 1 ||  // Admin
         roleId === 3 ||  // Project Manager
-        roleId === 8 ||  // Operations
         roleId === 4 ||  // Assistant Manager - EXPLICIT CHECK
         isAdmin ||
         isProjectManager ||

@@ -16,6 +16,11 @@ export function normRoleName(roleName) {
     .trim();
 }
 
+export function isOperationsRole(roleId, roleName) {
+  const id = Number(roleId);
+  return id === ROLE_OPERATIONS || normRoleName(roleName) === "operations";
+}
+
 /** Project Manager menus and data scope — includes Operations. Not the Add-User PM dropdown. */
 export function isProjectManagerLike(roleId, roleName) {
   const id = Number(roleId);

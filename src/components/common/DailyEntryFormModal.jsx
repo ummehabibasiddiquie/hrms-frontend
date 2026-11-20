@@ -33,7 +33,11 @@ const DailyEntryFormModal = ({
 
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
-  const hoursReadOnly = roleId === 5 || String(userRole || "").toUpperCase().includes("QA");
+  const hoursReadOnly =
+    roleId === 5 ||
+    roleId === 8 ||
+    String(userRole || "").toUpperCase().includes("QA") ||
+    String(userRole || "").toLowerCase() === "operations";
   const showHours = allowAssignedHours && !hoursReadOnly;
   const showQc = allowQcScore;
 

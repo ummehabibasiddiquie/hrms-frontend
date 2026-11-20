@@ -121,6 +121,11 @@ const Header = ({
       setIsMobileMenuOpen(false);
       return;
     }
+    if (view === 'QA_HOURS') {
+      navigate(dashboardTabUrl('qa_hours'));
+      setIsMobileMenuOpen(false);
+      return;
+    }
     if (view === 'AGENT_LIST') {
       navigate(dashboardTabUrl('agent_file_report'));
       setIsMobileMenuOpen(false);
@@ -207,6 +212,7 @@ const Header = ({
       const items = [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "QA_HOURS", label: "QA Report", icon: Clock },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
         { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
         { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
@@ -238,13 +244,23 @@ const Header = ({
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
           ];
         }
-        if (roleId === 3 || roleId === 8) {
+        if (roleId === 3) {
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: "QA_HOURS", label: "QA Report", icon: Clock },
             { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
             { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
             { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
+            { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
+          ];
+        }
+        if (roleId === 8) {
+          return [
+            { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+            { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: "QA_HOURS", label: "QA Report", icon: Clock },
+            { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
         }
@@ -303,11 +319,21 @@ const Header = ({
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
     }
-    // Project Manager fallback
-    if (role.includes('PROJECT_MANAGER') || role.replace(/\s+/g, '').toLowerCase() === 'projectmanager' || role.includes('OPERATIONS') || roleId === 3 || roleId === 8) {
+    if (role.includes('OPERATIONS') || roleId === 8) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "QA_HOURS", label: "QA Report", icon: Clock },
+        { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
+        { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
+      ];
+    }
+    // Project Manager fallback
+    if (role.includes('PROJECT_MANAGER') || role.replace(/\s+/g, '').toLowerCase() === 'projectmanager' || roleId === 3) {
+      return [
+        { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
+        { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "QA_HOURS", label: "QA Report", icon: Clock },
         { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
         { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 },
         { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck },
@@ -341,13 +367,17 @@ const Header = ({
 
     // Check for Analytics/Dashboard
     if (view === ViewState.DASHBOARD || view === 'Analytics') {
-      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report', 'qa_hours', 'kra_report'];
+      const analyticsTabs = ['overview', 'billable_report', 'user_monthly_report', 'project_monthly_report', 'audit_report', 'kra_report'];
       return currentPath === '/dashboard' && (!currentTab || analyticsTabs.includes(currentTab));
     }
 
     // Check for Tracker Report
     if (view === 'TRACKER_REPORT') {
       return currentPath === '/dashboard' && currentTab === 'tracker_report';
+    }
+
+    if (view === 'QA_HOURS') {
+      return currentPath === '/dashboard' && currentTab === 'qa_hours';
     }
 
     // Check for Agent List/Agent's Files & QC Report
