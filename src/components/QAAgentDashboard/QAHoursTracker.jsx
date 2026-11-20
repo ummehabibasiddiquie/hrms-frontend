@@ -392,11 +392,11 @@ const clampDateToMonth = (dateStr, yyyyMm, fallback) => {
 };
 
 const QAHoursTracker = ({ mode = "self" }) => {
-  const { user, isReadOnly } = useAuth();
+  const { user, isReadOnly, isOperations } = useAuth();
   const userId = user?.user_id || user?.id;
   const today = useMemo(() => todayISTISO() || new Date().toISOString().slice(0, 10), []);
   const isManager = mode === "manager";
-  const canAddHours = isManager ? !isReadOnly : true;
+  const canAddHours = isManager ? !isReadOnly && !isOperations : true;
   const currentMonth = getCurrentYyyyMm();
   const defaultMonth = currentMonth;
 
@@ -1702,7 +1702,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <div className="inline-flex items-center gap-1">
-                              {entry.can_edit && !isReadOnly ? (
+                              {entry.can_edit && !isReadOnly && !isOperations ? (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1723,7 +1723,7 @@ const QAHoursTracker = ({ mode = "self" }) => {
                                   <Pencil className="h-4 w-4" />
                                 </button>
                               ) : null}
-                              {entry.can_delete && !isReadOnly ? (
+                              {entry.can_delete && !isReadOnly && !isOperations ? (
                                 <button
                                   type="button"
                                   onClick={() => setDeleteConfirm(entry.qa_tracker_id)}

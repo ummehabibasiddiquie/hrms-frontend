@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { useCurrentUserRole } from "../../hooks/useCurrentUserRole";
 import { useAuth } from "../../context/AuthContext";
-import { isProjectManagerLike } from "../../utils/roles";
+import { isOperationsRole, isProjectManagerLike } from "../../utils/roles";
 import { exportToCSV } from '../../utils/csvExport';
 import { toast } from "react-hot-toast";
 import { User, Download, ChevronUp, Calendar, X, Edit } from "lucide-react";
@@ -59,9 +59,12 @@ export default function UserCard({
     normalizedRole === "QA" ||
     (normalizedRole.includes("QA") && !normalizedRole.includes("TEAM"));
 
-  // Assigned hours edit: Super Admin, Admin, Project Manager, Assistant Manager only (not QA / Assistant Team Leader).
+  // Assigned hours edit: Super Admin, Admin, Project Manager, Assistant Manager only (not QA / ATL / Operations).
   const canSeeActions =
-    !isQA && !isTeamLeader && (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager);
+    !isQA &&
+    !isTeamLeader &&
+    !isOperationsRole(roleId, normalizedRole) &&
+    (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager);
 
   const rowAllowsManualQc = (row) => {
     const v = row?.can_manual_qc ?? row?.canManualQc;

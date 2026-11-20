@@ -12,9 +12,9 @@ import { exportToCSV } from '../../utils/csvExport';
 import { getCurrentMonthYear, getDefaultRecentMonthYears } from '../../utils/rosterUtils';
 
 const ProjectMonthlyReport = () => {
-  const { user, isTeamLeader, isReadOnly } = useAuth();
-  // Team Leader: view only (roster edits are separate)
-  const canMutate = !isTeamLeader && !isReadOnly;
+  const { user, isTeamLeader, isReadOnly, isOperations } = useAuth();
+  // Team Leader and Operations: view only
+  const canMutate = !isTeamLeader && !isReadOnly && !isOperations;
   
   // State for projects dropdown
   const [projects, setProjects] = useState([]);

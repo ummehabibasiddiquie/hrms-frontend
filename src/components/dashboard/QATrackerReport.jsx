@@ -9,7 +9,7 @@ import { toast } from "react-hot-toast";
 import { downloadCSV, jsonToCSV } from "../../utils/csvExport";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import { isProjectManagerLike } from "../../utils/roles";
+import { isOperationsRole, isProjectManagerLike } from "../../utils/roles";
 import { log, logError } from "../../config/environment";
 import { useDeviceInfo } from "../../hooks/useDeviceInfo";
 import { DateRangePicker } from "../common/CustomCalendar";
@@ -61,7 +61,7 @@ const QATrackerReport = () => {
   const isAssistantManager =
     !isTeamLeader &&
     (roleId === 4 || role === 'assistant manager' || (role.includes('assistant') && !role.includes('team leader')));
-  const canMutateTracker = !isQAAgent && !isTeamLeader;
+  const canMutateTracker = !isQAAgent && !isTeamLeader && !isOperationsRole(roleId, role);
   
   // Check if user is PM, Admin, or Super Admin (for team filter visibility)
   const isProjectManager = isProjectManagerLike(roleId, role);

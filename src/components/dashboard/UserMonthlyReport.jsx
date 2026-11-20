@@ -3,7 +3,7 @@ import { Edit2, Trash2, Save, X, ChevronUp, ChevronDown, Search, Download, Users
 import { toast } from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { isProjectManagerLike } from '../../utils/roles';
+import { isOperationsRole, isProjectManagerLike } from '../../utils/roles';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
 import { exportToCSV } from '../../utils/csvExport';
@@ -43,7 +43,10 @@ const UserMonthlyReport = () => {
     (roleId === 4 ||
       normalizedRole === 'assistant manager' ||
       (normalizedRole.includes('assistant') && !normalizedRole.includes('team leader')));
-  const canManageAssignedHours = (isAssistantManager || isProjectManager || isAdmin || isSuperAdmin) && !isTeamLeader;
+  const canManageAssignedHours =
+    (isAssistantManager || isProjectManager || isAdmin || isSuperAdmin) &&
+    !isTeamLeader &&
+    !isOperationsRole(roleId, normalizedRole);
   const canEditMonthlyBaseline = canManageAssignedHours;
   const canEditExtraHours = canManageAssignedHours;
   const canViewTeamFilter = isAdmin || isSuperAdmin || isProjectManager;

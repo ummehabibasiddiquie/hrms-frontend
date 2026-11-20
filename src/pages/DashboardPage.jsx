@@ -16,7 +16,7 @@ import QAAgentDashboard from '../components/QAAgentDashboard/QAAgentDashboard';
 import AssistantManagerDashboard from '../components/dashboard/AssistantManagerDashboard';
 import AdminDashboard from '../components/dashboard/AdminDashboard';
 import { useAuth } from '../context/AuthContext'; // Updated to use AuthContext
-import { isProjectManagerLike } from '../utils/roles';
+import { isOperationsRole, isProjectManagerLike } from '../utils/roles';
 import { useDeviceInfo } from '../hooks/useDeviceInfo';
 import { useUserDropdowns } from '../hooks/useUserDropdowns';
 import BillableReportCommon from '../components/common/BillableReport';
@@ -62,7 +62,7 @@ const DashboardPage = ({
     user: currentUser, 
     canManageUsers, 
     canManageProjects, 
-    canViewSalary 
+    canViewSalary
   } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
   const { dropdowns, loadDropdowns } = useUserDropdowns();
@@ -103,7 +103,11 @@ const DashboardPage = ({
       (roleText.includes('assistant') && !roleText.includes('team leader')));
   const canViewAsAm = isAssistantManager || isTeamLeader;
   const isProjectManager = isProjectManagerLike(roleId, roleText);
+  const isOperations = isOperationsRole(roleId, roleText);
   const canViewTrackerReport = isQA || canViewAsAm || isProjectManager;
+  const canSeeManageProjects = !isOperations && (isAssistantManager || canManageProjects);
+  const canSeeManageCategoryAndPermissions =
+    !isOperations && (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager);
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
   const [adminRequests, setAdminRequests] = useState([]);
   const [managedUsers, setManagedUsers] = useState([]);
@@ -147,15 +151,15 @@ const DashboardPage = ({
     if (activeTab !== 'manage') return;
     const visibleTabs = [
       ...(canManageUsers || isSuperAdmin || isAdmin || isProjectManager ? ['users'] : []),
-      ...(isAssistantManager || canManageProjects ? ['projects', 'afd'] : []),
-      ...(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager ? ['category', 'permissions'] : []),
+      ...(canSeeManageProjects ? ['projects', 'afd'] : []),
+      ...(canSeeManageCategoryAndPermissions ? ['category', 'permissions'] : []),
       ...(canAccessRoster ? ['roster'] : []),
       ...(canManageSops ? ['sops'] : []),
     ];
     if (!visibleTabs.includes(adminActiveTab) && visibleTabs.length > 0) {
       setManageSubTab(visibleTabs[0]);
     }
-  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, canManageProjects, canAccessRoster, canManageReportEmails, canManageSops, setManageSubTab]);
+  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, canManageProjects, canSeeManageProjects, canSeeManageCategoryAndPermissions, canAccessRoster, canManageReportEmails, canManageSops, setManageSubTab]);
 
   useEffect(() => {
     if (activeTab === 'sops' && canManageSops) {
@@ -341,12 +345,14 @@ const DashboardPage = ({
   if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8 || isQA || canViewAsAm) && activeTab === 'tracker_report') {
     return <QATrackerReport />;
   }
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8) && activeTab === 'qa_hours') {
+    return <QAHoursTracker mode="manager" />;
+  }
   // Team Leaders do QC like a QA (on agents where they are set as the QA)
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8 || isQA || isAssistantManager || isTeamLeader) && activeTab === 'agent_file_report') {
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || isAssistantManager || isTeamLeader) && activeTab === 'agent_file_report') {
     return <QAAgentList />;
   }
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8 || roleId === 4 || roleId === 5 || isTeamLeader) && activeTab === 'qa_agent_audit') {
-    // QA and Team Leader see the same Audit Report as the QA Analytics tab (their own audits only)
+  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4 || roleId === 5 || isTeamLeader) && activeTab === 'qa_agent_audit') {
     if (roleId === 5 || isTeamLeader) {
       return (
         <div className="max-w-7xl mx-auto mt-2">
@@ -354,7 +360,6 @@ const DashboardPage = ({
         </div>
       );
     }
-    // Other roles see both tabs with all data
     return <QAAgentAudit />;
   }
   if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8 || roleId === 4) && activeTab === 'qc_report_overview') {
@@ -500,22 +505,22 @@ const DashboardPage = ({
                 {
                   id: 'projects',
                   label: 'Projects & Targets',
-                  hidden: !(isAssistantManager || canManageProjects),
+                  hidden: !canSeeManageProjects,
                 },
                 {
                   id: 'afd',
                   label: 'AFD Management',
-                  hidden: !(isAssistantManager || canManageProjects),
+                  hidden: !canSeeManageProjects,
                 },
                 {
                   id: 'category',
                   label: 'Project Category',
-                  hidden: !(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager),
+                  hidden: !canSeeManageCategoryAndPermissions,
                 },
                 {
                   id: 'permissions',
                   label: 'User Permission',
-                  hidden: !(isSuperAdmin || isAdmin || isProjectManager || isAssistantManager),
+                  hidden: !canSeeManageCategoryAndPermissions,
                 },
                 {
                   id: 'roster',
