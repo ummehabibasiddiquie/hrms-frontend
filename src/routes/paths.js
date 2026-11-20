@@ -22,6 +22,7 @@ export const ROLE_IDS = {
   QA_AGENT: 5,
   AGENT: 6,
   TEAM_LEADER: 7,
+  OPERATIONS: 8,
 };
 
 /** Default landing page after login (or when access is denied). */

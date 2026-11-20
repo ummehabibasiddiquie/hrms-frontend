@@ -63,7 +63,7 @@ const AppRoutes = () => {
       <Route
         path={ROUTES.DASHBOARD}
         element={
-          <ProtectedRoute allowedRoles={[1, 2, 3, 4, 5, 6, 7]}>
+          <ProtectedRoute allowedRoles={[1, 2, 3, 4, 5, 6, 7, 8]}>
             <AppLayout>
               <DashboardPage />
             </AppLayout>
