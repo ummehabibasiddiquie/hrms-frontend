@@ -67,7 +67,7 @@ const AssistantManagerDashboard = () => {
 
   // Tab state synced to ?tab= (same pattern as Manage → adminTab)
   const [activeTab, setActiveTab] = useRoutedDashboardTab('overview');
-  const { user, isTeamLeader } = useAuth();
+  const { user, isTeamLeader, canAccessAgentFilesQc, canAccessQaAgentAudit } = useAuth();
 
   // Team Leaders should never land on QA Report
   useEffect(() => {
@@ -431,7 +431,7 @@ const AssistantManagerDashboard = () => {
           <QATrackerReport />
         </div>
       )}
-      {activeTab === 'agent_file_report' && (
+      {activeTab === 'agent_file_report' && canAccessAgentFilesQc && (
         <div className="max-w-7xl mx-auto mt-6">
           <QAAgentList />
         </div>
@@ -441,7 +441,7 @@ const AssistantManagerDashboard = () => {
           <QAHoursTracker mode="manager" />
         </div>
       )}
-      {activeTab === 'qa_agent_audit' && !isTeamLeader && (
+      {activeTab === 'qa_agent_audit' && canAccessQaAgentAudit && (
         <div className="max-w-7xl mx-auto mt-6">
           <QAAgentAudit />
         </div>

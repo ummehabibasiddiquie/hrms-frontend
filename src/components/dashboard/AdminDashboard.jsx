@@ -66,7 +66,7 @@ const AdminDashboard = () => {
 
   // Tab state synced to ?tab= (same pattern as Manage → adminTab)
   const [activeTab, setActiveTab] = useRoutedDashboardTab('overview');
-  const { user } = useAuth();
+  const { user, canAccessAgentFilesQc, canAccessQaAgentAudit } = useAuth();
   // Project/task name mapping state
   const [projectNameMap, setProjectNameMap] = useState({});
   const [taskNameMap, setTaskNameMap] = useState({});
@@ -400,7 +400,7 @@ const AdminDashboard = () => {
           <QATrackerReport />
         </div>
       )}
-      {activeTab === 'agent_file_report' && (
+      {activeTab === 'agent_file_report' && canAccessAgentFilesQc && (
         <div className="max-w-7xl mx-auto mt-6">
           <QAAgentList />
         </div>
@@ -410,7 +410,7 @@ const AdminDashboard = () => {
           <QAHoursTracker mode="manager" />
         </div>
       )}
-      {activeTab === 'qa_agent_audit' && (
+      {activeTab === 'qa_agent_audit' && canAccessQaAgentAudit && (
         <div className="max-w-7xl mx-auto mt-6">
           <QAAgentAudit />
         </div>

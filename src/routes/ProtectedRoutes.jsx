@@ -2,8 +2,8 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ROUTES, getHomeRouteForUser } from "./paths";
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { user } = useAuth();
+const ProtectedRoute = ({ children, allowedRoles, requireQcAccess }) => {
+  const { user, canAccessAgentFilesQc } = useAuth();
 
   if (!user) {
     return <Navigate to={ROUTES.LOGIN} replace />;
@@ -14,6 +14,10 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     if (!allowedRoles.includes(roleId)) {
       return <Navigate to={getHomeRouteForUser(user)} replace />;
     }
+  }
+
+  if (requireQcAccess && !canAccessAgentFilesQc) {
+    return <Navigate to={getHomeRouteForUser(user)} replace />;
   }
 
   return children;

@@ -681,8 +681,8 @@ const QAHoursTracker = ({ mode = "self" }) => {
     let cancelled = false;
     (async () => {
       const [agents, projects] = await Promise.all([
-        fetchDropdown("agent", dropdownUserId, null, null, { scope: "qc" }),
-        fetchDropdown("projects with tasks", dropdownUserId, null, null, { scope: "qc" }),
+        fetchDropdown("agent", dropdownUserId),
+        fetchDropdown("projects with tasks", dropdownUserId),
       ]);
       if (cancelled) return;
       setAgentOptions(

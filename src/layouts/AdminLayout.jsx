@@ -8,7 +8,7 @@
           setActiveTab,
           onFactoryReset,
      }) => {
-          const { canManageUsers, canManageProjects, isSuperAdmin } = useAuth();
+          const { canManageUsers, canManageProjects, canManageUserPermissions } = useAuth();
 
           const showUsersTab = canManageUsers;
           const showProjectsTab = canManageProjects;
@@ -112,6 +112,7 @@
                                         </button>
                                    )}
 
+                                   {canManageUserPermissions && (
                                    <button
                                         onClick={() => setActiveTab("permissions")}
                                         className={`flex-1 px-6 py-4 text-sm font-bold transition-all relative ${
@@ -128,6 +129,7 @@
                                              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
                                         )}
                                    </button>
+                                   )}
                               </div>
                          )}
 

@@ -28,7 +28,7 @@ const ManageModule = ({ activeTab }) => {
      const [loadingProjects, setLoadingProjects] = useState(false);
      const hasFetchedUsersRef = React.useRef(false);
      const hasFetchedProjectsRef = React.useRef(false);
-     const { user, canManageUsers, canManageProjects } = useAuth();
+     const { user, canManageUsers, canManageProjects, canManageUserPermissions } = useAuth();
      const { device_id, device_type } = useDeviceInfo();
      const userId = user?.user_id || user?.id;
 
@@ -182,7 +182,7 @@ const ManageModule = ({ activeTab }) => {
                     <ProjectCategory />
                )}
 
-               {activeTab === "permissions" && canManageUsers && (
+               {activeTab === "permissions" && canManageUserPermissions && (
                     <UserTrackingView />
                )}
           </>

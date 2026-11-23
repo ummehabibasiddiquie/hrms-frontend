@@ -532,6 +532,7 @@ const QAAgentAudit = ({
       const formData = new FormData();
       formData.append('qc_record_id', selectedRecord.audit_id);
       formData.append('qc_score', score);
+      formData.append('logged_in_user_id', user?.user_id || user?.id || '');
       
       if (qcCheckedFile) {
         formData.append('qc_checked_file', qcCheckedFile);
