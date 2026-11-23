@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Search, Filter, Shield, CheckCircle2, XCircle, UserCog, Activity } from 'lucide-react';
+import { Users, Search, Filter, Shield, CheckCircle2, XCircle, UserCog, Activity, ClipboardCheck, UserCheck, BarChart3 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
 import SearchableSelect from './SearchableSelect';
+
+const flagOn = (value) => Number(value) === 1;
 
 const UserTrackingView = () => {
   const { user } = useAuth();
@@ -15,14 +17,11 @@ const UserTrackingView = () => {
   const [roleOptions, setRoleOptions] = useState([]);
   const [updatingPermission, setUpdatingPermission] = useState(null);
 
-  // Fetch users and roles on mount
   useEffect(() => {
-    fetchUsers();
     fetchRoleDropdown();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch users by role when roleFilter changes (except 'all')
   useEffect(() => {
     if (roleFilter === 'all') {
       fetchUsers();
@@ -167,34 +166,49 @@ const UserTrackingView = () => {
 
     try {
       // Find the target user to get both permission values
-      const targetUser = users.find(u => u.user_id === targetUserId);
+      const targetUser = users.find((u) => Number(u.user_id) === Number(targetUserId));
       
+      const nextValue = flagOn(currentValue) ? 0 : 1;
       const payload = {
         user_id: user.user_id,
         target_user_id: targetUserId,
-        project_creation_permission: permissionType === 'project' 
-          ? (currentValue === 1 ? 0 : 1) 
-          : (targetUser?.project_creation_permission || 0),
-        user_creation_permission: permissionType === 'user' 
-          ? (currentValue === 1 ? 0 : 1) 
-          : (targetUser?.user_creation_permission || 0)
+        project_creation_permission: permissionType === 'project'
+          ? nextValue
+          : (flagOn(targetUser?.project_creation_permission) ? 1 : 0),
+        user_creation_permission: permissionType === 'user'
+          ? nextValue
+          : (flagOn(targetUser?.user_creation_permission) ? 1 : 0),
+        qc_permission: permissionType === 'qc'
+          ? nextValue
+          : (flagOn(targetUser?.qc_permission) ? 1 : 0),
+        audit_permission: permissionType === 'audit'
+          ? nextValue
+          : (flagOn(targetUser?.audit_permission) ? 1 : 0),
+        qc_overview_permission: permissionType === 'qc_overview'
+          ? nextValue
+          : (flagOn(targetUser?.qc_overview_permission) ? 1 : 0)
       };
 
       const response = await api.post('/permission/update', payload);
       
-      if (response.data) {
-        // Update local state
+      if (response.data?.status === 200) {
         setUsers(prevUsers => 
           prevUsers.map(u => 
-            u.user_id === targetUserId 
+            Number(u.user_id) === Number(targetUserId)
               ? {
                   ...u,
-                  [permissionType === 'project' ? 'project_creation_permission' : 'user_creation_permission']: currentValue === 1 ? 0 : 1
+                  [{
+                    project: 'project_creation_permission',
+                    qc: 'qc_permission',
+                    audit: 'audit_permission',
+                    qc_overview: 'qc_overview_permission',
+                    user: 'user_creation_permission',
+                    }[permissionType] || 'user_creation_permission']: nextValue
                 }
               : u
           )
         );
-        toast.success(`Permission ${currentValue === 1 ? 'revoked' : 'granted'} successfully!`);
+        toast.success(`Permission ${flagOn(currentValue) ? 'revoked' : 'granted'} successfully!`);
       }
     } catch (error) {
       console.error('Error updating permission:', error);
@@ -217,7 +231,8 @@ const UserTrackingView = () => {
       totalUsers: safeUsers.length,
       userCreationEnabled: safeUsers.filter(u => u.user_creation_permission === 1).length,
       projectCreationEnabled: safeUsers.filter(u => u.project_creation_permission === 1).length,
-      bothPermissionsEnabled: safeUsers.filter(u => u.user_creation_permission === 1 && u.project_creation_permission === 1).length
+      bothPermissionsEnabled: safeUsers.filter(u => u.user_creation_permission === 1 && u.project_creation_permission === 1).length,
+      qcEnabled: safeUsers.filter(u => u.qc_permission === 1).length
     };
   }, [users]);
 
@@ -240,7 +255,7 @@ const UserTrackingView = () => {
               </div>
               <div>
                 <h2 className="text-xl font-bold">User Permissions</h2>
-                <p className="text-blue-100 text-sm">Manage user creation and project creation access</p>
+                <p className="text-blue-100 text-sm">Manage user creation, project creation, QC / Agent Files, QC Report Overview, and QA Agent Audit access</p>
               </div>
             </div>
             <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg text-sm">
@@ -311,6 +326,24 @@ const UserTrackingView = () => {
                       <div className="flex items-center justify-center gap-2">
                         <Activity className="w-4 h-4" />
                         Project Creation
+                      </div>
+                    </th>
+                    <th className="px-6 py-5 text-center text-xs font-bold text-white uppercase tracking-wider">
+                      <div className="flex items-center justify-center gap-2">
+                        <ClipboardCheck className="w-4 h-4" />
+                        QC / Agent Files
+                      </div>
+                    </th>
+                    <th className="px-6 py-5 text-center text-xs font-bold text-white uppercase tracking-wider">
+                      <div className="flex items-center justify-center gap-2">
+                        <BarChart3 className="w-4 h-4" />
+                        QC Report Overview
+                      </div>
+                    </th>
+                    <th className="px-6 py-5 text-center text-xs font-bold text-white uppercase tracking-wider">
+                      <div className="flex items-center justify-center gap-2">
+                        <UserCheck className="w-4 h-4" />
+                        QA Agent Audit
                       </div>
                     </th>
                   </tr>
@@ -409,6 +442,93 @@ const UserTrackingView = () => {
                             </span>
                           </button>
                           {updatingPermission === `${userData.user_id}-project` && (
+                            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-3">
+                          <button
+                            onClick={() => handlePermissionToggle(userData.user_id, 'qc', userData.qc_permission)}
+                            disabled={updatingPermission === `${userData.user_id}-qc`}
+                            className={`relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transform hover:scale-105 ${
+                              flagOn(userData.qc_permission)
+                                ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
+                                : 'bg-gradient-to-r from-slate-300 to-slate-400'
+                            }`}
+                            title={flagOn(userData.qc_permission) ? 'Enabled - Click to disable' : 'Disabled - Click to enable'}
+                          >
+                            <span
+                              className={`inline-flex items-center justify-center h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
+                                flagOn(userData.qc_permission) ? 'translate-x-9' : 'translate-x-1'
+                              }`}
+                            >
+                              {flagOn(userData.qc_permission) ? (
+                                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-slate-400" />
+                              )}
+                            </span>
+                          </button>
+                          {updatingPermission === `${userData.user_id}-qc` && (
+                            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-3">
+                          <button
+                            onClick={() => handlePermissionToggle(userData.user_id, 'qc_overview', userData.qc_overview_permission)}
+                            disabled={updatingPermission === `${userData.user_id}-qc_overview`}
+                            className={`relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transform hover:scale-105 ${
+                              flagOn(userData.qc_overview_permission)
+                                ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
+                                : 'bg-gradient-to-r from-slate-300 to-slate-400'
+                            }`}
+                            title={flagOn(userData.qc_overview_permission) ? 'Enabled - Click to disable' : 'Disabled - Click to enable'}
+                          >
+                            <span
+                              className={`inline-flex items-center justify-center h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
+                                flagOn(userData.qc_overview_permission) ? 'translate-x-9' : 'translate-x-1'
+                              }`}
+                            >
+                              {flagOn(userData.qc_overview_permission) ? (
+                                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-slate-400" />
+                              )}
+                            </span>
+                          </button>
+                          {updatingPermission === `${userData.user_id}-qc_overview` && (
+                            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 whitespace-nowrap text-center">
+                        <div className="flex items-center justify-center gap-3">
+                          <button
+                            onClick={() => handlePermissionToggle(userData.user_id, 'audit', userData.audit_permission)}
+                            disabled={updatingPermission === `${userData.user_id}-audit`}
+                            className={`relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transform hover:scale-105 ${
+                              flagOn(userData.audit_permission)
+                                ? 'bg-gradient-to-r from-green-500 to-emerald-600' 
+                                : 'bg-gradient-to-r from-slate-300 to-slate-400'
+                            }`}
+                            title={flagOn(userData.audit_permission) ? 'Enabled - Click to disable' : 'Disabled - Click to enable'}
+                          >
+                            <span
+                              className={`inline-flex items-center justify-center h-6 w-6 transform rounded-full bg-white shadow-md transition-transform duration-300 ${
+                                flagOn(userData.audit_permission) ? 'translate-x-9' : 'translate-x-1'
+                              }`}
+                            >
+                              {flagOn(userData.audit_permission) ? (
+                                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-slate-400" />
+                              )}
+                            </span>
+                          </button>
+                          {updatingPermission === `${userData.user_id}-audit` && (
                             <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                           )}
                         </div>

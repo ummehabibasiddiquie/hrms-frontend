@@ -203,11 +203,28 @@ export const AuthProvider = ({ children }) => {
         (roleName.includes('asst') && !roleName.includes('team leader'))
       );
 
+    // Calculate permissions
+    const hasQcFlag = Number(user.qc_permission) === 1;
+    const hasAuditFlag = Number(user.audit_permission) === 1;
+    const hasQcOverviewFlag =
+      Number(user.qc_overview_permission) === 1 ||
+      user.qc_overview_permission === true ||
+      user.qc_overview_permission === "1";
+    const isQA =
+      roleId === 5 ||
+      roleName === "qa";
+
     const calculatedPermissions = {
       isTeamLeader,
       isOperations,
       isReadOnly: isTeamLeader,
       canViewAsAssistantManager: isAssistantManager || isTeamLeader,
+      // Only QA keeps Agent Files & QC by role. Everyone else needs qc_permission.
+      canAccessAgentFilesQc: isQA || hasQcFlag,
+      // Only permission holders get manager QA Agent Audit. QA still sees their own audit report in QA screens.
+      canAccessQaAgentAudit: hasAuditFlag,
+      canAccessQcReportOverview: hasQcOverviewFlag,
+      canManageUserPermissions: isAdmin,
       // Can create/manage users - based on user_creation_permission flag
       canManageUsers:
         !isTeamLeader && (

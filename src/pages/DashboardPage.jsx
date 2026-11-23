@@ -62,7 +62,11 @@ const DashboardPage = ({
     user: currentUser, 
     canManageUsers, 
     canManageProjects, 
-    canViewSalary
+    canViewSalary,
+    canAccessAgentFilesQc,
+    canAccessQaAgentAudit,
+    canAccessQcReportOverview,
+    canManageUserPermissions,
   } = useAuth();
   const { device_id, device_type } = useDeviceInfo();
   const { dropdowns, loadDropdowns } = useUserDropdowns();
@@ -152,14 +156,15 @@ const DashboardPage = ({
     const visibleTabs = [
       ...(canManageUsers || isSuperAdmin || isAdmin || isProjectManager ? ['users'] : []),
       ...(canSeeManageProjects ? ['projects', 'afd'] : []),
-      ...(canSeeManageCategoryAndPermissions ? ['category', 'permissions'] : []),
+      ...(canSeeManageCategoryAndPermissions ? ['category'] : []),
+      ...(canManageUserPermissions ? ['permissions'] : []),
       ...(canAccessRoster ? ['roster'] : []),
       ...(canManageSops ? ['sops'] : []),
     ];
     if (!visibleTabs.includes(adminActiveTab) && visibleTabs.length > 0) {
       setManageSubTab(visibleTabs[0]);
     }
-  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, canManageProjects, canSeeManageProjects, canSeeManageCategoryAndPermissions, canAccessRoster, canManageReportEmails, canManageSops, setManageSubTab]);
+  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, canManageProjects, canSeeManageProjects, canSeeManageCategoryAndPermissions, canManageUserPermissions, canAccessRoster, canManageReportEmails, canManageSops, setManageSubTab]);
 
   useEffect(() => {
     if (activeTab === 'sops' && canManageSops) {
@@ -349,20 +354,13 @@ const DashboardPage = ({
     return <QAHoursTracker mode="manager" />;
   }
   // Team Leaders do QC like a QA (on agents where they are set as the QA)
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || isQA || isAssistantManager || isTeamLeader) && activeTab === 'agent_file_report') {
+  if (canAccessAgentFilesQc && activeTab === 'agent_file_report') {
     return <QAAgentList />;
   }
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 4 || roleId === 5 || isTeamLeader) && activeTab === 'qa_agent_audit') {
-    if (roleId === 5 || isTeamLeader) {
-      return (
-        <div className="max-w-7xl mx-auto mt-2">
-          <QAIndividualAuditReport />
-        </div>
-      );
-    }
+  if (canAccessQaAgentAudit && activeTab === 'qa_agent_audit') {
     return <QAAgentAudit />;
   }
-  if ((roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8 || roleId === 4) && activeTab === 'qc_report_overview') {
+  if (canAccessQcReportOverview && activeTab === 'qc_report_overview') {
     return <ManagerQCReportsOverview />;
   }
 
@@ -455,7 +453,7 @@ const DashboardPage = ({
       {/* User Monthly Report — handled by role dashboards via ?tab=user_monthly_report */}
 
       {/* Agent's Files & QC Report tab for Assistant Manager and QA (not Team Leader) */}
-      {activeTab === 'agent_file_report' && (isAssistantManager || isQA) && (
+      {activeTab === 'agent_file_report' && canAccessAgentFilesQc && (
         <div className="max-w-7xl mx-auto mt-6">
           <QAAgentList />
         </div>
@@ -520,7 +518,7 @@ const DashboardPage = ({
                 {
                   id: 'permissions',
                   label: 'User Permission',
-                  hidden: !canSeeManageCategoryAndPermissions,
+                  hidden: !canManageUserPermissions,
                 },
                 {
                   id: 'roster',
@@ -614,7 +612,7 @@ const DashboardPage = ({
               <ProjectCategory />
             )}
             
-            {adminActiveTab === 'permissions' && (
+            {adminActiveTab === 'permissions' && canManageUserPermissions && (
               <UserTrackingView />
             )}
 
