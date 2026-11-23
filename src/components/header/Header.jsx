@@ -230,12 +230,12 @@ const Header = ({
     if (roleId === 1 || roleId === 2) {
       const items = [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
-        { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
         { view: "QA_HOURS", label: "QA Report", icon: Clock },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
       if (roleId === 1) {
-        items.push({ view: "REPORT_EMAILS", label: "Report emails", icon: Mail });
+        items.push({ view: "REPORT_EMAILS", label: "Emails", icon: Mail });
       }
       return items;
     }
@@ -245,7 +245,7 @@ const Header = ({
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: ViewState.ENTRY, label: "Tracker", icon: PenTool },
-        { view: "AI_EVALUATION", label: "AI Evaluation", icon: Brain },
+        { view: "AI_EVALUATION", label: "AI", icon: Brain },
       ];
     }
     if (!role) {
@@ -256,14 +256,14 @@ const Header = ({
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "MY_REPORT", label: "My Report", icon: Clock },
             { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
-            { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
-            { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+            { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
+            { view: "AGENT_LIST", label: "Agent Files", icon: Users },
           ];
         }
         if (roleId === 3 || roleId === 8) {
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
-            { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
             { view: "QA_HOURS", label: "QA Report", icon: Clock },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
@@ -271,7 +271,7 @@ const Header = ({
         if (roleId === 4) {
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
-            { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
         }
@@ -280,7 +280,7 @@ const Header = ({
           return [
             { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
             { view: "MY_REPORT", label: "My Report", icon: Clock },
-            { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+            { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
             { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
         }
@@ -297,8 +297,8 @@ const Header = ({
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "MY_REPORT", label: "My Report", icon: Clock },
         { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
-        { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
-        { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users },
+        { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
+        { view: "AGENT_LIST", label: "Agent Files", icon: Users },
       ];
     }
     if (role.includes('TEAM LEADER') || role.includes('TEAM_LEADER') || roleId === 7) {
@@ -306,14 +306,14 @@ const Header = ({
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
         { view: "MY_REPORT", label: "My Report", icon: Clock },
-        { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
     }
     if (role.includes('ASSISTANT') || role.includes('ASST')) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
-        { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
     }
@@ -321,7 +321,7 @@ const Header = ({
     if (role.includes('PROJECT_MANAGER') || role.replace(/\s+/g, '').toLowerCase() === 'projectmanager' || role.includes('OPERATIONS') || roleId === 3 || roleId === 8) {
       return [
         { view: ViewState.DASHBOARD, label: "Analytics", icon: LayoutDashboard },
-        { view: "TRACKER_REPORT", label: "Tracker Report", icon: FileText },
+        { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
         { view: "QA_HOURS", label: "QA Report", icon: Clock },
         { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
@@ -341,12 +341,12 @@ const Header = ({
     const hasQcOverviewFlag =
       Number(currentUser?.qc_overview_permission) === 1;
     if (canAccessAgentFilesQc) {
-      insertAfter("TRACKER_REPORT", { view: "AGENT_LIST", label: "Agent Files & QC Report", icon: Users });
+      insertAfter("TRACKER_REPORT", { view: "AGENT_LIST", label: "Agent Files", icon: Users });
     }
     if (canAccessQcReportOverview) {
-      insertAfter("AGENT_LIST", { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 });
+      insertAfter("AGENT_LIST", { view: "QC_REPORT_OVERVIEW", label: "QC Overview", icon: BarChart3 });
       if (!items.some((i) => i.view === "QC_REPORT_OVERVIEW")) {
-        insertAfter("TRACKER_REPORT", { view: "QC_REPORT_OVERVIEW", label: "QC Report Overview", icon: BarChart3 });
+        insertAfter("TRACKER_REPORT", { view: "QC_REPORT_OVERVIEW", label: "QC Overview", icon: BarChart3 });
       }
     } else {
       for (let i = items.length - 1; i >= 0; i -= 1) {
@@ -360,9 +360,9 @@ const Header = ({
       }
     }
     if (canAccessQaAgentAudit) {
-      insertAfter("QC_REPORT_OVERVIEW", { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck });
+      insertAfter("QC_REPORT_OVERVIEW", { view: "QA_AGENT_AUDIT", label: "Audit", icon: UserCheck });
       if (!items.some((i) => i.view === "QA_AGENT_AUDIT")) {
-        insertAfter("AGENT_LIST", { view: "QA_AGENT_AUDIT", label: "QA Agent Audit", icon: UserCheck });
+        insertAfter("AGENT_LIST", { view: "QA_AGENT_AUDIT", label: "Audit", icon: UserCheck });
       }
     }
     if (!items.length) return items;
@@ -471,7 +471,7 @@ const Header = ({
       <button
         key={item.view}
         onClick={() => !item.disabled && goTo(item.view)}
-        className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+        className={`inline-flex h-9 items-center justify-center gap-1.5 px-3 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
           isActive
             ? 'bg-blue-600 text-white hover:bg-blue-700'
             : 'text-slate-600 bg-slate-50 hover:bg-slate-200'
@@ -492,7 +492,7 @@ const Header = ({
         <button
           type="button"
           onClick={() => setQcMenuOpen((open) => !open)}
-          className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+          className={`inline-flex h-9 items-center justify-center gap-1.5 px-3 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
             isActive
               ? "bg-blue-600 text-white hover:bg-blue-700"
               : "text-slate-600 bg-slate-50 hover:bg-slate-200"
