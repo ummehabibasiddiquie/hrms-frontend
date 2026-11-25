@@ -71,8 +71,8 @@ const ClockFileReminder = () => {
   const navigate = useNavigate();
   const [toast, setToast] = useState(null);
   const [clockedIn, setClockedIn] = useState(false);
-  const [notifyDenied, setNotifyDenied] = useState(
-    typeof Notification !== "undefined" && Notification.permission === "denied"
+  const [notifyPermission, setNotifyPermission] = useState(() =>
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission
   );
   const hideTimerRef = useRef(null);
   const lastPingRef = useRef("");
@@ -164,12 +164,13 @@ const ClockFileReminder = () => {
 
   const askNotify = async () => {
     const result = await requestDesktopReminderPermission();
-    setNotifyDenied(result === "denied");
+    setNotifyPermission(result || (typeof Notification !== "undefined" ? Notification.permission : "unsupported"));
   };
 
   if (!isFieldAgent(user)) return null;
 
-  const notifyReady = typeof Notification !== "undefined" && Notification.permission === "granted";
+  const notifyReady = notifyPermission === "granted";
+  const notifyDenied = notifyPermission === "denied" || notifyPermission === "unsupported";
 
   return (
     <>
