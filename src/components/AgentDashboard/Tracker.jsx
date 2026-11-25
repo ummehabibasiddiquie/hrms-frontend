@@ -115,10 +115,7 @@ const Tracker = ({ embedded = false }) => {
   const [, forceUpdate] = useState(0);
 
   // Date state for header (default to today)
-  const [entryDate] = useState(() => {
-    const d = new Date();
-    return d.toISOString().slice(0, 10);
-  });
+  const [entryDate] = useState(() => todayISTISO());
 
   // Table states
   const [trackers, setTrackers] = useState([]);
@@ -333,11 +330,17 @@ const Tracker = ({ embedded = false }) => {
     }
   };
 
+  const istStampMs = (value) => {
+    const p = getISTParts(value);
+    if (!p) return NaN;
+    return Date.UTC(p.year, p.month - 1, p.day, p.hours, p.minutes, p.seconds) - (5.5 * 60 * 60 * 1000);
+  };
+
   const clockElapsedLabel = () => {
     if (!clockSession?.clock_in_at) return "00:00:00";
-    const start = new Date(String(clockSession.clock_in_at).replace(" ", "T")).getTime();
+    const start = istStampMs(clockSession.clock_in_at);
     const end = clockSession.clock_out_at
-      ? new Date(String(clockSession.clock_out_at).replace(" ", "T")).getTime()
+      ? istStampMs(clockSession.clock_out_at)
       : clockNow;
     const sec = Math.max(0, Math.floor((end - start) / 1000));
     const hh = String(Math.floor(sec / 3600)).padStart(2, "0");
@@ -351,9 +354,9 @@ const Tracker = ({ embedded = false }) => {
     if (clockSession.clock_out_at && clockSession.worked_hours) {
       return Math.max(1, Number(clockSession.worked_hours) || 1);
     }
-    const start = new Date(String(clockSession.clock_in_at).replace(" ", "T")).getTime();
+    const start = istStampMs(clockSession.clock_in_at);
     const end = clockSession.clock_out_at
-      ? new Date(String(clockSession.clock_out_at).replace(" ", "T")).getTime()
+      ? istStampMs(clockSession.clock_out_at)
       : clockNow;
     const minutes = Math.max(0, (end - start) / 60000);
     return Math.max(1, Math.floor((minutes + 30) / 60));
