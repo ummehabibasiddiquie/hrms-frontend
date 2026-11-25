@@ -16,7 +16,7 @@ function filterApiErrorMessage(msg) {
   // Default: show a generic error but append the backend reason in parentheses
   return `Action failed. (${msg})`;
 }
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { toast } from "react-hot-toast";
 import { Download, Trash2, RotateCcw, RefreshCw, Copy, ChevronDown, Clock, Info } from "lucide-react";
 import { exportToCSV } from '../../utils/csvExport';
@@ -27,7 +27,8 @@ import { fileToBase64 } from "../../utils/fileToBase64";
 import { useAuth } from "../../context/AuthContext";
 import { log, logError } from "../../config/environment";
 import SearchableSelect from "../common/SearchableSelect";
-import ProjectSopLinks from "../common/ProjectSopLinks";
+import TaskSopViewer, { SopNoticeModal } from "../common/TaskSopViewer";
+import { requestDesktopReminderPermission } from "./ClockFileReminder";
 import { DateRangePicker } from "../common/CustomCalendar";
 import { Briefcase, ListChecks } from "lucide-react";
 import { formatISTDateTimeParts, getISTParts, formatISTDateMedium, todayISTISO } from "../../utils/dateTimeIST";
@@ -35,6 +36,16 @@ import { formatISTDateTimeParts, getISTParts, formatISTDateMedium, todayISTISO }
 
 // Helper to get today's date in YYYY-MM-DD format (IST)
 const getTodayDate = () => todayISTISO() || new Date().toISOString().split('T')[0];
+
+const CLOCK_EXEMPT_PROJECT_IDS = [7, 8];
+
+function isClockExemptProject(project) {
+  if (!project) return false;
+  const id = Number(project.project_id);
+  if (CLOCK_EXEMPT_PROJECT_IDS.includes(id)) return true;
+  const name = String(project.project_name || "").trim().toLowerCase();
+  return name === "training" || name === "sample";
+}
 
 const Tracker = ({ embedded = false }) => {
   // Auth context for user info
@@ -128,6 +139,32 @@ const Tracker = ({ embedded = false }) => {
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
+  const [clockSession, setClockSession] = useState(null);
+  const [clockBusy, setClockBusy] = useState(false);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [sopNotice, setSopNotice] = useState(null);
+  const sopNoticeForRef = useRef("");
+  const isClockedIn = Boolean(clockSession?.clock_in_at && !clockSession?.clock_out_at);
+  const isClockedOut = Boolean(clockSession?.clock_out_at);
+  const trackerLocked = isClockedIn;
+  const sessionMustFinish = isClockedIn || isClockedOut;
+  const selectedProjectRow = projects.find((p) => String(p.project_id) === String(selectedProject));
+  const clockExempt = isClockExemptProject(selectedProjectRow);
+  const sessionReady = clockExempt || isClockedIn || isClockedOut;
+  const hasProduction =
+    productionTarget !== "" && !isNaN(Number(productionTarget)) && Number(productionTarget) >= 0;
+  const hasFile = Boolean(file) && !fileError;
+  const canSubmitTracker = sessionReady && hasProduction && hasFile;
+
+  const tryCloseTrackerModal = () => {
+    if (sessionMustFinish) {
+      toast.error("Add production and the file, clock out, then Submit. This popup cannot be closed until the tracker is saved.");
+      setShowModal(true);
+      return;
+    }
+    setShowModal(false);
+    resetModalForm();
+  };
 
   // Custom dropdown states
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
@@ -179,6 +216,154 @@ const Tracker = ({ embedded = false }) => {
     setTouched({});
   };
 
+  const applyClockSession = (session) => {
+    setClockSession(session || null);
+    if (!session) return;
+    if (session.project_id) setSelectedProject(String(session.project_id));
+    if (session.task_id) setSelectedTask(String(session.task_id));
+    if (session.shift) setShiftType(String(session.shift).toLowerCase() === "night" ? "night" : "day");
+  };
+
+  const loadClockSession = async () => {
+    if (!user?.user_id) return;
+    try {
+      const res = await api.post("/tracker/clock/status", { logged_in_user_id: user.user_id });
+      const session = res.data?.data?.session || null;
+      applyClockSession(session);
+      if (session?.clock_in_at) setShowModal(true);
+    } catch (error) {
+      logError("[Tracker] Clock status failed:", error);
+    }
+  };
+
+  const handleTestElapsed = async (minutes) => {
+    if (!isClockedIn) {
+      toast.error("Clock in first, then jump the timer");
+      return;
+    }
+    setClockBusy(true);
+    try {
+      const res = await api.post("/tracker/clock/test_elapsed", {
+        logged_in_user_id: user.user_id,
+        user_id: user.user_id,
+        minutes,
+      }, import.meta.env.DEV ? { baseURL: "" } : undefined);
+      applyClockSession(res.data?.data?.session);
+      toast.success(`Timer set to about ${Math.floor(minutes / 60)}h ${minutes % 60}m`);
+    } catch (error) {
+      toast.error(filterApiErrorMessage(error?.response?.data?.message || "Could not jump timer"));
+    } finally {
+      setClockBusy(false);
+    }
+  };
+
+  const loadSopNotice = async (taskId) => {
+    if (!taskId || !user?.user_id) return;
+    const key = String(taskId);
+    if (sopNoticeForRef.current === key) return;
+    try {
+      const res = await api.post("/task_sop/get", {
+        logged_in_user_id: user.user_id,
+        task_id: Number(taskId),
+      });
+      const notice = res.data?.data?.notice;
+      sopNoticeForRef.current = key;
+      if (notice?.show) {
+        setSopNotice(notice);
+      } else {
+        setSopNotice(null);
+      }
+    } catch (error) {
+      logError("[Tracker] SOP notice failed:", error);
+    }
+  };
+
+  const handleAckSopNotice = () => {
+    setSopNotice(null);
+  };
+
+  const handleClockIn = async () => {
+    if (clockExempt) {
+      toast.error("Training and Sample do not use clock-in. Add the tracker as usual.");
+      return;
+    }
+    if (!selectedProject || !selectedTask) {
+      toast.error("Select project and task before clock-in");
+      setTouched((prev) => ({ ...prev, selectedProject: true, selectedTask: true }));
+      return;
+    }
+    setClockBusy(true);
+    requestDesktopReminderPermission();
+    try {
+      const res = await api.post("/tracker/clock/in", {
+        logged_in_user_id: user.user_id,
+        user_id: user.user_id,
+        project_id: Number(selectedProject),
+        task_id: Number(selectedTask),
+        shift: shiftType,
+      });
+      applyClockSession(res.data?.data?.session);
+      toast.success("Clocked in");
+      sopNoticeForRef.current = "";
+      await loadSopNotice(selectedTask);
+    } catch (error) {
+      toast.error(filterApiErrorMessage(error?.response?.data?.message || "Could not clock in"));
+    } finally {
+      setClockBusy(false);
+    }
+  };
+
+  const handleClockOut = async () => {
+    if (!hasProduction || !hasFile) {
+      toast.error("Add production and upload the file before clock-out");
+      return;
+    }
+    setClockBusy(true);
+    try {
+      const res = await api.post("/tracker/clock/out", {
+        logged_in_user_id: user.user_id,
+        user_id: user.user_id,
+      });
+      applyClockSession(res.data?.data?.session);
+      toast.success(`Clocked out · ${res.data?.data?.session?.worked_hours || 1} hour(s)`);
+    } catch (error) {
+      toast.error(filterApiErrorMessage(error?.response?.data?.message || "Could not clock out"));
+    } finally {
+      setClockBusy(false);
+    }
+  };
+
+  const clockElapsedLabel = () => {
+    if (!clockSession?.clock_in_at) return "00:00:00";
+    const start = new Date(String(clockSession.clock_in_at).replace(" ", "T")).getTime();
+    const end = clockSession.clock_out_at
+      ? new Date(String(clockSession.clock_out_at).replace(" ", "T")).getTime()
+      : clockNow;
+    const sec = Math.max(0, Math.floor((end - start) / 1000));
+    const hh = String(Math.floor(sec / 3600)).padStart(2, "0");
+    const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
+  };
+
+  const sessionBilledHours = (() => {
+    if (!clockSession?.clock_in_at) return 0;
+    if (clockSession.clock_out_at && clockSession.worked_hours) {
+      return Math.max(1, Number(clockSession.worked_hours) || 1);
+    }
+    const start = new Date(String(clockSession.clock_in_at).replace(" ", "T")).getTime();
+    const end = clockSession.clock_out_at
+      ? new Date(String(clockSession.clock_out_at).replace(" ", "T")).getTime()
+      : clockNow;
+    const minutes = Math.max(0, (end - start) / 60000);
+    return Math.max(1, Math.floor((minutes + 30) / 60));
+  })();
+  const hourlyTarget = Number(baseTarget) || 0;
+  const sessionExpectedProduction = hourlyTarget && sessionBilledHours
+    ? hourlyTarget * sessionBilledHours
+    : 0;
+  const sessionPreviewBillable =
+    hourlyTarget && hasProduction ? Number(productionTarget) / hourlyTarget : 0;
 
   // Fetch projects with tasks for form (fetch only once on mount or user change)
   useEffect(() => {
@@ -203,8 +388,19 @@ const Tracker = ({ embedded = false }) => {
     };
     if (user?.user_id) {
       fetchProjectsWithTasks();
+      loadClockSession();
     }
   }, [user?.user_id]);
+
+  useEffect(() => {
+    if (!isClockedIn) return undefined;
+    const timer = setInterval(() => setClockNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [isClockedIn]);
+
+  useEffect(() => {
+    if (sessionMustFinish) setShowModal(true);
+  }, [sessionMustFinish]);
 
   // Update tasks when project changes
   useEffect(() => {
@@ -228,11 +424,14 @@ const Tracker = ({ embedded = false }) => {
     setRequiresDuplicateCheck(requiresDuplicate);
     
     if (!project?.tasks?.find(t => String(t.task_id) === String(selectedTask))) {
-      setSelectedTask("");
-      setBaseTarget("");
+      const sessionTask = clockSession && String(clockSession.task_id) === String(selectedTask);
+      if (!sessionTask) {
+        setSelectedTask("");
+        setBaseTarget("");
+      }
     }
     setLoadingTasks(false);
-  }, [selectedProject, projects, selectedTask]);
+  }, [selectedProject, projects, selectedTask, clockSession]);
 
   // Base Target = task_target × tenure (if tenure < 1 → use 1)
   useEffect(() => {
@@ -572,6 +771,18 @@ const Tracker = ({ embedded = false }) => {
       setErrors(clientErrors);
       forceUpdate(n => n + 1);
       if (Object.keys(clientErrors).length > 0) return;
+      if (!clockExempt && !isClockedIn && !isClockedOut) {
+        toast.error("Clock in before submitting this tracker", { duration: 4000 });
+        return;
+      }
+      if (!productionTarget || isNaN(Number(productionTarget)) || Number(productionTarget) < 0) {
+        toast.error("Enter production before submitting", { duration: 4000 });
+        return;
+      }
+      if (!file) {
+        toast.error("Upload the production file before submitting", { duration: 4000 });
+        return;
+      }
       if (fileError) {
         toast.error("Please fix file upload errors before submitting", { duration: 4000 });
         return;
@@ -612,8 +823,9 @@ const Tracker = ({ embedded = false }) => {
       const formData = new FormData();
       formData.append('project_id', Number(selectedProject));
       formData.append('task_id', Number(selectedTask));
-      formData.append('shift', shiftType);
+      formData.append('shift', String(shiftType || "day").toUpperCase());
       formData.append('user_id', user?.user_id);
+      formData.append('logged_in_user_id', user?.user_id);
       formData.append('production', Number(productionTarget));
       {
         const project = projects.find((p) => String(p.project_id) === String(selectedProject));
@@ -691,7 +903,17 @@ const Tracker = ({ embedded = false }) => {
           }
         }
         
-        // Now submit the tracker (only after successful file processing or if no file)
+        if (!clockExempt) {
+          try {
+            await api.post("/tracker/clock/out", {
+              logged_in_user_id: user?.user_id,
+              user_id: user?.user_id,
+            });
+          } catch (clockErr) {
+            logError("[Tracker] Clock-out on submit:", clockErr);
+          }
+        }
+
         const res = await api.post("/tracker/add", formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
@@ -703,6 +925,7 @@ const Tracker = ({ embedded = false }) => {
           // Clear any staged file toast before showing final success
           toast.dismiss(fileStageToastId);
           toast.success("Tracker added successfully!");
+          setClockSession(null);
           resetModalForm();
           setShowModal(false);
           fetchTrackers();
@@ -825,7 +1048,13 @@ const Tracker = ({ embedded = false }) => {
   const formatDateTime = (dateTimeStr) => formatISTDateTimeParts(dateTimeStr);
 
   // Handle delete
-  const handleDelete = (tracker_id) => setDeleteConfirm(tracker_id);
+  const handleDelete = (tracker_id) => {
+    if (trackerLocked) {
+      toast.error("Clock out of your current session before deleting a tracker");
+      return;
+    }
+    setDeleteConfirm(tracker_id);
+  };
   
   const confirmDelete = async () => {
     if (!deleteConfirm) return;
@@ -1004,13 +1233,13 @@ const Tracker = ({ embedded = false }) => {
                     setShowModal(true);
                   }}
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transition-all duration-200 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white transform hover:scale-105 cursor-pointer"
-                  title="Add new tracker"
+                  title={trackerLocked ? "Finish the clocked-in session first" : "Add new tracker"}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                   </svg>
-                  Add Tracker
+                  {trackerLocked ? "Continue session" : "Add Tracker"}
                 </button>
                 <button
                   onClick={handleExportToExcel}
@@ -1190,12 +1419,13 @@ const Tracker = ({ embedded = false }) => {
                   <col style={{ width: '13%' }}/>
                   <col style={{ width: '13%' }}/>
                   <col style={{ width: '8%' }}/>
-                  <col style={{ width: '10%' }}/>
-                  <col style={{ width: '10%' }}/>
-                  <col style={{ width: '10%' }}/>
-                  <col style={{ width: '7%' }}/>
+                  <col style={{ width: '9%' }}/>
+                  <col style={{ width: '9%' }}/>
                   <col style={{ width: '8%' }}/>
                   <col style={{ width: '9%' }}/>
+                  <col style={{ width: '6%' }}/>
+                  <col style={{ width: '8%' }}/>
+                  <col style={{ width: '8%' }}/>
                 </colgroup>
                 <thead className="bg-gradient-to-r from-blue-600 to-blue-700 sticky top-0 z-10">
                   <tr>
@@ -1205,6 +1435,7 @@ const Tracker = ({ embedded = false }) => {
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">Shift</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Per Hour Target</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Production</th>
+                    <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Worked Hours</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-left">Billable Hours</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">Notes</th>
                     <th className="px-5 py-4 font-bold text-white text-xs uppercase tracking-wider text-center">Task File</th>
@@ -1214,7 +1445,7 @@ const Tracker = ({ embedded = false }) => {
                 <tbody className="divide-y divide-slate-200">
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className="text-center py-20">
+                      <td colSpan={11} className="text-center py-20">
                         <div className="flex flex-col items-center gap-3">
                           <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
                           <span className="font-semibold text-slate-600">Loading trackers...</span>
@@ -1223,7 +1454,7 @@ const Tracker = ({ embedded = false }) => {
                     </tr>
                   ) : trackers.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="text-center py-20">
+                      <td colSpan={11} className="text-center py-20">
                         <div className="flex flex-col items-center gap-2">
                           <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300">
                             <circle cx="12" cy="12" r="10"/>
@@ -1266,6 +1497,9 @@ const Tracker = ({ embedded = false }) => {
                         {tracker.production !== null && tracker.production !== undefined
                           ? Number(tracker.production).toFixed(2)
                           : '0.00'}
+                      </td>
+                      <td className="px-5 py-4 align-middle text-slate-700 font-semibold">
+                        {tracker.worked_hours != null ? Number(tracker.worked_hours) : "—"}
                       </td>
                       <td className="px-5 py-4 align-middle text-slate-700 font-semibold">
                         {tracker.billable_hours !== null && tracker.billable_hours !== undefined
@@ -1322,7 +1556,7 @@ const Tracker = ({ embedded = false }) => {
                         {canDeleteTracker(tracker) ? (
                           <button
                             onClick={() => handleDelete(tracker.tracker_id)}
-                            disabled={deletingId === tracker.tracker_id}
+                            disabled={deletingId === tracker.tracker_id || trackerLocked}
                             className="inline-flex items-center justify-center text-red-600 hover:text-white hover:bg-red-600 transition-all bg-red-50 rounded-lg p-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Delete Tracker"
                             aria-label="Delete Tracker"
@@ -1362,6 +1596,7 @@ const Tracker = ({ embedded = false }) => {
               <div className="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 rounded-2xl p-6 shadow-md hover:shadow-xl hover:scale-105 transition-all duration-300">
                 <p className="text-xs font-bold text-purple-700 uppercase tracking-wider mb-2">Billable Hours</p>
                 <p className="text-4xl font-extrabold text-purple-900">{totals.billableHours.toFixed(2)}</p>
+                <p className="text-xs text-purple-800/80 mt-2">Sum of every file today. A 9h day is usually 3 files.</p>
               </div>
             </div>
           </div>
@@ -1369,42 +1604,92 @@ const Tracker = ({ embedded = false }) => {
 
         {/* Add Tracker Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-start justify-center z-50 p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl transform transition-all my-8 animate-fade-in max-h-[calc(100vh-4rem)] flex flex-col">
-              {/* Modal Header */}
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-2.5 rounded-t-2xl flex-shrink-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                        <path d="M12 20h9"></path>
-                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
-                      </svg>
+          <div className="fixed inset-0 z-50 bg-slate-900/40">
+            <div className="absolute inset-0 bg-white flex flex-col">
+              <div className="shrink-0 h-16 px-6 border-b border-slate-200 flex items-center gap-6 bg-white">
+                  <div className="min-w-[140px]">
+                    <h2 className="text-xl font-bold text-slate-900 leading-tight">Add Tracker</h2>
+                    <p className="text-xs text-slate-500">
+                      {clockExempt
+                        ? `${formatISTDateMedium(entryDate)} · Training / Sample — no clock-in`
+                        : `${formatISTDateMedium(entryDate)} · one file per clock · ~9h day`}
+                    </p>
+                  </div>
+                  <div className="flex-1 flex items-center justify-between gap-4 rounded-xl bg-slate-50 border border-slate-200 px-4 h-11">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {clockExempt ? (
+                        <span className="text-sm font-semibold text-slate-600">Normal tracker</span>
+                      ) : (
+                        <>
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isClockedIn ? "bg-green-500 animate-pulse" : isClockedOut ? "bg-amber-500" : "bg-slate-300"}`} />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        {isClockedIn ? "Clocked in" : isClockedOut ? "Clocked out" : "Idle"}
+                      </span>
+                      <span className="text-xl font-bold tabular-nums text-slate-900">{clockElapsedLabel()}</span>
+                      {(isClockedIn || isClockedOut) && sessionBilledHours > 0 && (
+                        <span className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                          this file: {sessionBilledHours}h
+                        </span>
+                      )}
+                        </>
+                      )}
                     </div>
-                    <div>
-                      <h2 className="text-2xl font-bold text-white tracking-tight">Add New Tracker</h2>
-                      <p className="text-blue-100 text-sm font-medium mt-1">{formatISTDateMedium(entryDate)}</p>
-                    </div>
+                    <div className="flex items-center gap-2">
+                      {clockExempt && (
+                        <span className="text-xs font-semibold text-slate-600">
+                          Add this tracker the usual way — clock-in is only for other projects
+                        </span>
+                      )}
+                      {import.meta.env.DEV && isClockedIn && !clockExempt && (
+                        <div className="flex items-center gap-1 mr-1">
+                          <span className="text-[10px] font-bold uppercase text-violet-700">Test</span>
+                          {[
+                            [70, "1h10"],
+                            [150, "2h30"],
+                            [165, "2h45"],
+                            [185, "3h05"],
+                            [240, "4h"],
+                          ].map(([minutes, label]) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => handleTestElapsed(minutes)}
+                              disabled={clockBusy}
+                              className="px-1.5 h-7 rounded-md border border-violet-200 bg-violet-50 text-[11px] font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-40"
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    {!clockExempt && (
+                    <button
+                        type="button"
+                        onClick={handleClockIn}
+                        disabled={clockBusy || isClockedIn || isClockedOut}
+                        className="px-4 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {clockBusy && !isClockedIn ? "Starting…" : "Clock in"}
+                      </button>
+                    )}
+                      </div>
                   </div>
                   <button
-                    onClick={() => {
-                      setShowModal(false);
-                      resetModalForm();
-                    }}
-                    className="w-10 h-10 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-all border border-white/20 group"
+                    onClick={tryCloseTrackerModal}
+                    className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+                    title={sessionMustFinish ? "Finish production and file submit first" : "Close"}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18"></line>
                       <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
                   </button>
-                </div>
               </div>
 
-              {/* Modal Body */}
-              <div className="overflow-y-auto flex-1">
-                <form className="p-4" onSubmit={handleSubmit}>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_44%]">
+                <form className="min-h-0 h-full overflow-hidden bg-white flex flex-col" onSubmit={handleSubmit}>
+                  <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
                   {/* Project Selection */}
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wide">
@@ -1429,7 +1714,7 @@ const Tracker = ({ embedded = false }) => {
                       ]}
                       icon={Briefcase}
                       placeholder="Select a project..."
-                      disabled={loadingProjects}
+                      disabled={loadingProjects || isClockedIn || isClockedOut}
                     />
                     {touched.selectedProject && errors.selectedProject && (
                       <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
@@ -1441,7 +1726,6 @@ const Tracker = ({ embedded = false }) => {
                         {errors.selectedProject}
                       </p>
                     )}
-                    <ProjectSopLinks projectId={selectedProject} className="mt-1" />
                   </div>
 
                   {/* Task Selection */}
@@ -1461,6 +1745,10 @@ const Tracker = ({ embedded = false }) => {
                         const taskValue = String(value);
                         setSelectedTask(taskValue);
                         handleBlur('selectedTask');
+                        if (clockExempt) {
+                          sopNoticeForRef.current = "";
+                          loadSopNotice(taskValue);
+                        }
                         log('[Tracker] Task selected:', taskValue);
                         setTimeout(() => {
                           const project = projects.find(p => String(p.project_id) === String(selectedProject));
@@ -1482,7 +1770,7 @@ const Tracker = ({ embedded = false }) => {
                       ]}
                       icon={ListChecks}
                       placeholder="Select a task..."
-                      disabled={!selectedProject || loadingTasks}
+                      disabled={!selectedProject || loadingTasks || isClockedIn || isClockedOut}
                     />
                     {touched.selectedTask && errors.selectedTask && (
                       <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
@@ -1495,7 +1783,6 @@ const Tracker = ({ embedded = false }) => {
                       </p>
                     )}
                   </div>
-
                   {/* Shift Selection */}
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wide">
@@ -1518,7 +1805,7 @@ const Tracker = ({ embedded = false }) => {
                       ]}
                       icon={Clock}
                       placeholder="Select shift..."
-                      disabled={false}
+                      disabled={isClockedIn || isClockedOut}
                     />
                     {touched.shiftType && errors.shiftType && (
                       <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
@@ -1540,7 +1827,7 @@ const Tracker = ({ embedded = false }) => {
                         <circle cx="12" cy="12" r="6"></circle>
                         <circle cx="12" cy="12" r="2"></circle>
                       </svg>
-                      Base Target
+                      Per hour target
                       <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
@@ -1552,6 +1839,12 @@ const Tracker = ({ embedded = false }) => {
                         <span>{baseTargetLoading ? 'Calculating...' : (baseTarget ? Number(baseTarget).toFixed(2) : '—')}</span>
                       </div>
                     </div>
+                    {sessionBilledHours > 0 && hourlyTarget > 0 && (
+                      <p className="text-xs text-slate-500">
+                        Expected production for this {sessionBilledHours}h file:{" "}
+                        <span className="font-semibold text-slate-700">{sessionExpectedProduction.toFixed(2)}</span>
+                      </p>
+                    )}
                     {touched.baseTarget && errors.baseTarget && (
                       <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1587,6 +1880,7 @@ const Tracker = ({ embedded = false }) => {
                             : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'
                         }`}
                         value={productionTarget}
+                        disabled={!sessionReady}
                         onChange={e => setProductionTarget(e.target.value)}
                         onBlur={(e) => {
                           handleBlur('productionTarget');
@@ -1596,9 +1890,15 @@ const Tracker = ({ embedded = false }) => {
                             setProductionTarget(parseFloat(value).toFixed(2));
                           }
                         }}
-                        placeholder="Enter production"
+                        placeholder={sessionExpectedProduction ? `Total for this file, e.g. ${sessionExpectedProduction.toFixed(2)}` : "Enter production"}
                       />
                     </div>
+                    {hourlyTarget > 0 && hasProduction && (
+                      <p className="text-xs text-slate-500">
+                        This file ≈ <span className="font-semibold text-slate-700">{sessionPreviewBillable.toFixed(2)} billable hours</span>
+                        {sessionBilledHours > 0 ? ` · clocked ${sessionBilledHours}h` : ""}
+                      </p>
+                    )}
                     {touched.productionTarget && errors.productionTarget && (
                       <p className="text-xs text-red-600 font-medium flex items-center gap-1 mt-1">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1612,8 +1912,7 @@ const Tracker = ({ embedded = false }) => {
                   </div>
                 </div>
 
-                {/* Notes Section - Spans 3 columns */}
-                <div className="space-y-2 md:col-span-3">
+                <div className="space-y-2 md:col-span-2 mt-1">
                   <label className="flex items-center justify-between text-sm font-bold text-slate-700 uppercase tracking-wide">
                     <span className="flex items-center gap-2">
                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
@@ -1643,8 +1942,7 @@ const Tracker = ({ embedded = false }) => {
                   </div>
                 </div>
 
-                {/* File Upload Section */}
-                <div className="mb-3 md:col-span-3">
+                <div className="md:col-span-2">
                   <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wide mb-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
                       <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
@@ -1653,8 +1951,8 @@ const Tracker = ({ embedded = false }) => {
                     Project Files
                   </label>
                   <div
-                    onClick={() => !isUploading && document.getElementById('modal-file-upload').click()}
-                    className={`relative border-2 border-dashed rounded-lg px-3 py-3 text-center transition-all ${!isUploading ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'} group ${
+                    onClick={() => !isUploading && sessionReady && document.getElementById('modal-file-upload').click()}
+                    className={`relative border-2 border-dashed rounded-xl px-4 py-6 text-center transition-all overflow-hidden ${!isUploading && sessionReady ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'} group ${
                       fileError 
                         ? 'border-red-300 bg-red-50/30 hover:border-red-400' 
                         : 'border-slate-300 hover:border-blue-400 hover:bg-blue-50/50'
@@ -1689,9 +1987,9 @@ const Tracker = ({ embedded = false }) => {
                           </svg>
                         </div>
                         <div>
-                          <p className="text-xs font-semibold text-slate-700">
+                          <p className="text-sm font-semibold text-slate-700 break-all px-4">
                             {file ? (
-                              <span className="text-blue-600">{file.name}</span>
+                              <span className="text-blue-700">{file.name}</span>
                             ) : (
                               <>Click to upload <span className="text-blue-600">or drag and drop</span></>
                             )}
@@ -1980,19 +2278,25 @@ const Tracker = ({ embedded = false }) => {
                     </p>
                   )}
                 </div>
+                  </div>
 
-                {/* Modal Actions */}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <div className="shrink-0 px-6 lg:px-8 py-4 bg-white border-t border-slate-200 flex items-center justify-end gap-3">
+                  {!sessionMustFinish && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      resetModalForm();
-                    }}
+                    onClick={tryCloseTrackerModal}
                     className="px-6 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-sm rounded-lg transition-all duration-200"
                   >
                     Cancel
                   </button>
+                  )}
+                  {sessionMustFinish && (
+                    <p className="text-sm text-slate-600 mr-auto">
+                      {isClockedIn
+                        ? "These hours stay on this file. Enter all production done in this clock, Submit, then clock in again for the next file."
+                        : "Submit the tracker. This screen cannot be closed until it is saved."}
+                    </p>
+                  )}
                   
                   {/* Submit button - Show when: no file uploaded OR validation requirements met */}
                   {(!file || (
@@ -2004,9 +2308,9 @@ const Tracker = ({ embedded = false }) => {
                   )) && (
                     <button
                       type="submit"
-                      disabled={submitting || isUploading}
+                      disabled={submitting || isUploading || !canSubmitTracker}
                       className="px-8 py-3 font-bold text-sm rounded-lg shadow-lg transition-all duration-200 flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Submit tracker entry"
+                      title={!sessionReady ? "Clock in first" : !hasProduction || !hasFile ? "Add production and file first" : clockExempt ? "Save tracker" : "Clock out and save"}
                     >
                       {submitting ? (
                         <>
@@ -2021,17 +2325,25 @@ const Tracker = ({ embedded = false }) => {
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                           </svg>
-                          Submit Entry
+                          {clockExempt ? "Submit" : "Submit & clock out"}
                         </>
                       )}
                     </button>
                   )}
                 </div>
               </form>
+                <aside className="min-h-[50vh] lg:min-h-0 lg:h-full border-t lg:border-t-0 lg:border-l border-slate-200 bg-[#f7f5f0] overflow-hidden">
+                  <TaskSopViewer taskId={selectedTask} userId={user?.user_id} className="h-full" />
+                </aside>
               </div>
             </div>
           </div>
         )}
+
+        <SopNoticeModal
+          notice={sopNotice}
+          onAck={handleAckSopNotice}
+        />
 
         {/* Delete confirmation modal */}
         {deleteConfirm && (

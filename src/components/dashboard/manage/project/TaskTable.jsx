@@ -5,13 +5,19 @@ import { toast } from 'react-hot-toast';
 import DeleteTaskModal from './DeleteTaskModal';
 import { showApiError } from '../../../../utils/errorMessages';
 import { formatQaTargetSummary } from './qaTargetFields';
+import { useAuth } from '../../../../context/AuthContext';
+import { isSopCheckerRole } from '../../../../utils/roles';
+import api from '../../../../services/api';
 
 const ROW_HEIGHT = 40;
 const VISIBLE_ROWS = 12;
 const COMPACT_VISIBLE_ROWS = 6;
 
 const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated, onTaskCountChange, refresh, compact = false, fillAvailable = false }) => {
+  const { user } = useAuth();
+  const canOpenSop = isSopCheckerRole(user?.role_id ?? user?.user_role_id, user?.role_name || user?.user_role);
   const [tasks, setTasks] = useState([]);
+  const [pendingSopIds, setPendingSopIds] = useState(() => new Set());
   const [deleteModal, setDeleteModal] = useState({ open: false, task: null });
   const [togglingId, setTogglingId] = useState(null);
   const tableBodyRef = useRef(null);
@@ -31,7 +37,19 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
         setTasks([]);
         onTaskCountChange?.(project.id, 0);
       });
-  }, [project?.id, typeof refresh === 'undefined' ? null : refresh, onTaskCountChange]);
+    if (canOpenSop && user?.user_id) {
+      api
+        .post("/task_sop/pending", {
+          logged_in_user_id: user.user_id,
+          project_id: project.id,
+        })
+        .then((res) => {
+          const rows = res.data?.data?.pending || [];
+          setPendingSopIds(new Set(rows.map((row) => String(row.task_id))));
+        })
+        .catch(() => setPendingSopIds(new Set()));
+    }
+  }, [project?.id, typeof refresh === 'undefined' ? null : refresh, onTaskCountChange, canOpenSop, user?.user_id]);
 
   const handleToggleStatus = async (task) => {
     if (readOnly || togglingId) return;
@@ -79,6 +97,15 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
         />
       )}
 
+      {canOpenSop && pendingSopIds.size > 0 && (
+        <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left">
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Draft SOP waiting for approval</p>
+          <p className="text-xs text-amber-900 mt-0.5">
+            {pendingSopIds.size} task{pendingSopIds.size === 1 ? "" : "s"} on this project {pendingSopIds.size === 1 ? "has" : "have"} a
+            draft SOP. Open the task and click Approve SOP.
+          </p>
+        </div>
+      )}
       <div className={`rounded-lg overflow-hidden border border-slate-200 ${compact ? '' : 'shadow-sm'}`}>
         <div
           className="overflow-x-auto"
@@ -138,6 +165,7 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                   const qaTarget = formatQaTargetSummary(t);
                   const taskId = t.id || t.task_id;
                   const isActive = Number(t.is_active ?? 1) === 1;
+                  const hasDraftSop = pendingSopIds.has(String(taskId));
                   const cellPad = compact ? 'py-2 px-3' : 'py-4 px-4';
                   const qaTone =
                     qaTarget.mode === 'object_range'
@@ -160,7 +188,14 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                             </svg>
                           </div>
                           )}
-                          <span className="text-slate-800 font-medium whitespace-normal break-words">{taskName}</span>
+                          <div className="min-w-0">
+                            <span className="text-slate-800 font-medium whitespace-normal break-words">{taskName}</span>
+                            {hasDraftSop && (
+                              <span className="mt-1 inline-flex items-center rounded-full bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                                Waiting for approval
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className={`${cellPad} align-middle`}>
@@ -223,16 +258,17 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                         )}
                       </td>
                       <td className={`${cellPad} text-center align-middle`}>
-                        {!readOnly && (
+                        {(!readOnly || canOpenSop) && (
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => onEditTask && onEditTask(project.id, taskId, t)}
                               className={`text-blue-600 hover:bg-blue-100 rounded-md transition-all ${compact ? 'p-1' : 'p-2 bg-blue-100 hover:bg-blue-600 hover:text-white'}`}
-                              title="Edit Task"
-                              aria-label="Edit Task"
+                              title={readOnly ? "Approve / edit Task SOP" : "Edit Task"}
+                              aria-label={readOnly ? "Approve Task SOP" : "Edit Task"}
                             >
                               <Edit className="w-4 h-4" />
                             </button>
+                            {!readOnly && (
                             <button
                               onClick={() => setDeleteModal({ open: true, task: t })}
                               className={`text-red-600 hover:bg-red-100 rounded-md transition-all ${compact ? 'p-1' : 'p-2 bg-red-100 hover:bg-red-600 hover:text-white'}`}
@@ -241,6 +277,7 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
+                            )}
                           </div>
                         )}
                       </td>

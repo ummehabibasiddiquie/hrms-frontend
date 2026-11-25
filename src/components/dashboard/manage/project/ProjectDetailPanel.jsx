@@ -235,6 +235,7 @@ const ProjectDetailPanel = ({
           onClose={() => setEditTaskModal({ open: false, task: null })}
           task={editTaskModal.task}
           projectId={project.id}
+          sopOnly={Boolean(readOnly)}
           onTaskUpdated={async (projectId, taskId, taskPayload) => {
             const ok = onUpdateTask
               ? await onUpdateTask(projectId, taskId, taskPayload)

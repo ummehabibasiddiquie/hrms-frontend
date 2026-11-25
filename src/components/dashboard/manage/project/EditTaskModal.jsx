@@ -8,6 +8,7 @@ import MultiSelectWithCheckbox from '../../../common/MultiSelectWithCheckbox';
 import * as XLSX from 'xlsx';
 import SearchableSelect from '../../../common/SearchableSelect';
 import QaTargetFieldsEditor from './QaTargetFieldsEditor';
+import TaskSopEditor from './TaskSopEditor';
 import { emptyQaTargetFields, parseQaTargetFieldsFromTask, serializeQaTargetPayload } from './qaTargetFields';
 
 const EditTaskModal = ({
@@ -15,7 +16,8 @@ const EditTaskModal = ({
   onClose,
   task,
   projectId,
-  onTaskUpdated
+  onTaskUpdated,
+  sopOnly = false,
 }) => {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
@@ -409,6 +411,29 @@ const EditTaskModal = ({
 
   if (!open) return null;
 
+  if (sopOnly) {
+    return (
+      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="p-4 bg-blue-800 text-white flex justify-between items-center shrink-0">
+            <h2 className="text-lg font-bold text-left">Task SOP</h2>
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-white/10 rounded-full transition-colors"
+              title="Close"
+              aria-label="Close"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white">
+            <TaskSopEditor taskId={task?.task_id || task?.id} userId={user?.user_id} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in-up">
@@ -553,6 +578,8 @@ const EditTaskModal = ({
                 excelColumnHeaders={excelColumnHeaders}
                 disabled={isSubmitting}
               />
+
+              <TaskSopEditor taskId={task?.task_id || task?.id} userId={user?.user_id} />
 
               {/* Important Columns Dropdown - Populated from Excel */}
               <div className="md:col-span-2">

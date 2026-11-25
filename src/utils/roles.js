@@ -21,6 +21,24 @@ export function isOperationsRole(roleId, roleName) {
   return id === ROLE_OPERATIONS || normRoleName(roleName) === "operations";
 }
 
+/** Can upload/approve Task SOP drafts. */
+export function isSopCheckerRole(roleId, roleName) {
+  const id = Number(roleId);
+  const n = normRoleName(roleName);
+  return (
+    id === ROLE_SUPER_ADMIN ||
+    id === ROLE_ADMIN ||
+    id === ROLE_PROJECT_MANAGER ||
+    id === ROLE_ASSISTANT_MANAGER ||
+    id === ROLE_QA ||
+    n === "admin" ||
+    n === "super admin" ||
+    n === "project manager" ||
+    n === "assistant manager" ||
+    n === "qa"
+  );
+}
+
 /** Project Manager menus and data scope — includes Operations. Not the Add-User PM dropdown. */
 export function isProjectManagerLike(roleId, roleName) {
   const id = Number(roleId);

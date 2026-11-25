@@ -258,6 +258,7 @@ const Header = ({
             { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
             { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
             { view: "AGENT_LIST", label: "Agent Files", icon: Users },
+            { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
           ];
         }
         if (roleId === 3 || roleId === 8) {
@@ -299,6 +300,7 @@ const Header = ({
         { view: "MY_ROSTER", label: "My Roster", icon: CalendarDays },
         { view: "TRACKER_REPORT", label: "Tracker", icon: FileText },
         { view: "AGENT_LIST", label: "Agent Files", icon: Users },
+        { view: ViewState.ADMIN_PANEL, label: "Manage", icon: Settings },
       ];
     }
     if (role.includes('TEAM LEADER') || role.includes('TEAM_LEADER') || roleId === 7) {
@@ -366,13 +368,30 @@ const Header = ({
       }
     }
     if (!items.length) return items;
+    const moveAiLast = (list) => {
+      const ai = list.filter((i) => i.view === "AI_EVALUATION");
+      const rest = list.filter((i) => i.view !== "AI_EVALUATION");
+      return [...rest, ...ai];
+    };
     const roleId = Number(currentUser?.role_id);
+    const roleName = String(
+      currentUser?.role_name || currentUser?.role || currentUser?.user_role || ""
+    ).toLowerCase();
+    const isAssistantManager =
+      roleId === 4 ||
+      roleName === "assistant manager" ||
+      (roleName.includes("assistant") && !roleName.includes("team leader")) ||
+      (roleName.includes("asst") && !roleName.includes("team leader"));
     // Admin, Super Admin and Project Manager manage SOPs from Manage; everyone else views them here.
-    if (roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8) return items;
+    if (roleId === 1 || roleId === 2 || roleId === 3 || roleId === 8) return moveAiLast(items);
     const sops = { view: "SOPS", label: "SOPs", icon: BookOpen };
-    // Agents, QA and Team Leaders get a view-only Projects tab (project details, files, SOP links, tasks)
-    if (roleId === 4) return [...items, sops];
-    return [...items, { view: "MY_PROJECTS", label: "Projects", icon: FolderKanban }, sops];
+    const isFieldAgent =
+      isAgent ||
+      roleId === 6 ||
+      (roleName.includes("agent") && !roleName.includes("qa"));
+    // AM has Manage → Projects & Targets. Agents pick projects in Tracker; they do not need this tab.
+    if (isAssistantManager || isFieldAgent) return moveAiLast([...items, sops]);
+    return moveAiLast([...items, { view: "MY_PROJECTS", label: "Projects", icon: FolderKanban }, sops]);
   })();
   // DEBUG: Log navItems and currentUser for troubleshooting tab visibility
 

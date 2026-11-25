@@ -109,7 +109,7 @@ const DashboardPage = ({
   const isProjectManager = isProjectManagerLike(roleId, roleText);
   const isOperations = isOperationsRole(roleId, roleText);
   const canViewTrackerReport = isQA || canViewAsAm || isProjectManager;
-  const canSeeManageProjects = !isOperations && (isAssistantManager || canManageProjects);
+  const canSeeManageProjects = !isOperations && (isAssistantManager || isQA || canManageProjects);
   const canSeeManageCategoryAndPermissions =
     !isOperations && (isSuperAdmin || isAdmin || isProjectManager || isAssistantManager);
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'overview');
@@ -124,7 +124,7 @@ const DashboardPage = ({
   const canManageReportEmails = isSuperAdmin;
   // SOP editors use Manage > SOPs; everyone else views SOPs from the main menu.
   const canManageSops = isSuperAdmin || isAdmin || isProjectManager;
-  const canAccessManage = canManageUsers || canManageProjects || isSuperAdmin || canAccessRoster;
+  const canAccessManage = canManageUsers || canManageProjects || isSuperAdmin || canAccessRoster || isQA;
   const canViewIncentivesTab = isAdmin || userRole === 'FINANCE_HR' || userRole === 'PROJECT_MANAGER' || isSuperAdmin;
   const canViewAdherence = isAdmin || userRole === 'PROJECT_MANAGER' || isQA || isSuperAdmin;
 
@@ -155,7 +155,8 @@ const DashboardPage = ({
     if (activeTab !== 'manage') return;
     const visibleTabs = [
       ...(canManageUsers || isSuperAdmin || isAdmin || isProjectManager ? ['users'] : []),
-      ...(canSeeManageProjects ? ['projects', 'afd'] : []),
+      ...(canSeeManageProjects ? ['projects'] : []),
+      ...(!isOperations && (isAssistantManager || canManageProjects) ? ['afd'] : []),
       ...(canSeeManageCategoryAndPermissions ? ['category'] : []),
       ...(canManageUserPermissions ? ['permissions'] : []),
       ...(canAccessRoster ? ['roster'] : []),
@@ -164,7 +165,7 @@ const DashboardPage = ({
     if (!visibleTabs.includes(adminActiveTab) && visibleTabs.length > 0) {
       setManageSubTab(visibleTabs[0]);
     }
-  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, canManageProjects, canSeeManageProjects, canSeeManageCategoryAndPermissions, canManageUserPermissions, canAccessRoster, canManageReportEmails, canManageSops, setManageSubTab]);
+  }, [activeTab, adminActiveTab, canManageUsers, isSuperAdmin, isAdmin, isAssistantManager, isProjectManager, isQA, canManageProjects, canSeeManageProjects, canSeeManageCategoryAndPermissions, canManageUserPermissions, canAccessRoster, canManageReportEmails, canManageSops, setManageSubTab]);
 
   useEffect(() => {
     if (activeTab === 'sops' && canManageSops) {
@@ -329,7 +330,7 @@ const DashboardPage = ({
       loadUsers();
     }
     // Load projects for Assistant Manager when switching to projects tab
-    if (activeTab === 'manage' && adminActiveTab === 'projects' && (isAssistantManager || canManageProjects)) {
+    if (activeTab === 'manage' && adminActiveTab === 'projects' && (isAssistantManager || isQA || canManageProjects)) {
       loadProjects();
     }
   }, [activeTab, adminActiveTab, canManageUsers, loadUsers, isAssistantManager, canManageProjects, loadProjects]);
@@ -634,7 +635,7 @@ const DashboardPage = ({
         </div>
       )}
 
-      {activeTab === 'my_projects' && (isAgent || isQA || isTeamLeader) && <MyProjects />}
+      {activeTab === 'my_projects' && (isQA || isTeamLeader) && <MyProjects />}
 
       {activeTab === 'sops' && !canManageSops && (
         <div className="max-w-7xl mx-auto mt-2">

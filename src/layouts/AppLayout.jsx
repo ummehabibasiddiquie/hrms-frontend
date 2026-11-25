@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/header/Header";
+import ClockFileReminder from "../components/AgentDashboard/ClockFileReminder";
 import { useAuth } from "../context/AuthContext";
 import { ROUTES } from "../routes/paths";
 
@@ -16,7 +17,10 @@ const AppLayout = ({ children }) => {
   return (
     <>
       <Header currentUser={currentUser} handleLogout={handleLogout} />
-      <main className="p-6 bg-slate-50">{children}</main>
+      <main className="p-6 bg-slate-50">
+        <ClockFileReminder />
+        {children}
+      </main>
     </>
   );
 };
