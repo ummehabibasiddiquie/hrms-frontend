@@ -244,7 +244,7 @@ const DashboardPage = ({
     } finally {
       setLoadingManagedProjects(false);
     }
-  }, [currentUser]);
+  }, [currentUser?.user_id]);
 
   // Load users for Manage → Users tab from backend
   // Fallback no-op for handleResolveRequest to prevent ReferenceError
@@ -261,16 +261,18 @@ const DashboardPage = ({
         setError(getFriendlyErrorMessage('User session invalid. Please log in again.'));
         return;
       }
-      if (!dropdowns.designations || dropdowns.designations.length === 0) {
-        await loadDropdowns();
+      let designationList = dropdowns.designations;
+      if (!designationList?.length) {
+        const data = await loadDropdowns();
+        designationList = data?.designations || designationList || [];
       }
       const res = await fetchUsersList(userId, device_id, device_type);
       if (res.status === 200 || res.status === '200') {
         const usersArray = Array.isArray(res.data) ? res.data : [];
         const formatted = usersArray.map(u => {
           let designationName = u.designation || u.designation_name || '';
-          if (!designationName && u.designation_id && dropdowns.designations) {
-            const designationObj = dropdowns.designations.find(
+          if (!designationName && u.designation_id && designationList?.length) {
+            const designationObj = designationList.find(
               d => d.designation_id === u.designation_id || d.id === u.designation_id
             );
             if (designationObj) {
@@ -322,7 +324,7 @@ const DashboardPage = ({
     } finally {
       setLoadingManagedUsers(false);
     }
-  }, [currentUser, device_id, device_type, dropdowns.designations, loadDropdowns]);
+  }, [currentUser?.user_id, currentUser?.id, device_id, device_type, loadDropdowns]);
 
   useEffect(() => {
     // Load users ONLY when on the Manage tab AND User Management sub-tab is active AND user has permission
