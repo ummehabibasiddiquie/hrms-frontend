@@ -482,6 +482,12 @@ const QATrackerReport = () => {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
+  const formatWorkedHours = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    const num = Number(value);
+    return Number.isNaN(num) ? '—' : String(num);
+  };
+
   // Custom Dropdown Component for Edit Modal (single select)
   const CustomDropdown = ({ options, value, onChange, placeholder, show, onClose, disabled, valueKey, labelKey }) => {
     if (!show || disabled) return null;
@@ -1414,6 +1420,9 @@ const QATrackerReport = () => {
           'Shift': shiftDisplay,
           'Per Hour Target': tracker.tenure_target || 0,
           'Production': tracker.production || 0,
+          'Worked Hours': tracker.worked_hours != null && tracker.worked_hours !== ''
+            ? Number(tracker.worked_hours)
+            : '',
           'Billable Hours': tracker.billable_hours !== null && tracker.billable_hours !== undefined
             ? Number(tracker.billable_hours).toFixed(2)
             : "0.00",
@@ -1432,6 +1441,7 @@ const QATrackerReport = () => {
         'Shift': '',
         'Per Hour Target': '',
         'Production': Number(exportTotals.production || 0).toFixed(2),
+        'Worked Hours': '',
         'Billable Hours': Number(exportTotals.billableHours || 0).toFixed(2),
         'Notes': '',
         'Has File': ''
@@ -1670,12 +1680,13 @@ const QATrackerReport = () => {
                   <col style={{ width: isQAAgent ? '10%' : '9%' }}/>
                   <col style={{ width: isQAAgent ? '10%' : '9%' }}/>
                   <col style={{ width: isQAAgent ? '8%' : '7%' }}/>
-                  <col style={{ width: isQAAgent ? '9%' : '8%' }}/>
-                  <col style={{ width: isQAAgent ? '9%' : '8%' }}/>
-                  <col style={{ width: isQAAgent ? '16%' : '14%' }}/>
-                  <col style={{ width: isQAAgent ? '10%' : '8%' }}/>
                   <col style={{ width: isQAAgent ? '8%' : '7%' }}/>
-                  {canMutateTracker && <col style={{ width: '13%' }}/>}
+                  <col style={{ width: isQAAgent ? '8%' : '7%' }}/>
+                  <col style={{ width: isQAAgent ? '8%' : '7%' }}/>
+                  <col style={{ width: isQAAgent ? '14%' : '12%' }}/>
+                  <col style={{ width: isQAAgent ? '8%' : '7%' }}/>
+                  <col style={{ width: isQAAgent ? '8%' : '7%' }}/>
+                  {canMutateTracker && <col style={{ width: '12%' }}/>}
                 </colgroup>
                 <thead className="bg-gradient-to-r from-blue-600 to-blue-700 sticky top-0 z-10">
                   <tr>
@@ -1686,6 +1697,7 @@ const QATrackerReport = () => {
                       { key: "task", label: "Task" },
                       { key: "tenure_target", label: "Per Hour Target" },
                       { key: "production", label: "Production" },
+                      { key: "worked_hours", label: "Worked Hours" },
                       { key: "billable_hours", label: "Billable Hours" },
                       { key: "notes", label: "Notes" },
                     ].map((column) => {
@@ -1741,7 +1753,7 @@ const QATrackerReport = () => {
                 <tbody className="divide-y divide-slate-200">
                   {loading ? (
                     <tr>
-                      <td colSpan={isQAAgent ? "10" : "11"} className="px-5 py-16 text-center">
+                      <td colSpan={canMutateTracker ? "12" : "11"} className="px-5 py-16 text-center">
                         <div className="flex flex-col items-center justify-center gap-4">
                           <RefreshCw className="w-10 h-10 text-blue-600 animate-spin" />
                           <p className="text-slate-600 font-medium text-base">Loading tracker data...</p>
@@ -1750,7 +1762,7 @@ const QATrackerReport = () => {
                     </tr>
                   ) : trackers.length === 0 ? (
                     <tr>
-                      <td colSpan={isQAAgent ? "10" : "11"} className="px-5 py-16 text-center">
+                      <td colSpan={canMutateTracker ? "12" : "11"} className="px-5 py-16 text-center">
                         <div className="flex flex-col items-center justify-center gap-4">
                           <svg className="w-16 h-16 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1809,6 +1821,9 @@ const QATrackerReport = () => {
                         </td>
                         <td className="px-5 py-3 align-middle font-bold text-green-700 whitespace-nowrap">
                           {formatDecimal(tracker.production)}
+                        </td>
+                        <td className="px-5 py-3 align-middle font-semibold text-slate-800 whitespace-nowrap">
+                          {formatWorkedHours(tracker.worked_hours)}
                         </td>
                         <td className="px-5 py-3 align-middle font-bold text-purple-700 whitespace-nowrap">
                           {formatDecimal(tracker.billable_hours)}
