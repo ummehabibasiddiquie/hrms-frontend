@@ -5,9 +5,10 @@ import config from "../../config/environment";
 const HIDE_KEY = "tfs_hide_api_target_banner";
 
 function shouldShowTargets() {
-  if (import.meta.env.VITE_SHOW_API_TARGETS === "true") return true;
-  const env = String(config.appEnv || "").toLowerCase();
-  return env === "test" || env === "development" || env === "preview" || env === "staging";
+  // Set VITE_SHOW_API_TARGETS=false on Vercel when you remove this for testers.
+  if (import.meta.env.VITE_SHOW_API_TARGETS === "false") return false;
+  // Temporary: always show so we can verify HRMS/QC URLs on the deployed test site.
+  return true;
 }
 
 const ApiTargetBanner = () => {
