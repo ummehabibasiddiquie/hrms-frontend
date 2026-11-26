@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback, useRef, useLayoutEffe
 import { Lock, FolderKanban, Search, RotateCcw } from 'lucide-react';
 import { useAuth } from "../../../../context/AuthContext";
 import { useProjectManagement } from "../../../../hooks/useProjectManagement";
+import { isSopCheckerRole } from "../../../../utils/roles";
 
 
 import AddProjectForm from './AddProjectForm';
@@ -43,6 +44,10 @@ const ProjectsManagement = ({
 }) => {
   const { canManageProjects, isSuperAdmin, user } = useAuth();
   const isAdmin = user?.role_name === 'admin';
+  const canManageTaskSop = isSopCheckerRole(
+    user?.role_id ?? user?.user_role_id,
+    user?.role_name || user?.user_role
+  );
 
   const {
     dropdowns,
@@ -91,8 +96,8 @@ const ProjectsManagement = ({
     closeDeleteModal,
   } = useProjectManagement(projects, onUpdateProjects, loadProjects, user?.user_id);
 
-  // Only show if user has permission to edit projects
-  if (!canManageProjects && !isSuperAdmin && !isAdmin) {
+  // Project CRUD needs manage permission; Task SOP checkers (incl. QA) may still open the list.
+  if (!canManageProjects && !isSuperAdmin && !isAdmin && !canManageTaskSop) {
     return (
       <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-6 rounded-xl border border-yellow-200 shadow-md text-yellow-800">
         <div className="flex items-center gap-3">

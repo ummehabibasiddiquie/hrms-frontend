@@ -581,6 +581,26 @@ const DashboardPage = ({
                   potentialAPMs={potentialAPMs}
                   potentialQAs={potentialQAs}
                 />
+              ) : isQA || isAssistantManager ? (
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-amber-950">
+                    <p className="text-sm font-bold">Task SOP access</p>
+                    <p className="text-xs mt-0.5">
+                      You can open tasks to add, edit draft, discard, or approve Task SOPs.
+                      Project and task fields stay view-only unless you have project manage permission.
+                    </p>
+                  </div>
+                  <ProjectsManagement
+                    projects={managedProjects}
+                    onUpdateProjects={setManagedProjects}
+                    loading={loadingManagedProjects}
+                    loadProjects={loadProjects}
+                    potentialOwners={potentialOwners}
+                    potentialAPMs={potentialAPMs}
+                    potentialQAs={potentialQAs}
+                    readOnly={true}
+                  />
+                </div>
               ) : (
                 <div className="p-12 text-center">
                   <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -589,20 +609,6 @@ const DashboardPage = ({
                   <h3 className="font-bold text-xl mb-2 text-slate-800">View Only Access</h3>
                   <p className="text-slate-600 mb-4">You can view project information but don't have permission to make changes.</p>
                   <p className="text-sm text-slate-500">Contact your administrator if you need edit access.</p>
-                  
-                  {/* Show read-only view */}
-                  <div className="mt-8">
-                    <ProjectsManagement
-                      projects={managedProjects}
-                      onUpdateProjects={setManagedProjects}
-                      loading={loadingManagedProjects}
-                      loadProjects={loadProjects}
-                      potentialOwners={potentialOwners}
-                      potentialAPMs={potentialAPMs}
-                      potentialQAs={potentialQAs}
-                      readOnly={true}
-                    />
-                  </div>
                 </div>
               )
             )}
