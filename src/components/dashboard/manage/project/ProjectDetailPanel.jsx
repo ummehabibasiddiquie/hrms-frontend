@@ -236,6 +236,7 @@ const ProjectDetailPanel = ({
           task={editTaskModal.task}
           projectId={project.id}
           sopOnly={Boolean(readOnly)}
+          onSopChanged={() => setTaskTableRefresh(Date.now())}
           onTaskUpdated={async (projectId, taskId, taskPayload) => {
             const ok = onUpdateTask
               ? await onUpdateTask(projectId, taskId, taskPayload)

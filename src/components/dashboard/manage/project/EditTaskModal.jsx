@@ -17,6 +17,7 @@ const EditTaskModal = ({
   task,
   projectId,
   onTaskUpdated,
+  onSopChanged,
   sopOnly = false,
 }) => {
   const { user } = useAuth();
@@ -427,7 +428,12 @@ const EditTaskModal = ({
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white">
-            <TaskSopEditor taskId={task?.task_id || task?.id} userId={user?.user_id} />
+            <TaskSopEditor
+              taskId={task?.task_id || task?.id}
+              userId={user?.user_id}
+              onSopChanged={onSopChanged}
+              onDone={onClose}
+            />
           </div>
         </div>
       </div>
@@ -579,7 +585,11 @@ const EditTaskModal = ({
                 disabled={isSubmitting}
               />
 
-              <TaskSopEditor taskId={task?.task_id || task?.id} userId={user?.user_id} />
+              <TaskSopEditor
+                taskId={task?.task_id || task?.id}
+                userId={user?.user_id}
+                onSopChanged={onSopChanged}
+              />
 
               {/* Important Columns Dropdown - Populated from Excel */}
               <div className="md:col-span-2">

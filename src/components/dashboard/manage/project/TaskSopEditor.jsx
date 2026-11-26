@@ -11,7 +11,7 @@ const MAX_SOP_FILE_BYTES = MAX_SOP_FILE_MB * 1024 * 1024;
 const SOP_FILE_TOO_LARGE_MSG =
   `SOP Word file is too large. Maximum allowed size is ${MAX_SOP_FILE_MB} MB. Compress or remove large screenshots and try again.`;
 
-export default function TaskSopEditor({ taskId, userId }) {
+export default function TaskSopEditor({ taskId, userId, onSopChanged, onDone }) {
   const [sop, setSop] = useState(null);
   const [canManage, setCanManage] = useState(false);
   const [file, setFile] = useState(null);
@@ -119,6 +119,8 @@ export default function TaskSopEditor({ taskId, userId }) {
       const res = await api.post("/task_sop/save", payload);
       applySop(res.data?.data?.sop);
       toast.success("Saved as draft. Not live until another checker approves.");
+      onSopChanged?.(res.data?.data?.sop);
+      onDone?.();
     } catch (err) {
       const status = Number(err?.response?.status || 0);
       const apiMsg = err?.response?.data?.message || err?.message;
@@ -152,8 +154,10 @@ export default function TaskSopEditor({ taskId, userId }) {
       });
       applySop(res.data?.data?.sop);
       toast.success("SOP approved. Agents now see this version.");
+      onSopChanged?.(res.data?.data?.sop);
+      onDone?.();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err, "Could not approve SOP"));
+      toast.error(getFriendlyErrorMessage(err) || "Could not approve SOP");
     } finally {
       setSaving(false);
     }
@@ -169,8 +173,10 @@ export default function TaskSopEditor({ taskId, userId }) {
       });
       applySop(res.data?.data?.sop);
       toast.success("Draft discarded");
+      onSopChanged?.(res.data?.data?.sop);
+      onDone?.();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err, "Could not discard draft"));
+      toast.error(getFriendlyErrorMessage(err) || "Could not discard draft");
     } finally {
       setSaving(false);
     }
@@ -186,8 +192,10 @@ export default function TaskSopEditor({ taskId, userId }) {
       });
       applySop(null);
       toast.success("Task SOP removed");
+      onSopChanged?.(null);
+      onDone?.();
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err, "Could not remove task SOP"));
+      toast.error(getFriendlyErrorMessage(err) || "Could not remove task SOP");
     } finally {
       setSaving(false);
     }
