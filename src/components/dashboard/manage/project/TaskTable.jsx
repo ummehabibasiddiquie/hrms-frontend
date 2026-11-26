@@ -99,7 +99,7 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
 
       {canOpenSop && pendingSopIds.size > 0 && (
         <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left">
-          <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Draft SOP waiting for approval</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-800">SOP-waiting for approval</p>
           <p className="text-xs text-amber-900 mt-0.5">
             {pendingSopIds.size} task{pendingSopIds.size === 1 ? "" : "s"} on this project {pendingSopIds.size === 1 ? "has" : "have"} a
             draft SOP. Open the task and click Approve SOP.
@@ -192,7 +192,7 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                             <span className="text-slate-800 font-medium whitespace-normal break-words">{taskName}</span>
                             {hasDraftSop && (
                               <span className="mt-1 inline-flex items-center rounded-full bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                                Waiting for approval
+                                SOP-waiting for approval
                               </span>
                             )}
                           </div>
