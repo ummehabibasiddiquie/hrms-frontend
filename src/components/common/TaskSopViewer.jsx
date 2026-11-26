@@ -114,24 +114,45 @@ const SOP_CSS = `
 .task-sop-html .sop-note, .task-sop-html .sop-check { background: #fffbeb; border-color: #fde68a; }
 .task-sop-html .sop-tip { background: #ecfdf5; border-color: #a7f3d0; }
 .task-sop-html .sop-warning, .task-sop-html .sop-important { background: #fff1f2; border-color: #fecdd3; }
-.task-sop-html table {
+.task-sop-html .sop-table-wrap {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin: 0.75rem 0 1rem;
-  font-size: 0.9rem;
-  overflow: hidden;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.75rem 0 1.1rem;
+  border: 1px solid #cbd5e1;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  background: #fff;
+  -webkit-overflow-scrolling: touch;
 }
-.task-sop-html th, .task-sop-html td {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 0.5rem 0.65rem;
+.task-sop-html table,
+.task-sop-html table.sop-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.task-sop-html th,
+.task-sop-html td {
+  border: 1px solid #cbd5e1;
+  padding: 0.45rem 0.6rem;
   text-align: left;
   vertical-align: top;
+  white-space: nowrap;
 }
-.task-sop-html th { background: #eff6ff; font-weight: 650; color: #1e3a8a; }
-.task-sop-html tr:last-child td { border-bottom: 0; }
+.task-sop-html th {
+  background: #dbeafe;
+  font-weight: 700;
+  color: #1e3a8a;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.task-sop-html tbody tr:nth-child(even) td { background: #f8fafc; }
+.task-sop-html tbody tr:hover td { background: #eff6ff; }
+.task-sop-html td p,
+.task-sop-html th p { margin: 0; }
 .task-sop-html figure.sop-shot {
   margin: 0.7rem 0 1.1rem;
   padding: 0.45rem;
@@ -171,9 +192,18 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+/** Wrap bare tables so wide Word tables scroll and keep borders (old drafts too). */
+function prepareSopHtml(html) {
+  if (!html) return "";
+  return String(html).replace(/<table\b[\s\S]*?<\/table>/gi, (table) => {
+    if (/sop-table-wrap/i.test(table)) return table;
+    return `<div class="sop-table-wrap">${table}</div>`;
+  });
+}
+
 export function openSopFullView(sop, { draft = false } = {}) {
   const fileName = draft ? sop?.draft_file_name : sop?.original_file_name;
-  const html = draft ? sop?.draft_html_body : sop?.html_body;
+  const html = prepareSopHtml(draft ? sop?.draft_html_body : sop?.html_body);
   const displayName = String(fileName || "")
     .replace(/\.docx$/i, "")
     .trim();
@@ -191,7 +221,7 @@ export function openSopFullView(sop, { draft = false } = {}) {
     header { position: sticky; top: 0; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid #e2e8f0; padding: 14px 28px; z-index: 1; }
     header p { margin: 0; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: ${draft ? "#b45309" : "#2563eb"}; font-weight: 700; }
     header h1 { margin: 4px 0 0; font-size: 20px; font-family: "Segoe UI", system-ui, sans-serif; font-weight: 700; color: #0f172a; }
-    .wrap { max-width: 820px; margin: 24px auto; background: ${wrapBg}; padding: 32px 40px; border: 1px solid ${wrapBorder}; border-radius: 16px; box-shadow: 0 10px 30px rgba(15,23,42,.06); }
+    .wrap { max-width: min(1100px, 96vw); margin: 24px auto; background: ${wrapBg}; padding: 28px 32px; border: 1px solid ${wrapBorder}; border-radius: 16px; box-shadow: 0 10px 30px rgba(15,23,42,.06); overflow: visible; }
     ${SOP_CSS}
   </style>
 </head>
@@ -332,7 +362,7 @@ export default function TaskSopViewer({ taskId, userId, className = "" }) {
         {!loading && sop && sop.has_approved && (
           <article
             className="task-sop-html mx-auto max-w-[40rem] bg-white shadow-md border border-slate-200 rounded-2xl px-6 py-6"
-            dangerouslySetInnerHTML={{ __html: sop.html_body || "" }}
+            dangerouslySetInnerHTML={{ __html: prepareSopHtml(sop.html_body || "") }}
           />
         )}
         {!loading && sop && sop.has_draft && (
@@ -352,7 +382,7 @@ export default function TaskSopViewer({ taskId, userId, className = "" }) {
             </div>
             <article
               className="task-sop-html bg-amber-50 shadow-md border-2 border-dashed border-amber-400 rounded-2xl px-6 py-6"
-              dangerouslySetInnerHTML={{ __html: sop.draft_html_body || "" }}
+              dangerouslySetInnerHTML={{ __html: prepareSopHtml(sop.draft_html_body || "") }}
             />
           </div>
         )}

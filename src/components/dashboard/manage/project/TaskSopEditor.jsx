@@ -5,6 +5,12 @@ import api from "../../../../services/api";
 import { getFriendlyErrorMessage } from "../../../../utils/errorMessages";
 import { openSopFullView } from "../../../common/TaskSopViewer";
 
+/** Keep in sync with backend task_sop.MAX_SOP_FILE_MB */
+const MAX_SOP_FILE_MB = 10;
+const MAX_SOP_FILE_BYTES = MAX_SOP_FILE_MB * 1024 * 1024;
+const SOP_FILE_TOO_LARGE_MSG =
+  `SOP Word file is too large. Maximum allowed size is ${MAX_SOP_FILE_MB} MB. Compress or remove large screenshots and try again.`;
+
 export default function TaskSopEditor({ taskId, userId }) {
   const [sop, setSop] = useState(null);
   const [canManage, setCanManage] = useState(false);
@@ -47,6 +53,10 @@ export default function TaskSopEditor({ taskId, userId }) {
       toast.error("Only a Word document (.docx) is allowed");
       return;
     }
+    if (Number(next.size || 0) > MAX_SOP_FILE_BYTES) {
+      toast.error(SOP_FILE_TOO_LARGE_MSG);
+      return;
+    }
     setFile(next);
   };
 
@@ -59,6 +69,10 @@ export default function TaskSopEditor({ taskId, userId }) {
   const handleSaveDraft = async () => {
     if (!file && !sop?.has_draft) {
       toast.error("Upload a Word document (.docx) to save as draft");
+      return;
+    }
+    if (file && Number(file.size || 0) > MAX_SOP_FILE_BYTES) {
+      toast.error(SOP_FILE_TOO_LARGE_MSG);
       return;
     }
     setSaving(true);
@@ -79,7 +93,22 @@ export default function TaskSopEditor({ taskId, userId }) {
           : "Saved as draft. Not live until another checker approves."
       );
     } catch (err) {
-      toast.error(getFriendlyErrorMessage(err, "Could not save draft"));
+      const status = Number(err?.response?.status || 0);
+      const raw = String(
+        err?.response?.data?.message || err?.message || ""
+      ).toLowerCase();
+      if (
+        status === 413 ||
+        raw.includes("too large") ||
+        raw.includes("content too large") ||
+        raw.includes("entity too large")
+      ) {
+        toast.error(
+          err?.response?.data?.message || SOP_FILE_TOO_LARGE_MSG
+        );
+      } else {
+        toast.error(getFriendlyErrorMessage(err) || "Could not save draft");
+      }
     } finally {
       setSaving(false);
     }
@@ -149,6 +178,7 @@ export default function TaskSopEditor({ taskId, userId }) {
       <p className="text-xs text-slate-500 mb-2 text-left">
         Upload saves a <strong>draft</strong>. Another Assistant Manager, Project Manager, Admin, Super Admin, or QA
         must approve it here (the person who uploaded cannot). Existing live SOP stays until then.
+        Word file max size: <strong>{MAX_SOP_FILE_MB} MB</strong>.
       </p>
       <div className="text-xs text-slate-600 mb-3 text-left rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 space-y-1">
         <p className="font-semibold text-slate-700">Write the Word file like this:</p>

@@ -105,8 +105,27 @@ export function getFriendlyErrorMessage(error) {
     "";
   if (code && errorMap[code]) return errorMap[code];
 
+  const status = Number(error?.response?.status || 0);
+  if (status === 413) {
+    return (
+      rawFromError(error) ||
+      "Upload is too large. Task SOP Word files must be 10 MB or less."
+    );
+  }
+
   const raw = rawFromError(error);
   if (raw && errorMap[raw]) return errorMap[raw];
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("content too large") ||
+    lower.includes("entity too large") ||
+    lower.includes("request entity too large")
+  ) {
+    return (
+      raw ||
+      "Upload is too large. Task SOP Word files must be 10 MB or less. Compress or remove large screenshots and try again."
+    );
+  }
   if (raw && !AXIOS_JUNK.test(raw)) return raw;
 
   return MSG_GENERIC;
