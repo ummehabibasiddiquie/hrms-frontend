@@ -66,6 +66,34 @@ export default function TaskSopEditor({ taskId, userId }) {
     setChangeNote(next?.draft_change_note || "");
   };
 
+  const uploadDocxToCloudinary = async (docxFile) => {
+    const signRes = await api.post("/task_sop/cloudinary_sign", {
+      logged_in_user_id: userId,
+      task_id: taskId,
+    });
+    const sign = signRes.data?.data || {};
+    if (!sign.upload_url || !sign.signature) {
+      throw new Error(signRes.data?.message || "Could not prepare Cloudinary upload");
+    }
+    const body = new FormData();
+    body.append("file", docxFile);
+    body.append("api_key", sign.api_key);
+    body.append("timestamp", String(sign.timestamp));
+    body.append("signature", sign.signature);
+    body.append("folder", sign.folder);
+    body.append("public_id", sign.public_id);
+    body.append("overwrite", "1");
+    const up = await fetch(sign.upload_url, { method: "POST", body });
+    const upJson = await up.json().catch(() => ({}));
+    if (!up.ok || !upJson.secure_url) {
+      throw new Error(upJson.error?.message || "Cloudinary upload failed");
+    }
+    return {
+      cloudinary_url: upJson.secure_url,
+      file_name: sign.file_name || docxFile.name,
+    };
+  };
+
   const handleSaveDraft = async () => {
     if (!file && !sop?.has_draft) {
       toast.error("Upload a Word document (.docx) to save as draft");
@@ -77,14 +105,18 @@ export default function TaskSopEditor({ taskId, userId }) {
     }
     setSaving(true);
     try {
-      const form = new FormData();
-      form.append("logged_in_user_id", userId);
-      form.append("task_id", taskId);
-      form.append("change_note", changeNote);
-      if (file) form.append("file", file);
-      const res = await api.post("/task_sop/save", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      let payload = {
+        logged_in_user_id: userId,
+        task_id: taskId,
+        change_note: changeNote,
+      };
+      if (file) {
+        // Direct to Cloudinary folder hrms/task_sop (same pattern as other HRMS files).
+        // Avoids Vercel 413 when the Word file is larger than ~4.5 MB.
+        const uploaded = await uploadDocxToCloudinary(file);
+        payload = { ...payload, ...uploaded };
+      }
+      const res = await api.post("/task_sop/save", payload);
       applySop(res.data?.data?.sop);
       const emailed = Number(res.data?.data?.email_count || 0);
       toast.success(
@@ -94,13 +126,8 @@ export default function TaskSopEditor({ taskId, userId }) {
       );
     } catch (err) {
       const status = Number(err?.response?.status || 0);
-      const apiMsg = err?.response?.data?.message;
-      const raw = String(
-        (typeof apiMsg === "string" ? apiMsg : "") ||
-          err?.response?.statusText ||
-          err?.message ||
-          ""
-      ).toLowerCase();
+      const apiMsg = err?.response?.data?.message || err?.message;
+      const raw = String(apiMsg || err?.response?.statusText || "").toLowerCase();
       if (
         status === 413 ||
         raw.includes("too large") ||
@@ -113,7 +140,7 @@ export default function TaskSopEditor({ taskId, userId }) {
             : SOP_FILE_TOO_LARGE_MSG
         );
       } else {
-        toast.error(getFriendlyErrorMessage(err) || "Could not save draft");
+        toast.error(getFriendlyErrorMessage(err) || String(apiMsg || "Could not save draft"));
       }
     } finally {
       setSaving(false);
@@ -182,8 +209,8 @@ export default function TaskSopEditor({ taskId, userId }) {
     <div className="md:col-span-2 mt-1 border border-blue-100 rounded-lg p-3 bg-white">
       <h4 className="text-sm font-bold text-slate-700 mb-2 text-left">Task SOP (Word only)</h4>
       <p className="text-xs text-slate-500 mb-2 text-left">
-        Upload saves a <strong>draft</strong>. Another Assistant Manager, Project Manager, Admin, Super Admin, or QA
-        must approve it here (the person who uploaded cannot). Existing live SOP stays until then.
+        Upload saves a <strong>draft</strong> to Cloudinary (<code>hrms/task_sop</code>) as
+        <code>Task_ProjCode_SOP_date.docx</code>. Another checker must approve it (uploader cannot).
         Word file max size: <strong>{MAX_SOP_FILE_MB} MB</strong>.
       </p>
       <div className="text-xs text-slate-600 mb-3 text-left rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 space-y-1">
