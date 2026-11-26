@@ -3,6 +3,8 @@ import { FolderKanban } from "lucide-react";
 import ProjectDetailPanel from "./ProjectDetailPanel";
 import { useAuth } from "../../../../context/AuthContext";
 import { fetchProjectTasks } from "../../../../services/projectService";
+import { isSopCheckerRole } from "../../../../utils/roles";
+import api from "../../../../services/api";
 
 export default function ProjectManagementPanel({
   projects = [],
@@ -15,8 +17,10 @@ export default function ProjectManagementPanel({
   onStatusChanged,
 }) {
   const { user } = useAuth();
+  const canSeeSop = isSopCheckerRole(user?.role_id ?? user?.user_role_id, user?.role_name || user?.user_role);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [taskCounts, setTaskCounts] = useState({});
+  const [pendingSopCounts, setPendingSopCounts] = useState({});
 
   const loadTaskCounts = useCallback(async () => {
     const userId = user?.user_id || user?.id;
@@ -35,29 +39,55 @@ export default function ProjectManagementPanel({
     }
   }, [user?.user_id, user?.id]);
 
+  const loadPendingSopCounts = useCallback(async () => {
+    const userId = user?.user_id || user?.id;
+    if (!userId || !canSeeSop) {
+      setPendingSopCounts({});
+      return;
+    }
+    try {
+      const res = await api.post("/task_sop/pending", { logged_in_user_id: userId });
+      const rows = res.data?.data?.pending || [];
+      const counts = {};
+      rows.forEach((row) => {
+        const pid = String(row.project_id);
+        counts[pid] = (counts[pid] || 0) + 1;
+      });
+      setPendingSopCounts(counts);
+    } catch {
+      setPendingSopCounts({});
+    }
+  }, [user?.user_id, user?.id, canSeeSop]);
+
   useEffect(() => {
     loadTaskCounts();
-  }, [loadTaskCounts, projects.length]);
+    loadPendingSopCounts();
+  }, [loadTaskCounts, loadPendingSopCounts, projects.length]);
 
   const handleTaskCountChange = useCallback((projectId, count) => {
     setTaskCounts((prev) => ({ ...prev, [String(projectId)]: count }));
   }, []);
 
-  const prepared = useMemo(
-    () =>
-      projects.map((p) => {
-        const id = String(p.id || p.project_id);
-        return {
-          id,
-          project: p,
-          name: p.name || p.project_name || "Untitled",
-          code: p.code || p.project_code || "—",
-          isActive: Number(p.is_active ?? 1) === 1,
-          taskCount: taskCounts[id] ?? 0,
-        };
-      }),
-    [projects, taskCounts]
-  );
+  const prepared = useMemo(() => {
+    const rows = projects.map((p) => {
+      const id = String(p.id || p.project_id);
+      return {
+        id,
+        project: p,
+        name: p.name || p.project_name || "Untitled",
+        code: p.code || p.project_code || "—",
+        isActive: Number(p.is_active ?? 1) === 1,
+        taskCount: taskCounts[id] ?? 0,
+        pendingSopCount: pendingSopCounts[id] ?? 0,
+      };
+    });
+    // Active first, then A–Z within each group
+    rows.sort((a, b) => {
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
+    return rows;
+  }, [projects, taskCounts, pendingSopCounts]);
   useEffect(() => {
     if (!prepared.length) {
       // Keep prior selection while list is empty (e.g. brief reload) so we
@@ -126,6 +156,11 @@ export default function ProjectManagementPanel({
               <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold whitespace-nowrap">
                 {selected.taskCount} tasks
               </span>
+              {canSeeSop && selected.pendingSopCount > 0 && (
+                <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 text-xs font-semibold whitespace-nowrap">
+                  {selected.pendingSopCount} SOP pending
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -180,6 +215,11 @@ export default function ProjectManagementPanel({
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-bold tabular-nums">
                           {item.taskCount} {item.taskCount === 1 ? "task" : "tasks"}
                         </span>
+                        {canSeeSop && item.pendingSopCount > 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold tabular-nums">
+                            {item.pendingSopCount} SOP
+                          </span>
+                        )}
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold ${
                             item.isActive
@@ -221,10 +261,12 @@ export default function ProjectManagementPanel({
                 return result;
               }}
               onTaskCountChange={handleTaskCountChange}
+              onSopPendingChange={loadPendingSopCounts}
               openEditModal={openEditModal}
               openDeleteModal={openDeleteModal}
               onStatusChanged={onStatusChanged}
-            />          )}
+            />
+          )}
         </div>
       </div>
     </div>

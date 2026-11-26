@@ -18,6 +18,7 @@ const ProjectDetailPanel = ({
   openDeleteModal,
   onStatusChanged,
   onTaskCountChange,
+  onSopPendingChange,
 }) => {
   const { user } = useAuth();
   const [editTaskModal, setEditTaskModal] = useState({ open: false, task: null });
@@ -236,7 +237,10 @@ const ProjectDetailPanel = ({
           task={editTaskModal.task}
           projectId={project.id}
           sopOnly={Boolean(readOnly)}
-          onSopChanged={() => setTaskTableRefresh(Date.now())}
+          onSopChanged={() => {
+            setTaskTableRefresh(Date.now());
+            onSopPendingChange?.();
+          }}
           onTaskUpdated={async (projectId, taskId, taskPayload) => {
             const ok = onUpdateTask
               ? await onUpdateTask(projectId, taskId, taskPayload)

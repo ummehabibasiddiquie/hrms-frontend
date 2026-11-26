@@ -229,9 +229,16 @@ const ProjectsManagement = ({
       list = list.filter((p) => Number(p.is_active ?? 1) !== 1);
     }
 
-    return list.sort((a, b) =>
-      (a.name || a.project_name || "").localeCompare(b.name || b.project_name || "", undefined, { sensitivity: "base" })
-    );
+    return list.sort((a, b) => {
+      const aActive = Number(a.is_active ?? 1) === 1 ? 0 : 1;
+      const bActive = Number(b.is_active ?? 1) === 1 ? 0 : 1;
+      if (aActive !== bActive) return aActive - bActive;
+      return (a.name || a.project_name || "").localeCompare(
+        b.name || b.project_name || "",
+        undefined,
+        { sensitivity: "base" }
+      );
+    });
   }, [projects, projectNameSearch, statusFilter]);
 
   const activeCount = useMemo(

@@ -236,10 +236,6 @@ export default function TaskSopEditor({ taskId, userId, onSopChanged, onDone }) 
           {sop?.has_draft && !sop?.has_approved && (
             <div className="rounded-lg border-2 border-amber-400 bg-amber-50 px-3 py-2 text-left">
               <p className="text-xs font-bold uppercase tracking-wide text-amber-800">SOP-waiting for approval</p>
-              <p className="text-xs text-amber-900 mt-1">
-                This first SOP is a draft. Agents can see it in yellow, but it is not live until someone
-                with Assistant Manager, Project Manager, Admin, Super Admin, or QA clicks Approve SOP.
-              </p>
             </div>
           )}
           {sop?.has_approved && (
