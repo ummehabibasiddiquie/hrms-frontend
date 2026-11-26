@@ -17,7 +17,7 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
   const { user } = useAuth();
   const canOpenSop = isSopCheckerRole(user?.role_id ?? user?.user_role_id, user?.role_name || user?.user_role);
   const [tasks, setTasks] = useState([]);
-  const [pendingSopIds, setPendingSopIds] = useState(() => new Set());
+  const [sopStatusByTaskId, setSopStatusByTaskId] = useState(() => ({}));
   const [deleteModal, setDeleteModal] = useState({ open: false, task: null });
   const [togglingId, setTogglingId] = useState(null);
   const tableBodyRef = useRef(null);
@@ -37,19 +37,50 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
         setTasks([]);
         onTaskCountChange?.(project.id, 0);
       });
-    if (canOpenSop && user?.user_id) {
+    if (user?.user_id) {
+      const userId = user.user_id;
+      const applyStatuses = (rows) => {
+        const map = {};
+        rows.forEach((row) => {
+          const id = String(row.task_id);
+          map[id] = {
+            hasApproved: Boolean(row.has_approved ?? row.hasApproved),
+            hasDraft: Boolean(row.has_draft ?? row.hasDraft ?? true),
+          };
+        });
+        setSopStatusByTaskId(map);
+      };
       api
-        .post("/task_sop/pending", {
-          logged_in_user_id: user.user_id,
+        .post("/task_sop/project_status", {
+          logged_in_user_id: userId,
           project_id: project.id,
         })
         .then((res) => {
-          const rows = res.data?.data?.pending || [];
-          setPendingSopIds(new Set(rows.map((row) => String(row.task_id))));
+          applyStatuses(res.data?.data?.statuses || []);
         })
-        .catch(() => setPendingSopIds(new Set()));
+        .catch(() => {
+          // Fallback if project_status is not deployed yet (old API process)
+          if (!canOpenSop) {
+            setSopStatusByTaskId({});
+            return;
+          }
+          api
+            .post("/task_sop/pending", {
+              logged_in_user_id: userId,
+              project_id: project.id,
+            })
+            .then((res) => {
+              const rows = (res.data?.data?.pending || []).map((row) => ({
+                task_id: row.task_id,
+                has_approved: false,
+                has_draft: true,
+              }));
+              applyStatuses(rows);
+            })
+            .catch(() => setSopStatusByTaskId({}));
+        });
     }
-  }, [project?.id, typeof refresh === 'undefined' ? null : refresh, onTaskCountChange, canOpenSop, user?.user_id]);
+  }, [project?.id, typeof refresh === 'undefined' ? null : refresh, onTaskCountChange, user?.user_id, canOpenSop]);
 
   const handleToggleStatus = async (task) => {
     if (readOnly || togglingId) return;
@@ -97,15 +128,18 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
         />
       )}
 
-      {canOpenSop && pendingSopIds.size > 0 && (
-        <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left">
-          <p className="text-xs font-bold uppercase tracking-wide text-amber-800">SOP-waiting for approval</p>
-          <p className="text-xs text-amber-900 mt-0.5">
-            {pendingSopIds.size} task{pendingSopIds.size === 1 ? "" : "s"} on this project {pendingSopIds.size === 1 ? "has" : "have"} a
-            draft SOP. Open the task and click Approve SOP.
-          </p>
-        </div>
-      )}
+      {(() => {
+        const pendingCount = Object.values(sopStatusByTaskId).filter((s) => s.hasDraft).length;
+        if (!canOpenSop || pendingCount === 0) return null;
+        return (
+          <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left">
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-800">SOP-waiting for approval</p>
+            <p className="text-xs text-amber-900 mt-0.5">
+              {pendingCount} task{pendingCount === 1 ? " has" : "s have"} a draft SOP. Open the task and click Approve SOP.
+            </p>
+          </div>
+        );
+      })()}
       <div className={`rounded-lg overflow-hidden border border-slate-200 ${compact ? '' : 'shadow-sm'}`}>
         <div
           className="overflow-x-auto"
@@ -165,7 +199,9 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                   const qaTarget = formatQaTargetSummary(t);
                   const taskId = t.id || t.task_id;
                   const isActive = Number(t.is_active ?? 1) === 1;
-                  const hasDraftSop = pendingSopIds.has(String(taskId));
+                  const sopStatus = sopStatusByTaskId[String(taskId)];
+                  const hasDraftSop = Boolean(sopStatus?.hasDraft);
+                  const hasApprovedSop = Boolean(sopStatus?.hasApproved);
                   const cellPad = compact ? 'py-2 px-3' : 'py-4 px-4';
                   const qaTone =
                     qaTarget.mode === 'object_range'
@@ -190,11 +226,23 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                           )}
                           <div className="min-w-0">
                             <span className="text-slate-800 font-medium whitespace-normal break-words">{taskName}</span>
-                            {hasDraftSop && (
-                              <span className="mt-1 inline-flex items-center rounded-full bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                                SOP-waiting for approval
-                              </span>
-                            )}
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {hasApprovedSop && (
+                                <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                                  SOP added
+                                </span>
+                              )}
+                              {hasDraftSop && (
+                                <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                                  SOP-waiting for approval
+                                </span>
+                              )}
+                              {!hasApprovedSop && !hasDraftSop && (
+                                <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                                  No SOP
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
