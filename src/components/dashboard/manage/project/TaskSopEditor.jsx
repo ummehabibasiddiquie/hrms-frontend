@@ -118,12 +118,7 @@ export default function TaskSopEditor({ taskId, userId }) {
       }
       const res = await api.post("/task_sop/save", payload);
       applySop(res.data?.data?.sop);
-      const emailed = Number(res.data?.data?.email_count || 0);
-      toast.success(
-        emailed > 0
-          ? `Saved as draft. ${emailed} checker${emailed === 1 ? "" : "s"} emailed to approve.`
-          : "Saved as draft. Not live until another checker approves."
-      );
+      toast.success("Saved as draft. Not live until another checker approves.");
     } catch (err) {
       const status = Number(err?.response?.status || 0);
       const apiMsg = err?.response?.data?.message || err?.message;
@@ -156,12 +151,7 @@ export default function TaskSopEditor({ taskId, userId }) {
         task_id: taskId,
       });
       applySop(res.data?.data?.sop);
-      const emailed = Number(res.data?.data?.email_count || 0);
-      toast.success(
-        emailed > 0
-          ? `SOP approved. ${emailed} people emailed.`
-          : "SOP approved. Agents now see this version."
-      );
+      toast.success("SOP approved. Agents now see this version.");
     } catch (err) {
       toast.error(getFriendlyErrorMessage(err, "Could not approve SOP"));
     } finally {
