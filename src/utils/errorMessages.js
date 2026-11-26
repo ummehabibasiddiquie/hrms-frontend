@@ -106,10 +106,15 @@ export function getFriendlyErrorMessage(error) {
   if (code && errorMap[code]) return errorMap[code];
 
   const status = Number(error?.response?.status || 0);
-  if (status === 413) {
+  const statusText = asText(error?.response?.statusText).toLowerCase();
+  if (status === 413 || statusText.includes("too large")) {
+    const raw413 = rawFromError(error);
+    if (raw413 && !/^<!doctype|^<html/i.test(raw413) && !AXIOS_JUNK.test(raw413)) {
+      return raw413;
+    }
     return (
-      rawFromError(error) ||
-      "Upload is too large. Task SOP Word files must be 10 MB or less."
+      "Upload is too large. Task SOP Word files must be 25 MB or less. "
+      + "Compress or remove large screenshots and try again."
     );
   }
 
@@ -122,8 +127,8 @@ export function getFriendlyErrorMessage(error) {
     lower.includes("request entity too large")
   ) {
     return (
-      raw ||
-      "Upload is too large. Task SOP Word files must be 10 MB or less. Compress or remove large screenshots and try again."
+      "Upload is too large. Task SOP Word files must be 25 MB or less. "
+      + "Compress or remove large screenshots and try again."
     );
   }
   if (raw && !AXIOS_JUNK.test(raw)) return raw;

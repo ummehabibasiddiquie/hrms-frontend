@@ -1689,7 +1689,7 @@ const Tracker = ({ embedded = false }) => {
                   </button>
               </div>
 
-              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_44%]">
+              <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2">
                 <form className="min-h-0 h-full overflow-hidden bg-white flex flex-col" onSubmit={handleSubmit}>
                   <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">

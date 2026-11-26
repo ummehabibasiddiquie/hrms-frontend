@@ -6,7 +6,7 @@ import { getFriendlyErrorMessage } from "../../../../utils/errorMessages";
 import { openSopFullView } from "../../../common/TaskSopViewer";
 
 /** Keep in sync with backend task_sop.MAX_SOP_FILE_MB */
-const MAX_SOP_FILE_MB = 10;
+const MAX_SOP_FILE_MB = 25;
 const MAX_SOP_FILE_BYTES = MAX_SOP_FILE_MB * 1024 * 1024;
 const SOP_FILE_TOO_LARGE_MSG =
   `SOP Word file is too large. Maximum allowed size is ${MAX_SOP_FILE_MB} MB. Compress or remove large screenshots and try again.`;
@@ -94,8 +94,12 @@ export default function TaskSopEditor({ taskId, userId }) {
       );
     } catch (err) {
       const status = Number(err?.response?.status || 0);
+      const apiMsg = err?.response?.data?.message;
       const raw = String(
-        err?.response?.data?.message || err?.message || ""
+        (typeof apiMsg === "string" ? apiMsg : "") ||
+          err?.response?.statusText ||
+          err?.message ||
+          ""
       ).toLowerCase();
       if (
         status === 413 ||
@@ -104,7 +108,9 @@ export default function TaskSopEditor({ taskId, userId }) {
         raw.includes("entity too large")
       ) {
         toast.error(
-          err?.response?.data?.message || SOP_FILE_TOO_LARGE_MSG
+          typeof apiMsg === "string" && apiMsg.trim() && !/^<!doctype|^<html/i.test(apiMsg)
+            ? apiMsg
+            : SOP_FILE_TOO_LARGE_MSG
         );
       } else {
         toast.error(getFriendlyErrorMessage(err) || "Could not save draft");
