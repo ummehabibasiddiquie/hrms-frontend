@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { fetchProjectTasks, updateTask } from '../../../../services/projectService';
-import { Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2, FileText } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import DeleteTaskModal from './DeleteTaskModal';
 import { showApiError } from '../../../../utils/errorMessages';
@@ -13,7 +13,18 @@ const ROW_HEIGHT = 40;
 const VISIBLE_ROWS = 12;
 const COMPACT_VISIBLE_ROWS = 6;
 
-const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated, onTaskCountChange, refresh, compact = false, fillAvailable = false }) => {
+const TaskTable = ({
+  project,
+  readOnly,
+  onDeleteTask,
+  onEditTask,
+  onEditSop,
+  onTaskUpdated,
+  onTaskCountChange,
+  refresh,
+  compact = false,
+  fillAvailable = false,
+}) => {
   const { user } = useAuth();
   const canOpenSop = isSopCheckerRole(user?.role_id ?? user?.user_role_id, user?.role_name || user?.user_role);
   const [tasks, setTasks] = useState([]);
@@ -227,16 +238,15 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                           <div className="min-w-0">
                             <span className="text-slate-800 font-medium whitespace-normal break-words">{taskName}</span>
                             <div className="mt-1 flex flex-wrap gap-1">
-                              {hasApprovedSop && (
-                                <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-                                  SOP added
-                                </span>
-                              )}
-                              {hasDraftSop && (
+                              {hasDraftSop ? (
                                 <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
                                   SOP-waiting for approval
                                 </span>
-                              )}
+                              ) : hasApprovedSop ? (
+                                <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                                  SOP added
+                                </span>
+                              ) : null}
                               {!hasApprovedSop && !hasDraftSop && (
                                 <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
                                   No SOP
@@ -308,23 +318,42 @@ const TaskTable = ({ project, readOnly, onDeleteTask, onEditTask, onTaskUpdated,
                       <td className={`${cellPad} text-center align-middle`}>
                         {(!readOnly || canOpenSop) && (
                           <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => onEditTask && onEditTask(project.id, taskId, t)}
-                              className={`text-blue-600 hover:bg-blue-100 rounded-md transition-all ${compact ? 'p-1' : 'p-2 bg-blue-100 hover:bg-blue-600 hover:text-white'}`}
-                              title={readOnly ? "Approve / edit Task SOP" : "Edit Task"}
-                              aria-label={readOnly ? "Approve Task SOP" : "Edit Task"}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
                             {!readOnly && (
-                            <button
-                              onClick={() => setDeleteModal({ open: true, task: t })}
-                              className={`text-red-600 hover:bg-red-100 rounded-md transition-all ${compact ? 'p-1' : 'p-2 bg-red-100 hover:bg-red-600 hover:text-white'}`}
-                              title="Delete Task"
-                              aria-label="Delete Task"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => onEditTask?.(project.id, taskId, t)}
+                                className={`text-blue-600 hover:bg-blue-100 rounded-md transition-all ${compact ? 'p-1' : 'p-2 bg-blue-100 hover:bg-blue-600 hover:text-white'}`}
+                                title="Edit Task"
+                                aria-label="Edit Task"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            )}
+                            {canOpenSop && (
+                              <button
+                                type="button"
+                                onClick={() => onEditSop?.(project.id, taskId, t)}
+                                className={`text-amber-800 hover:bg-amber-100 rounded-md transition-all ${
+                                  compact
+                                    ? 'p-1'
+                                    : 'p-2 bg-amber-100 hover:bg-amber-500 hover:text-white'
+                                }`}
+                                title="Task SOP — upload, draft, or approve"
+                                aria-label="Task SOP"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </button>
+                            )}
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteModal({ open: true, task: t })}
+                                className={`text-red-600 hover:bg-red-100 rounded-md transition-all ${compact ? 'p-1' : 'p-2 bg-red-100 hover:bg-red-600 hover:text-white'}`}
+                                title="Delete Task"
+                                aria-label="Delete Task"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             )}
                           </div>
                         )}

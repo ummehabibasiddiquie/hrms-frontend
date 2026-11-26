@@ -21,7 +21,7 @@ const ProjectDetailPanel = ({
   onSopPendingChange,
 }) => {
   const { user } = useAuth();
-  const [editTaskModal, setEditTaskModal] = useState({ open: false, task: null });
+  const [editTaskModal, setEditTaskModal] = useState({ open: false, task: null, sopOnly: false });
   const [showTasksModal, setShowTasksModal] = useState(false);
   const [taskTableRefresh, setTaskTableRefresh] = useState(Date.now());
   const [showFilesDropdown, setShowFilesDropdown] = useState(false);
@@ -219,7 +219,10 @@ const ProjectDetailPanel = ({
           fillAvailable
           onTaskCountChange={onTaskCountChange}
           onEditTask={(projectId, taskId, taskObj) => {
-            setEditTaskModal({ open: true, task: taskObj });
+            setEditTaskModal({ open: true, task: taskObj, sopOnly: false });
+          }}
+          onEditSop={(projectId, taskId, taskObj) => {
+            setEditTaskModal({ open: true, task: taskObj, sopOnly: true });
           }}
           onTaskUpdated={() => setTaskTableRefresh(Date.now())}
           onDeleteTask={(projectId, taskId) => {
@@ -233,10 +236,10 @@ const ProjectDetailPanel = ({
       {editTaskModal.open && (
         <EditTaskModal
           open={editTaskModal.open}
-          onClose={() => setEditTaskModal({ open: false, task: null })}
+          onClose={() => setEditTaskModal({ open: false, task: null, sopOnly: false })}
           task={editTaskModal.task}
           projectId={project.id}
-          sopOnly={Boolean(readOnly)}
+          sopOnly={Boolean(editTaskModal.sopOnly)}
           onSopChanged={() => {
             setTaskTableRefresh(Date.now());
             onSopPendingChange?.();
@@ -247,7 +250,7 @@ const ProjectDetailPanel = ({
               : true;
             if (ok === false) return false;
             setTaskTableRefresh(Date.now());
-            setEditTaskModal({ open: false, task: null });
+            setEditTaskModal({ open: false, task: null, sopOnly: false });
             return true;
           }}
         />
