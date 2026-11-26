@@ -5,7 +5,6 @@ import AgentGoalStatusModal from './components/AgentDashboard/AgentGoalStatusMod
 import { Toaster } from "react-hot-toast";
 import { BrowserRouter } from 'react-router-dom';
 import ConnectionBanner from './components/common/ConnectionBanner';
-import ApiTargetBanner from './components/common/ApiTargetBanner';
 
 const AgentGoalModalHost = () => {
   const { user } = useAuth();
@@ -17,7 +16,6 @@ const App = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <ApiTargetBanner />
         <ConnectionBanner />
         <Toaster
           position="top-right"
